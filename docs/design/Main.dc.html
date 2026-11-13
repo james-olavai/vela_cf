@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Vela 首页与登录</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0}
+a{color:#e0b64a}a:hover{color:#f7d57f}
+</style>
+</helmet>
+<div style="min-height: 900px; box-sizing: border-box; background: #070812; color: #f8fafc; font-family: 'Noto Sans SC', system-ui, sans-serif; display: flex; flex-direction: column">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 32px; padding: 20px 40px">
+<span style="font-family: 'Cinzel', Georgia, serif; font-size: 22px; font-weight: 600; letter-spacing: 0.32em; color: #e0b64a">VELA</span>
+<nav style="display: flex; flex-wrap: wrap; align-items: center; gap: 28px; font-size: 15px">
+<a href="#how" style="color: #c3cde0; text-decoration: none; padding: 12px 0">如何使用</a>
+<a href="#plans" style="color: #c3cde0; text-decoration: none; padding: 12px 0">订阅方案</a>
+</nav>
+</header>
+
+<main style="flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 48px 64px; max-width: 1200px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 32px 40px 56px">
+
+<section style="flex: 999 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 28px">
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.14em; color: #e0b64a">西洋占星 · 八字 · 紫微斗数</p>
+<h1 style="margin: 0; font-family: 'Noto Serif SC', serif; font-weight: 700; font-size: 56px; line-height: 1.25">先排准星盘，<br>再谈你的处境。</h1>
+<p style="margin: 0; max-width: 520px; font-size: 18px; line-height: 1.8; color: #c3cde0">输入出生时间与地点，Vela 先算出你的星盘事实，再由 AI 顾问基于这些事实与你对话。每一句解读都能在盘面上找到出处。</p>
+
+<div id="how" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; max-width: 560px">
+<div style="display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid #26304d">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #e0b64a">01</span>
+<span style="font-size: 15px; line-height: 1.6; color: #f8fafc">建立出生档案</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid #26304d">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #e0b64a">02</span>
+<span style="font-size: 15px; line-height: 1.6; color: #f8fafc">选择咨询类型</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid #26304d">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #e0b64a">03</span>
+<span style="font-size: 15px; line-height: 1.6; color: #f8fafc">开始对话</span>
+</div>
+</div>
+</section>
+
+<section style="flex: 1 1 380px; min-width: 0; max-width: 440px; display: flex; flex-direction: column; gap: 20px; padding: 36px; box-sizing: border-box; background: #101527; border: 1px solid #26304d; border-radius: 16px">
+<svg aria-hidden="true" viewBox="0 0 400 400" style="width: 132px; height: 132px; align-self: center" fill="none" stroke="#e0b64a" stroke-width="1.5">
+<circle cx="200" cy="200" r="190"></circle>
+<circle cx="200" cy="200" r="150"></circle>
+<circle cx="200" cy="200" r="100" stroke="#3a4668"></circle>
+<path d="M350 200H390M329.9 275L364.5 295M275 329.9L295 364.5M200 350V390M125 329.9L105 364.5M70.1 275L35.5 295M50 200H10M70.1 125L35.5 105M125 70.1L105 35.5M200 50V10M275 70.1L295 35.5M329.9 125L364.5 105"></path>
+<path d="M317.5 242.8L104.2 280.4L280.4 104.2ZM232.4 320.7L82.5 157.2M167.6 79.3L317.5 242.8" stroke="#6f7fa8" stroke-width="1"></path>
+<g fill="#f7d57f" stroke="none">
+<circle cx="317.5" cy="242.8" r="7"></circle>
+<circle cx="232.4" cy="320.7" r="5"></circle>
+<circle cx="104.2" cy="280.4" r="6"></circle>
+<circle cx="82.5" cy="157.2" r="5"></circle>
+<circle cx="167.6" cy="79.3" r="6"></circle>
+<circle cx="280.4" cy="104.2" r="5"></circle>
+</g>
+</svg>
+<h2 style="margin: 0; font-family: 'Noto Serif SC', serif; font-weight: 700; font-size: 24px; text-align: center">登录 Vela</h2>
+<p style="margin: 0; font-size: 15px; line-height: 1.7; color: #c3cde0; text-align: center">免费档每月可咨询 3 次，无需绑定支付方式。</p>
+
+<label style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; font-size: 14px; line-height: 1.7; color: #c3cde0; cursor: pointer">
+<input type="checkbox" checked style="width: 20px; height: 20px; margin: 2px 0 0; accent-color: #e0b64a; flex: none">
+<span>我已年满 18 岁，并同意 <a href="#terms">服务条款</a> 与 <a href="#privacy">隐私政策</a>。</span>
+</label>
+
+<a href="Catalog.dc.html" style="display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; padding: 0 20px; background: #e0b64a; color: #1a1405; font-size: 16px; font-weight: 700; text-decoration: none; border-radius: 10px">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: #1a1405; color: #e0b64a; font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500">G</span>
+使用 Google 账号继续
+</a>
+
+<p style="margin: 0; font-size: 13px; line-height: 1.7; color: #a3b0c5; text-align: center">我们只读取你的邮箱与昵称。</p>
+</section>
+</main>
+
+<footer style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 32px; padding: 20px 40px; border-top: 1px solid #1e2740; font-size: 13px; line-height: 1.7; color: #a3b0c5">
+<p style="margin: 0; max-width: 760px">Vela 的解读由 AI 生成，仅供娱乐与自我探索，不构成医疗、法律、财务或心理健康建议。</p>
+<nav style="display: flex; gap: 24px">
+<a id="privacy" href="#privacy" style="color: #c3cde0; padding: 12px 0">隐私政策</a>
+<a id="terms" href="#terms" style="color: #c3cde0; padding: 12px 0">服务条款</a>
+</nav>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

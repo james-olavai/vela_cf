@@ -1,0 +1,111 @@
+{
+  "_readme": "项目边界与排期的唯一机器可读来源。由 scripts/check-boundaries.mjs 强制执行（npm run check，以及 Claude Code 的 PostToolUse 钩子）。修改本文件 = 修改项目范围，必须由项目负责人批准，并同步 docs/LLD.md §6。",
+
+  "workspaces": {
+    ".": {
+      "maxSourceLines": 0,
+      "dependencies": []
+    },
+    "apps/api": {
+      "maxSourceLines": 2000,
+      "maxApiRoutes": 16,
+      "dependencies": [
+        "@ai-sdk/google",
+        "@ai-sdk/openai-compatible",
+        "@better-auth/stripe",
+        "@cloudflare/workers-types",
+        "@vela-cf/astrology",
+        "@vela-cf/shared",
+        "ai",
+        "better-auth",
+        "drizzle-kit",
+        "drizzle-orm",
+        "hono",
+        "stripe",
+        "typescript",
+        "wrangler",
+        "zod"
+      ]
+    },
+    "apps/web": {
+      "maxSourceLines": 5000,
+      "dependencies": [
+        "@ai-sdk/react",
+        "@assistant-ui/react",
+        "@assistant-ui/react-ai-sdk",
+        "@assistant-ui/react-markdown",
+        "@tailwindcss/vite",
+        "@types/react",
+        "@types/react-dom",
+        "@vela-cf/shared",
+        "@vitejs/plugin-react",
+        "better-auth",
+        "react",
+        "react-dom",
+        "tailwindcss",
+        "typescript",
+        "vite",
+        "zod"
+      ]
+    },
+    "packages/astrology": {
+      "maxSourceLines": 2500,
+      "dependencies": [
+        "iztro",
+        "lunar-javascript",
+        "typescript",
+        "zod"
+      ]
+    },
+    "packages/shared": {
+      "maxSourceLines": 300,
+      "dependencies": [
+        "typescript",
+        "zod"
+      ]
+    }
+  },
+
+  "wrangler": {
+    "allowedKeys": [
+      "$schema",
+      "name",
+      "main",
+      "compatibility_date",
+      "compatibility_flags",
+      "d1_databases",
+      "assets",
+      "vars",
+      "routes",
+      "observability",
+      "workers_dev",
+      "preview_urls",
+      "env"
+    ],
+    "maxD1Databases": 1
+  },
+
+  "deferred": [
+    "Admin 界面与 Cloudflare Access",
+    "其余排盘技法（合盘、次限、返照、法达、恒星等）",
+    "对外 Remote MCP、Durable Objects",
+    "Workers AI 绑定、KV、R2、Queues、Cron、Service Bindings",
+    "Langfuse、PostHog 及任何分析/埋点 SDK",
+    "邮箱验证码或密码登录",
+    "前端路由库、状态管理库、组件库",
+    "测试框架（用 node:test 与 node:sqlite）",
+    "i18n"
+  ],
+
+  "schedule": {
+    "_assumption": "一人全职，2026-11-16 开工。开工日或人力变化时由负责人改这里。",
+    "phases": [
+      { "id": "phase-0", "name": "Phase 0 风险验证", "deadline": "2026-11-18", "done": false },
+      { "id": "slice-1", "name": "切片 1 最细链路", "deadline": "2026-11-30", "done": false },
+      { "id": "slice-2", "name": "切片 2 排盘补全", "deadline": "2026-12-07", "done": false },
+      { "id": "slice-3", "name": "切片 3 配额与订阅", "deadline": "2026-12-14", "done": false },
+      { "id": "slice-4", "name": "切片 4 前端补全", "deadline": "2026-12-21", "done": false },
+      { "id": "launch", "name": "上线准备", "deadline": "2026-12-24", "done": false }
+    ]
+  }
+}

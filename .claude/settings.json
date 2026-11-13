@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "ask": [
+      "Edit(boundaries.json)",
+      "Edit(scripts/check-boundaries.mjs)",
+      "Edit(.claude/settings.json)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/check-boundaries.mjs\" --hook",
+            "timeout": 20,
+            "statusMessage": "检查项目边界"
+          }
+        ]
+      }
+    ]
+  }
+}
