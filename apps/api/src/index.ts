@@ -18,6 +18,7 @@ import {
   type AstrologyToolName,
   type Tier,
 } from '@vela-cf/shared';
+import { NatalWheelInputSchema, natalWheel } from '@vela-cf/astrology';
 import { createAstrologyTools } from './tools.js';
 import { getServerPreset } from './presets.js';
 
@@ -261,10 +262,17 @@ export const createSession = onCall(
   },
 );
 
+export const previewNatalWheel = onCall(
+  { region: REGION, enforceAppCheck: ENFORCE_APP_CHECK },
+  async (req) => {
+    const input = NatalWheelInputSchema.parse(req.data);
+    return { natal: natalWheel(input) };
+  },
+);
+
 export const resolveLocation = onCall(
   { region: REGION, enforceAppCheck: ENFORCE_APP_CHECK },
   async (req) => {
-    if (!req.auth?.uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
     const { query } = ResolveLocationRequestSchema.parse(req.data);
     const cacheKey = query.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/g, '_').slice(0, 100);
     const cacheRef = db.collection('locations_cache').doc(cacheKey);

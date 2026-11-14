@@ -54,6 +54,39 @@ a:hover {
   font-variant-numeric: tabular-nums;
 }
 
+@keyframes vela-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.vela-thinking-dot {
+  animation: vela-pulse 1.4s ease-in-out infinite;
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    color-scheme: light !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only-clean {
+    border-color: #d1d5db !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

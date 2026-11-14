@@ -10,6 +10,7 @@ import {
   type UsageRecord,
   utcMonthPeriodStart,
 } from '@vela-cf/shared';
+import { AuthGateModal } from './components/AuthGateModal';
 import { auth, googleProvider, initAnalyticsConsent } from './lib/firebase';
 import { navigate, usePathname } from './lib/router';
 import {
@@ -18,14 +19,12 @@ import {
   fetchPublishedProducts,
   loadLocalSessions,
   loadLocalUsage,
+  saveCachedChart,
+  saveProfile,
   subscribeProfiles,
 } from './lib/store';
-import { AccountPage } from './pages/AccountPage';
-import { CatalogPage } from './pages/CatalogPage';
-import { ChatPage } from './pages/ChatPage';
 import { LegalPage } from './pages/LegalPage';
-import { MainPage } from './pages/MainPage';
-import { ProfilesPage } from './pages/ProfilesPage';
+import { WorkbenchPage, type PendingHandoff } from './pages/WorkbenchPage';
 
 export function App() {
   const pathname = usePathname();
@@ -33,13 +32,17 @@ export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [tier, setTier] = useState<Tier>('free');
   const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
-  const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [products, setProducts] = useState<CatalogProduct[]>(DEFAULT_PRODUCTS);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [usage, setUsage] = useState<UsageRecord>(() => ({
     periodStart: utcMonthPeriodStart(),
     used: 0,
   }));
+
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [pendingHandoff, setPendingHandoff] = useState<PendingHandoff | null>(null);
 
   useEffect(() => {
     void initAnalyticsConsent();
@@ -58,7 +61,6 @@ export function App() {
       if (!nextUser) {
         setTier('free');
         setProfiles([]);
-        setProfilesLoaded(false);
         setSessions([]);
         setUsage({ periodStart: utcMonthPeriodStart(), used: 0 });
         setAuthReady(true);
@@ -76,10 +78,7 @@ export function App() {
       setSessions(loadLocalSessions(nextUser.uid));
       setUsage(loadLocalUsage(nextUser.uid));
 
-      unsubProfiles = subscribeProfiles(nextUser.uid, (list) => {
-        setProfiles(list);
-        setProfilesLoaded(true);
-      });
+      unsubProfiles = subscribeProfiles(nextUser.uid, setProfiles);
       setAuthReady(true);
     });
 
@@ -89,17 +88,40 @@ export function App() {
     };
   }, []);
 
-  const handleGoogleLogin = async () => {
-    const cred = await signInWithPopup(auth, googleProvider);
-    await ensureUserRecord(
-      cred.user.uid,
-      cred.user.email ?? '',
-      cred.user.displayName ?? '',
-    );
-    const unsubTemp = subscribeProfiles(cred.user.uid, (list) => {
-      unsubTemp();
-      navigate(list.length > 0 ? '/consult' : '/profiles');
-    });
+  const handleConfirmGoogleLogin = async () => {
+    setAuthBusy(true);
+    setAuthError(null);
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      const uid = cred.user.uid;
+      await ensureUserRecord(uid, cred.user.email ?? '', cred.user.displayName ?? '');
+
+      if (pendingHandoff) {
+        const savedProfileId = await saveProfile(uid, null, pendingHandoff.draftProfile);
+        const now = new Date().toISOString();
+        const savedProfile: ProfileRecord = {
+          ...pendingHandoff.draftProfile,
+          id: savedProfileId,
+          createdAt: now,
+          updatedAt: now,
+        };
+        if (pendingHandoff.chart) {
+          saveCachedChart(uid, savedProfileId, pendingHandoff.chart);
+        }
+        if (pendingHandoff.question) {
+          const session = createConsultationSession(uid, pendingHandoff.product, savedProfile);
+          setSessions(loadLocalSessions(uid));
+          navigate(`/consult/${session.id}`);
+        } else {
+          setPendingHandoff(null);
+        }
+      }
+      setAuthModalOpen(false);
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Google 登录失败，请重试');
+    } finally {
+      setAuthBusy(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -107,11 +129,11 @@ export function App() {
     navigate('/');
   };
 
-  const handleStartSession = (product: CatalogProduct, profile: ProfileRecord) => {
-    if (!user) return;
-    const session = createConsultationSession(user.uid, product, profile);
-    setSessions(loadLocalSessions(user.uid));
+  const handleStartSession = (product: CatalogProduct, profile: ProfileRecord): SessionRecord => {
+    const session = createConsultationSession(user!.uid, product, profile);
+    setSessions(loadLocalSessions(user!.uid));
     navigate(`/consult/${session.id}`);
+    return session;
   };
 
   if (pathname === '/privacy') return <LegalPage kind="privacy" />;
@@ -129,67 +151,48 @@ export function App() {
     );
   }
 
-  if (!user || pathname === '/') {
-    return (
-      <MainPage
-        isSignedIn={Boolean(user)}
-        onGoogleLogin={handleGoogleLogin}
-        hasProfiles={profilesLoaded && profiles.length > 0}
-      />
-    );
-  }
-
-  if (pathname === '/profiles') {
-    return (
-      <ProfilesPage
-        uid={user.uid}
-        tier={tier}
-        used={usage.used}
-        profiles={profiles}
-      />
-    );
-  }
-
-  if (pathname === '/account') {
-    return (
-      <AccountPage
-        uid={user.uid}
-        email={user.email ?? 'Google 用户'}
-        tier={tier}
-        usage={usage}
-        onSignOut={handleSignOut}
-      />
-    );
-  }
-
-  if (pathname.startsWith('/consult/')) {
-    const sessionId = pathname.slice('/consult/'.length);
-    const activeSession = sessions.find((s) => s.id === sessionId);
-    if (activeSession) {
-      const activeProfile =
-        profiles.find((p) => p.id === activeSession.profileId) ?? profiles[0] ?? null;
-      return (
-        <ChatPage
-          uid={user.uid}
-          tier={tier}
-          usage={usage}
-          session={activeSession}
-          sessions={sessions}
-          profile={activeProfile}
-          onUsageChange={setUsage}
-        />
-      );
-    }
-  }
+  const activeSessionId = pathname.startsWith('/consult/')
+    ? pathname.slice('/consult/'.length)
+    : null;
+  const activeSession = activeSessionId
+    ? sessions.find((s) => s.id === activeSessionId) ?? null
+    : null;
 
   return (
-    <CatalogPage
-      tier={tier}
-      used={usage.used}
-      profiles={profiles}
-      products={products}
-      sessions={sessions}
-      onStartSession={handleStartSession}
-    />
+    <>
+      <WorkbenchPage
+        uid={user?.uid ?? null}
+        email={user?.email ?? 'Google 用户'}
+        tier={tier}
+        usage={usage}
+        profiles={profiles}
+        products={products}
+        sessions={sessions}
+        activeSession={activeSession}
+        pendingHandoff={pendingHandoff}
+        onClearPendingHandoff={() => setPendingHandoff(null)}
+        onRequireAuth={(handoff) => {
+          setPendingHandoff(handoff);
+          setAuthError(null);
+          setAuthModalOpen(true);
+        }}
+        onStartSession={handleStartSession}
+        onSelectSession={(sid) => navigate(sid ? `/consult/${sid}` : '/')}
+        onUsageChange={setUsage}
+        onSignOut={() => void handleSignOut()}
+      />
+
+      <AuthGateModal
+        open={authModalOpen}
+        busy={authBusy}
+        error={authError}
+        pendingQuestion={pendingHandoff?.question}
+        onConfirmLogin={() => void handleConfirmGoogleLogin()}
+        onClose={() => {
+          setAuthModalOpen(false);
+          setPendingHandoff(null);
+        }}
+      />
+    </>
   );
 }
