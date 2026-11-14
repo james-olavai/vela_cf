@@ -185,10 +185,30 @@ export interface LocationCandidate {
   timezone: string;
 }
 
+export const AstroUiBlockSchema = z.discriminatedUnion('component', [
+  z.object({
+    component: z.literal('aspect-highlight'),
+    title: z.string().max(40),
+    items: z.array(z.object({ pair: z.string().max(32), orb: z.string().max(12).optional(), tone: z.enum(['harmony', 'tension', 'focus']).default('focus'), note: z.string().max(60), prompt: z.string().max(80) })).min(1).max(4),
+  }),
+  z.object({
+    component: z.literal('transit-timeline'),
+    title: z.string().max(40),
+    windows: z.array(z.object({ range: z.string().max(32), theme: z.string().max(50), intensity: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(2), prompt: z.string().max(80) })).min(1).max(4),
+  }),
+  z.object({
+    component: z.literal('synastry-meter'),
+    title: z.string().max(40),
+    dimensions: z.array(z.object({ label: z.string().max(24), score: z.number().min(0).max(100), summary: z.string().max(60) })).min(1).max(4),
+  }),
+]);
+export type AstroUiBlock = z.infer<typeof AstroUiBlockSchema> & { type: 'ui-block' };
+
 export type MessagePart =
   | { type: 'text'; text: string }
   | { type: 'tool-call'; toolName: AstrologyToolName; label: string }
-  | { type: 'tool-result'; toolName: AstrologyToolName; label: string; data: unknown };
+  | { type: 'tool-result'; toolName: AstrologyToolName; label: string; data: unknown }
+  | AstroUiBlock;
 
 export interface MessageRecord {
   id: string;
@@ -253,4 +273,23 @@ export function utcMonthPeriodStart(now = new Date()): string {
 export function nextUtcMonthResetLabel(now = new Date()): string {
   const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   return `${nextMonth.getUTCMonth() + 1} 月 1 日`;
+}
+
+export function extractVelaUiBlocks(raw: string): { cleanText: string; uiBlocks: AstroUiBlock[]; suggestions: string[] } {
+  const sugMatch = raw.match(/\n?SUGGESTIONS:\s*(.+)$/s);
+  const suggestions = sugMatch ? sugMatch[1].split('|').map((s) => s.trim()).filter(Boolean).slice(0, 3) : [];
+  let text = raw.replace(/\n?SUGGESTIONS:\s*.+$/s, '');
+  const uiBlocks: AstroUiBlock[] = [];
+  text = text.replace(/:::vela-ui\s*([\s\S]*?)\s*:::/g, (_m, body: string) => {
+    try {
+      const parsed = JSON.parse(body.trim()) as unknown;
+      for (const item of Array.isArray(parsed) ? parsed : [parsed]) {
+        const res = AstroUiBlockSchema.safeParse(item);
+        if (res.success) uiBlocks.push({ type: 'ui-block', ...res.data });
+      }
+    } catch { /* ignore malformed block */ }
+    return '';
+  });
+  text = text.replace(/:::vela-ui[\s\S]*$/g, '').trim();
+  return { cleanText: text, uiBlocks, suggestions };
 }

@@ -4,6 +4,7 @@ import {
   computeUsagePercent,
   nextUtcMonthResetLabel,
   TIER_META,
+  type AstroUiBlock,
   type ConsultationMode,
   type MessageRecord,
   type ProfileInput,
@@ -12,6 +13,7 @@ import {
   type Tier,
   type UsageRecord,
 } from '@vela-cf/shared';
+import { AstroUiRenderer } from '../components/AstroUiRenderer';
 import { ChartFactCard } from '../components/ChartFactCard';
 import { HistorySearchModal } from '../components/HistorySearchModal';
 import {
@@ -773,6 +775,9 @@ export function WorkbenchPage({
                     .map((p) => p.text)
                     .join('\n');
                   const toolCalls = msg.parts.filter((p) => p.type === 'tool-call');
+                  const uiBlocks = msg.parts.filter(
+                    (p): p is AstroUiBlock => p.type === 'ui-block',
+                  );
 
                   if (msg.role === 'user') {
                     return (
@@ -823,6 +828,12 @@ export function WorkbenchPage({
                       ) : (
                         <div className="py-1">{renderFormattedText(textContent)}</div>
                       )}
+
+                      <AstroUiRenderer
+                        blocks={uiBlocks}
+                        disabled={isStreaming || quotaExhausted}
+                        onQuickAsk={(q) => void handleSend(q)}
+                      />
 
                       {textContent && !(isLastAssistant && isStreaming) && (
                         <div className="no-print flex items-center gap-2 pt-0.5">

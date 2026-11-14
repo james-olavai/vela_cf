@@ -14,11 +14,13 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import {
   computeEffectiveBudget,
+  extractVelaUiBlocks,
   MAX_MONTHLY_SHARE_BONUSES,
   ProfileInputSchema,
   SHARE_BONUS_MICRO_USD,
   utcMonthPeriodStart,
   type AstrologyToolName,
+  type AstroUiBlock,
   type ConsultationMode,
   type LocationCandidate,
   type MessagePart,
@@ -508,11 +510,14 @@ export async function streamConsultationReply(params: {
   let fullText = '';
   const toolParts: MessagePart[] = [];
 
-  const updateAssistant = (suggestions?: string[]) => {
-    const cleanText = fullText.replace(/\n?SUGGESTIONS:\s*.+$/s, '').trim();
+  const updateAssistant = (suggestions?: string[], extraBlocks: AstroUiBlock[] = []) => {
+    const { cleanText, uiBlocks } = extractVelaUiBlocks(fullText);
     const parts: MessagePart[] = [...toolParts];
     if (cleanText) {
       parts.push({ type: 'text', text: cleanText });
+    }
+    for (const block of uiBlocks.length > 0 ? uiBlocks : extraBlocks) {
+      parts.push(block);
     }
     currentMsgs = currentMsgs.map((m) =>
       m.id === assistantId ? { ...m, parts, suggestions } : m,
@@ -579,7 +584,7 @@ export async function streamConsultationReply(params: {
 
     const callable = httpsCallable<
       { sessionId: string; message: string },
-      { text: string; suggestions?: string[] },
+      { text: string; suggestions?: string[]; uiBlocks?: AstroUiBlock[] },
       ChatStreamChunk
     >(functions, 'chat');
     const { stream, data } = await callable.stream(
@@ -611,7 +616,7 @@ export async function streamConsultationReply(params: {
     const finalRes = await data;
     if (!fullText && finalRes?.text) {
       fullText = finalRes.text;
-      updateAssistant(finalRes.suggestions ?? []);
+      updateAssistant(finalRes.suggestions ?? [], finalRes.uiBlocks ?? []);
     }
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return;

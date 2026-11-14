@@ -11,6 +11,7 @@ import {
   computeEffectiveBudget,
   computeTokenCostMicroUsd,
   CreateSessionRequestSchema,
+  extractVelaUiBlocks,
   MAX_OUTPUT_TOKENS_BY_TIER,
   ResolveLocationRequestSchema,
   TIER_META,
@@ -235,6 +236,8 @@ const chatFlow = ai.defineFlow(
         model: modelName,
         system:
           `${session.frozenPrompt}\n` +
+          '当需要直观呈现关键相位、行运时间窗或合盘维度对比时，可在正文末尾、`SUGGESTIONS:` 之前附带一个可选的 `:::vela-ui` JSON 块（`component` 仅限 `aspect-highlight` | `transit-timeline` | `synastry-meter`，纯 JSON，不要加代码块围栏），例如：\n' +
+          ':::vela-ui\n{"component":"aspect-highlight","title":"核心相位焦点","items":[{"pair":"太阳 □ 土星","orb":"1.2°","tone":"tension","note":"近期压力与定型课题","prompt":"展开解读太阳四分土星对当下选择的启示"}]}\n:::\n' +
           '在回复正文最后，请另起一行输出 `SUGGESTIONS:` 后跟 2 个简短追问（用 `|` 分隔），例如 `SUGGESTIONS:天顶在水瓶意味着什么？|土星六宫该如何减负？`。\n\n' +
           profileContext,
         prompt: `${historyContext ? `${historyContext}\n` : ''}用户最新消息: ${input.message}`,
@@ -303,15 +306,7 @@ const chatFlow = ai.defineFlow(
       }
     }
 
-    const sugMatch = fullText.match(/\n?SUGGESTIONS:\s*(.+)$/s);
-    const suggestions = sugMatch
-      ? sugMatch[1]
-          .split('|')
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .slice(0, 3)
-      : [];
-    const cleanText = fullText.replace(/\n?SUGGESTIONS:\s*.+$/s, '').trim();
+    const { cleanText, uiBlocks, suggestions } = extractVelaUiBlocks(fullText);
 
     const usageMeta = finalResp.usage;
     const inTokens = Number(usageMeta?.inputTokens ?? 0);
@@ -340,6 +335,7 @@ const chatFlow = ai.defineFlow(
     const assistantParts = [
       ...toolParts,
       ...(cleanText ? [{ type: 'text', text: cleanText }] : []),
+      ...uiBlocks,
     ];
     await sessionRef.collection('messages').add({
       role: 'user',
@@ -355,7 +351,7 @@ const chatFlow = ai.defineFlow(
     await sessionRef.update({ updatedAt: new Date().toISOString() });
 
     sendChunk({ type: 'done', suggestions });
-    return { text: cleanText, suggestions };
+    return { text: cleanText, suggestions, uiBlocks };
     } catch (err) {
       throw toHttpsError(err);
     }
