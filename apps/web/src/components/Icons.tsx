@@ -52,7 +52,7 @@ export function IconSearch({ size = 18 }: IconProps) {
 export function IconSparkles({ size = 18 }: IconProps) {
   return (
     <svg {...baseProps(size)}>
-      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
+      <path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z" />
     </svg>
   );
 }

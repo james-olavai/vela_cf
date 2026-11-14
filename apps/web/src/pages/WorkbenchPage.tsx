@@ -435,11 +435,11 @@ export function WorkbenchPage({
       <img
         src={photoURL}
         alt={displayName}
-        className={`w-8 h-8 rounded-full object-cover shrink-0 ${avatarRingClass}`}
+        className={`w-9 h-9 rounded-full object-cover shrink-0 ${avatarRingClass}`}
       />
     ) : (
       <div
-        className={`w-8 h-8 rounded-full bg-[#1d2540] flex items-center justify-center text-[12px] font-bold text-[#f7d57f] shrink-0 ${avatarRingClass}`}
+        className={`w-9 h-9 rounded-full bg-[#1d2540] flex items-center justify-center text-[13px] font-bold text-[#f7d57f] shrink-0 ${avatarRingClass}`}
       >
         {displayName.slice(0, 1).toUpperCase()}
       </div>
@@ -465,9 +465,9 @@ export function WorkbenchPage({
           onClick={() => onSelectSession(null)}
           title="新咨询"
           aria-label="新咨询"
-          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
+          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
         >
-          <IconSquarePen size={18} />
+          <IconSquarePen size={20} />
         </button>
 
         <button
@@ -475,9 +475,9 @@ export function WorkbenchPage({
           onClick={() => setHistorySearchOpen(true)}
           title="搜索历史对话"
           aria-label="搜索历史对话"
-          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
+          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
         >
-          <IconSearch size={18} />
+          <IconSearch size={20} />
         </button>
 
         <button
@@ -485,9 +485,9 @@ export function WorkbenchPage({
           onClick={() => setSidebarOpen(true)}
           title="出生档案与合盘"
           aria-label="出生档案与合盘"
-          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
+          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
         >
-          <IconNotebook size={18} />
+          <IconNotebook size={20} />
         </button>
 
         <button
@@ -496,9 +496,9 @@ export function WorkbenchPage({
           onClick={() => setPortraitOpen(true)}
           title={needsMoreProfiles ? '个人星盘画像（请先添加档案）' : '个人星盘画像'}
           aria-label="个人星盘画像"
-          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f7d57f] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer"
+          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f7d57f] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer"
         >
-          <IconSparkles size={18} />
+          <IconSparkles size={20} />
         </button>
       </div>
 
@@ -511,7 +511,7 @@ export function WorkbenchPage({
           }}
           title={`${displayName} · ${TIER_META[tier].label}`}
           aria-label={`账号与订阅：${displayName}`}
-          className="w-11 h-11 rounded-full border-0 bg-transparent hover:bg-[#101527] flex items-center justify-center cursor-pointer"
+          className="w-10 h-10 rounded-full border-0 bg-transparent hover:bg-[#101527] flex items-center justify-center cursor-pointer"
         >
           {renderAvatar()}
         </button>
@@ -565,7 +565,7 @@ export function WorkbenchPage({
           className="w-full min-h-[40px] px-3 rounded-[20px] border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#f8fafc] text-[13.5px] font-medium flex items-center justify-center gap-2 cursor-pointer"
         >
           <span className="text-[#c3cde0] flex items-center">
-            <IconSquarePen size={16} />
+            <IconSquarePen size={18} />
           </span>
           <span>新咨询</span>
         </button>
@@ -580,7 +580,7 @@ export function WorkbenchPage({
           className="w-full px-3 py-2.5 rounded-[12px] border border-[#26304d] bg-[#0e1426] hover:border-[#e0b64a] disabled:opacity-45 disabled:hover:border-[#26304d] disabled:cursor-not-allowed text-left flex items-center gap-2.5 cursor-pointer transition-colors"
         >
           <span className="text-[#e0b64a] shrink-0 flex items-center">
-            <IconSparkles size={16} />
+            <IconSparkles size={18} />
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-medium text-[#f8fafc]">个人星盘画像</div>
