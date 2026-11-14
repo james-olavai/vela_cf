@@ -20,9 +20,10 @@ import {
   type AstrologyToolName,
   type Tier,
 } from '@vela-cf/shared';
-import { NatalWheelInputSchema, natalWheel } from '@vela-cf/astrology';
+import { NatalWheelInputSchema, natalWheel, type NatalWheelResult } from '@vela-cf/astrology';
 import { createAstrologyTools } from './tools.js';
 import { getServerPreset } from './presets.js';
+import { buildNatalFactSummary, filterHallucinatedUiBlocks, verifyKeySignClaims } from './guard.js';
 
 initializeApp();
 const DATABASE_ID =
@@ -220,6 +221,22 @@ const chatFlow = ai.defineFlow(
       const toolParts: Array<{ type: 'tool-call'; toolName: string; label: string }> = [];
       const seenTools = new Set<string>();
       const chartSnapshot: Record<string, unknown> = {};
+      let precomputedNatal: NatalWheelResult | null = null;
+      try {
+        const primary = profiles[0];
+        if (primary) {
+          precomputedNatal = natalWheel({
+            birthDateTime: String(primary.birthDateTime),
+            latitude: Number(primary.latitude),
+            longitude: Number(primary.longitude),
+            timezone: String(primary.timezone),
+          });
+          chartSnapshot.natal = precomputedNatal;
+        }
+      } catch {
+        // ignore precompute errors on malformed legacy profiles
+      }
+      const factFrameContext = precomputedNatal ? `\n${buildNatalFactSummary(precomputedNatal)}` : '';
 
       const entityLabel = (et?: string) =>
         et === 'company' ? '公司' : et === 'country' ? '国家' : '个人';
@@ -239,7 +256,8 @@ const chatFlow = ai.defineFlow(
           '当需要直观呈现关键相位、行运时间窗或合盘维度对比时，可在正文末尾、`SUGGESTIONS:` 之前附带一个可选的 `:::vela-ui` JSON 块（`component` 仅限 `aspect-highlight` | `transit-timeline` | `synastry-meter`，纯 JSON，不要加代码块围栏），例如：\n' +
           ':::vela-ui\n{"component":"aspect-highlight","title":"核心相位焦点","items":[{"pair":"太阳 □ 土星","orb":"1.2°","tone":"tension","note":"近期压力与定型课题","prompt":"展开解读太阳四分土星对当下选择的启示"}]}\n:::\n' +
           '在回复正文最后，请另起一行输出 `SUGGESTIONS:` 后跟 2 个简短追问（用 `|` 分隔），例如 `SUGGESTIONS:天顶在水瓶意味着什么？|土星六宫该如何减负？`。\n\n' +
-          profileContext,
+          profileContext +
+          factFrameContext,
         prompt: `${historyContext ? `${historyContext}\n` : ''}用户最新消息: ${input.message}`,
         tools,
         maxTurns: 3,
@@ -306,7 +324,14 @@ const chatFlow = ai.defineFlow(
       }
     }
 
-    const { cleanText, uiBlocks, suggestions } = extractVelaUiBlocks(fullText);
+    const { cleanText: rawCleanText, uiBlocks: rawUiBlocks, suggestions } = extractVelaUiBlocks(fullText);
+    const activeNatal = (chartSnapshot.natal as NatalWheelResult | undefined) ?? precomputedNatal;
+    const isSynastry = session.mode === 'synastry' || profiles.length > 1 || seenTools.has('synastryAspects');
+    const { blocks: uiBlocks, droppedCount } = filterHallucinatedUiBlocks(rawUiBlocks, activeNatal, isSynastry);
+    const { text: cleanText, mismatches } = verifyKeySignClaims(rawCleanText, activeNatal);
+    if (droppedCount > 0 || mismatches.length > 0) {
+      console.warn('Anti-hallucination guard triggered', { uid, droppedCount, mismatches });
+    }
 
     const usageMeta = finalResp.usage;
     const inTokens = Number(usageMeta?.inputTokens ?? 0);
