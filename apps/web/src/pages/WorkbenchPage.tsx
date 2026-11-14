@@ -17,9 +17,10 @@ import { HistorySearchModal } from '../components/HistorySearchModal';
 import {
   IconArrowUp,
   IconChevronsLeft,
-  IconPlus,
+  IconNotebook,
   IconSearch,
   IconSparkles,
+  IconSquarePen,
   IconStop,
 } from '../components/Icons';
 import { NatalWheelSvg } from '../components/NatalWheelSvg';
@@ -441,9 +442,9 @@ export function WorkbenchPage({
           onClick={() => onSelectSession(null)}
           title="新咨询"
           aria-label="新咨询"
-          className="w-11 h-11 rounded-full border border-[#26304d] bg-[#101527] hover:border-[#e0b64a] text-[#e0b64a] flex items-center justify-center cursor-pointer"
+          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
         >
-          <IconPlus size={18} />
+          <IconSquarePen size={18} />
         </button>
 
         <button
@@ -461,9 +462,9 @@ export function WorkbenchPage({
           onClick={() => setSidebarOpen(true)}
           title="出生档案与合盘"
           aria-label="出生档案与合盘"
-          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#f7d57f] flex items-center justify-center cursor-pointer"
+          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
         >
-          <IconSparkles size={18} />
+          <IconNotebook size={18} />
         </button>
       </div>
 
@@ -529,8 +530,8 @@ export function WorkbenchPage({
           }}
           className="w-full min-h-[40px] px-3 rounded-[20px] border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#f8fafc] text-[13.5px] font-medium flex items-center justify-center gap-2 cursor-pointer"
         >
-          <span className="text-[#e0b64a] flex items-center">
-            <IconPlus size={16} />
+          <span className="text-[#c3cde0] flex items-center">
+            <IconSquarePen size={16} />
           </span>
           <span>新咨询</span>
         </button>
