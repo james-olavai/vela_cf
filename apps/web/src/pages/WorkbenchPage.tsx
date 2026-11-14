@@ -362,6 +362,95 @@ export function WorkbenchPage({
     void handleSend();
   };
 
+  const renderAvatar = () =>
+    photoURL ? (
+      <img
+        src={photoURL}
+        alt={displayName}
+        className="w-8 h-8 rounded-full object-cover shrink-0 border border-[#26304d]"
+      />
+    ) : (
+      <div className="w-8 h-8 rounded-full bg-[#1d2540] border border-[#26304d] flex items-center justify-center text-[12px] font-bold text-[#f7d57f] shrink-0">
+        {displayName.slice(0, 1).toUpperCase()}
+      </div>
+    );
+
+  const renderCollapsedRail = () => (
+    <div className="flex flex-col items-center justify-between h-full bg-[#101527] border-r border-[#1e2740]">
+      <div className="w-full flex flex-col items-center gap-2">
+        <div className="w-full h-[68px] px-4 flex items-center justify-start shrink-0">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            title="展开侧栏"
+            aria-label="展开侧栏"
+            className="flex items-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#161d33] cursor-pointer"
+          >
+            <img src="/assets/logo-small.webp" alt="Vela" className="brand-logo" />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onSelectSession(null)}
+          title="新咨询"
+          aria-label="新咨询"
+          className="w-10 h-10 rounded-full border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#e0b64a] text-[18px] flex items-center justify-center cursor-pointer"
+        >
+          +
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setHistorySearchOpen(true)}
+          title="搜索历史对话"
+          aria-label="搜索历史对话"
+          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#161d33] text-[#c3cde0] hover:text-[#f8fafc] text-[16px] flex items-center justify-center cursor-pointer"
+        >
+          🔍
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          title="出生档案与合盘"
+          aria-label="出生档案与合盘"
+          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#161d33] text-[#f7d57f] text-[16px] flex items-center justify-center cursor-pointer"
+        >
+          ✦
+        </button>
+      </div>
+
+      <div className="pb-3 flex flex-col items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setSettingsTab('subscription');
+            setSettingsOpen(true);
+          }}
+          title="订阅与额度"
+          aria-label="订阅与额度"
+          className="px-2.5 min-h-[30px] rounded-[15px] border border-[#e0b64a]/40 bg-[#1d1a0f] text-[11px] font-medium text-[#f7d57f] cursor-pointer"
+        >
+          订阅
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setSettingsTab('account');
+            setSettingsOpen(true);
+          }}
+          title={displayName}
+          aria-label={`账号：${displayName}`}
+          className="p-1 rounded-full border-0 bg-transparent hover:bg-[#161d33] cursor-pointer"
+        >
+          {renderAvatar()}
+        </button>
+      </div>
+    </div>
+  );
+
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full bg-[#101527] border-r border-[#1e2740]">
       <div className="h-[68px] px-4 flex items-center justify-between shrink-0">
@@ -428,32 +517,28 @@ export function WorkbenchPage({
         />
       </div>
 
-      <div className="p-3 border-t border-[#1e2740] flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          {photoURL ? (
-            <img
-              src={photoURL}
-              alt={displayName}
-              className="w-8 h-8 rounded-full object-cover shrink-0 border border-[#26304d]"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-[#1d2540] border border-[#26304d] flex items-center justify-center text-[12px] font-bold text-[#f7d57f] shrink-0">
-              {displayName.slice(0, 1).toUpperCase()}
-            </div>
-          )}
-          <span className="text-[13px] font-medium text-[#f8fafc] truncate">{displayName}</span>
-        </div>
+      <div className="p-3 border-t border-[#1e2740] flex flex-col items-start gap-2.5">
         <button
           type="button"
           onClick={() => {
             setSettingsTab('subscription');
             setSettingsOpen(true);
           }}
-          title="设置与订阅"
-          aria-label="设置与订阅"
-          className="min-h-[36px] min-w-[36px] rounded-[10px] border-0 bg-transparent hover:bg-[#161d33] text-[#c3cde0] hover:text-[#f8fafc] text-[17px] flex items-center justify-center cursor-pointer shrink-0"
+          className="px-3 min-h-[30px] rounded-[15px] border border-[#e0b64a]/40 bg-[#1d1a0f] hover:border-[#e0b64a] text-[12px] font-medium text-[#f7d57f] cursor-pointer"
         >
-          ⚙
+          ✦ 订阅方案 · {TIER_META[tier].label}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setSettingsTab('account');
+            setSettingsOpen(true);
+          }}
+          className="w-full flex items-center gap-2.5 min-w-0 p-1 rounded-[10px] border-0 bg-transparent hover:bg-[#161d33] text-left cursor-pointer"
+        >
+          {renderAvatar()}
+          <span className="text-[13px] font-medium text-[#f8fafc] truncate">{displayName}</span>
         </button>
       </div>
     </div>
@@ -592,9 +677,14 @@ export function WorkbenchPage({
 
   return (
     <div className="h-[100dvh] w-full flex bg-[#070812] text-[#f8fafc] overflow-hidden">
-      {/* Unified Slide-In Left Sidebar (Desktop & Mobile) */}
+      {/* Desktop Persistent Left Rail / Expanded Sidebar */}
+      <aside className={`no-print hidden lg:block h-full shrink-0 ${sidebarOpen ? 'w-[280px]' : 'w-[80px]'}`}>
+        {sidebarOpen ? renderSidebarContent() : renderCollapsedRail()}
+      </aside>
+
+      {/* Mobile Slide-In Left Sidebar */}
       {sidebarOpen && (
-        <div className="no-print fixed inset-0 z-40 flex">
+        <div className="no-print fixed inset-0 z-40 flex lg:hidden">
           <aside className="w-[280px] h-full shrink-0">{renderSidebarContent()}</aside>
           <button
             type="button"
@@ -607,7 +697,7 @@ export function WorkbenchPage({
 
       {/* Main Column */}
       <main className="flex-1 min-w-0 flex flex-col h-full relative">
-        {/* Unified Borderless Top Header with Logo only */}
+        {/* Unified Borderless Top Header */}
         <header className="no-print shrink-0 h-[68px] px-4 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -615,7 +705,7 @@ export function WorkbenchPage({
               onClick={() => setSidebarOpen(true)}
               title="打开侧栏与档案"
               aria-label="打开侧栏与档案"
-              className="flex items-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#101527] cursor-pointer shrink-0"
+              className="lg:hidden flex items-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#101527] cursor-pointer shrink-0"
             >
               <img src="/assets/logo-small.webp" alt="Vela" className="brand-logo" />
             </button>
