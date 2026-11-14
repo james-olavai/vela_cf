@@ -263,16 +263,12 @@ export async function fetchNatalChart(
   return next;
 }
 
-function resolveToolsForTierAndMode(tier: Tier, mode: ConsultationMode): AstrologyToolName[] {
+function resolveToolsForTier(tier: Tier): AstrologyToolName[] {
   if (tier === 'pro') {
-    return mode === 'synastry'
-      ? ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces', 'synastryAspects']
-      : ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces'];
+    return ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces', 'synastryAspects'];
   }
   if (tier === 'go') {
-    return mode === 'synastry'
-      ? ['natalWheel', 'synastryAspects']
-      : ['natalWheel', 'transitEvents'];
+    return ['natalWheel', 'transitEvents', 'synastryAspects'];
   }
   return ['natalWheel'];
 }
@@ -286,17 +282,16 @@ export function createConsultationSession(
   const now = new Date().toISOString();
   const id = `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const names = profiles.map((p) => p.name).join(' × ');
-  const modeLabel = mode === 'synastry' ? '多人合盘' : '个人星盘';
   const session: SessionRecord = {
     id,
     mode,
     profileIds: profiles.map((p) => p.id),
     profileId: profiles[0].id,
     profileName: names,
-    title: `${modeLabel} · ${names}`,
-    frozenPrompt: `${modeLabel}（${tier.toUpperCase()}）`,
+    title: profiles.length >= 2 ? `合盘 · ${names}` : names,
+    frozenPrompt: `${profiles.length >= 2 ? '多人合盘' : '个人星盘'}（${tier.toUpperCase()}）`,
     frozenModel: 'vertexai/gemini-4-hydrogen',
-    frozenTools: resolveToolsForTierAndMode(tier, mode),
+    frozenTools: resolveToolsForTier(tier),
     createdAt: now,
     updatedAt: now,
   };

@@ -111,8 +111,8 @@ export function WorkbenchPage({
   const [draftProfiles, setDraftProfiles] = useState<ProfileRecord[]>([]);
   const effectiveProfiles = uid ? profiles : draftProfiles;
 
-  const [mode, setMode] = useState<ConsultationMode>('personal');
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+  const maxSelectable = Math.max(1, TIER_META[tier].maxSynastryProfiles);
 
   const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [chart, setChart] = useState<ChartSnapshot | null>(null);
@@ -132,7 +132,7 @@ export function WorkbenchPage({
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }, [inputText]);
 
-  // Keep selectedProfileIds valid when profiles or mode change
+  // Keep selectedProfileIds valid within tier limit when profiles or tier change
   useEffect(() => {
     if (effectiveProfiles.length === 0) {
       setSelectedProfileIds([]);
@@ -141,19 +141,14 @@ export function WorkbenchPage({
     const validIds = selectedProfileIds.filter((id) =>
       effectiveProfiles.some((p) => p.id === id),
     );
-    if (mode === 'personal') {
-      if (validIds.length !== 1) {
-        setSelectedProfileIds([validIds[0] ?? effectiveProfiles[0].id]);
-      }
-    } else {
-      const maxCount = Math.max(2, TIER_META[tier].maxSynastryProfiles);
-      if (validIds.length === 0) {
-        setSelectedProfileIds(effectiveProfiles.slice(0, maxCount).map((p) => p.id));
-      } else if (validIds.length > maxCount) {
-        setSelectedProfileIds(validIds.slice(0, maxCount));
-      }
+    if (validIds.length === 0) {
+      setSelectedProfileIds([effectiveProfiles[0].id]);
+    } else if (validIds.length > maxSelectable) {
+      setSelectedProfileIds(validIds.slice(0, maxSelectable));
+    } else if (validIds.length !== selectedProfileIds.length) {
+      setSelectedProfileIds(validIds);
     }
-  }, [effectiveProfiles, mode, tier]);
+  }, [effectiveProfiles, maxSelectable]);
 
   // Sync active session messages & chart
   useEffect(() => {
@@ -161,7 +156,6 @@ export function WorkbenchPage({
       setMessages([]);
       return;
     }
-    setMode(activeSession.mode ?? 'personal');
     const sessionPids =
       activeSession.profileIds && activeSession.profileIds.length > 0
         ? activeSession.profileIds
@@ -231,21 +225,19 @@ export function WorkbenchPage({
 
   const quotaExhausted = Boolean(uid) && usage.used >= QUOTA_BUDGET_MICRO_USD[tier];
   const activeProfiles = effectiveProfiles.filter((p) => selectedProfileIds.includes(p.id));
-  const needsMoreProfiles =
-    effectiveProfiles.length === 0 ||
-    (mode === 'synastry' && (TIER_META[tier].maxSynastryProfiles < 2 || activeProfiles.length < 2));
+  const mode: ConsultationMode = activeProfiles.length >= 2 ? 'synastry' : 'personal';
+  const needsMoreProfiles = effectiveProfiles.length === 0;
 
   const handleToggleProfile = (id: string) => {
-    if (mode === 'personal') {
+    if (maxSelectable <= 1) {
       setSelectedProfileIds([id]);
       return;
     }
-    const maxCount = Math.max(2, TIER_META[tier].maxSynastryProfiles);
     setSelectedProfileIds((prev) => {
       if (prev.includes(id)) {
         return prev.length > 1 ? prev.filter((x) => x !== id) : prev;
       }
-      if (prev.length >= maxCount) {
+      if (prev.length >= maxSelectable) {
         return [...prev.slice(1), id];
       }
       return [...prev, id];
@@ -257,7 +249,11 @@ export function WorkbenchPage({
       const savedId = await saveProfile(uid, editId ?? null, input);
       if (!editId) {
         setSelectedProfileIds((prev) =>
-          mode === 'personal' ? [savedId] : [...prev.slice(0, 3), savedId],
+          maxSelectable <= 1
+            ? [savedId]
+            : prev.length < maxSelectable
+              ? [...prev, savedId]
+              : [...prev.slice(1), savedId],
         );
       }
       return;
@@ -274,7 +270,11 @@ export function WorkbenchPage({
       editId ? prev.map((p) => (p.id === editId ? record : p)) : [record, ...prev],
     );
     setSelectedProfileIds((prev) =>
-      mode === 'personal' ? [nextId] : [...prev.slice(0, 3), nextId],
+      maxSelectable <= 1
+        ? [nextId]
+        : prev.length < maxSelectable
+          ? [...prev, nextId]
+          : [...prev.slice(1), nextId],
     );
     const preview = await fetchNatalChart(null, record);
     setChart(preview);
@@ -297,17 +297,6 @@ export function WorkbenchPage({
     if (effectiveProfiles.length === 0) {
       setStreamError('请先在左侧边栏点击「+ 添加出生信息」');
       return;
-    }
-    if (mode === 'synastry') {
-      if (TIER_META[tier].maxSynastryProfiles < 2) {
-        setSettingsTab('subscription');
-        setSettingsOpen(true);
-        return;
-      }
-      if (activeProfiles.length < 2) {
-        setStreamError('多人合盘请在左侧边栏至少勾选 2 个档案');
-        return;
-      }
     }
 
     if (!uid) {
@@ -513,16 +502,11 @@ export function WorkbenchPage({
       <div className="flex-1 overflow-y-auto">
         <ProfileSidebarPanel
           tier={tier}
-          mode={mode}
           profiles={effectiveProfiles}
           selectedProfileIds={selectedProfileIds}
           onToggleProfile={handleToggleProfile}
           onSaveProfile={handleSaveSidebarProfile}
           onDeleteProfile={handleDeleteSidebarProfile}
-          onOpenUpgrade={() => {
-            setSettingsTab('subscription');
-            setSettingsOpen(true);
-          }}
         />
       </div>
 
@@ -583,13 +567,11 @@ export function WorkbenchPage({
             ref={textareaRef}
             rows={1}
             maxLength={2000}
-            disabled={needsMoreProfiles && effectiveProfiles.length === 0}
+            disabled={needsMoreProfiles}
             placeholder={
               effectiveProfiles.length === 0
                 ? '点击左上角 Logo 添加出生信息'
-                : mode === 'synastry' && activeProfiles.length < 2
-                  ? '请在左侧边栏勾选 2–4 个档案以开启多人合盘…'
-                  : '问 Vela 任何关于星盘、行运或关系的问题…'
+                : '问 Vela 任何关于星盘、行运或关系的问题…'
             }
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
@@ -604,31 +586,8 @@ export function WorkbenchPage({
 
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
-              {(
-                [
-                  { id: 'personal', label: '个人星盘' },
-                  {
-                    id: 'synastry',
-                    label: TIER_META[tier].maxSynastryProfiles < 2 ? '多人合盘 🔒' : '多人合盘',
-                  },
-                ] as const
-              ).map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  disabled={Boolean(activeSession)}
-                  onClick={() => setMode(m.id)}
-                  className={`min-h-[32px] px-3 rounded-[16px] border text-[12px] font-medium cursor-pointer disabled:opacity-60 ${
-                    mode === m.id
-                      ? 'border-[#e0b64a] bg-[#1d1a0f] text-[#f7d57f]'
-                      : 'border-[#26304d] bg-[#161d33] text-[#c3cde0]'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
               {inputText.length > 1500 && (
-                <span className="ml-1 font-mono-num text-[11px] text-[#a3b0c5]">
+                <span className="font-mono-num text-[11px] text-[#a3b0c5]">
                   {inputText.length}/2000
                 </span>
               )}
@@ -703,7 +662,7 @@ export function WorkbenchPage({
               <span className="hidden sm:inline text-[13px] text-[#a3b0c5] truncate">
                 {activeSession
                   ? activeSession.title
-                  : `${mode === 'synastry' ? '多人合盘' : '个人星盘'} · ${activeProfiles.map((p) => p.name).join(' × ')}`}
+                  : activeProfiles.map((p) => p.name).join(' × ')}
               </span>
             )}
           </div>

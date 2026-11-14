@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import {
   TIER_META,
-  type ConsultationMode,
   type EntityType,
   type Gender,
   type LocationCandidate,
@@ -14,13 +13,11 @@ import { searchLocations } from '../lib/store';
 
 interface ProfileSidebarPanelProps {
   tier: Tier;
-  mode: ConsultationMode;
   profiles: ProfileRecord[];
   selectedProfileIds: string[];
   onToggleProfile: (id: string) => void;
   onSaveProfile: (input: ProfileInput, editId?: string) => Promise<void>;
   onDeleteProfile: (id: string) => Promise<void>;
-  onOpenUpgrade: () => void;
 }
 
 const ENTITY_LABELS: Record<EntityType, string> = {
@@ -31,13 +28,11 @@ const ENTITY_LABELS: Record<EntityType, string> = {
 
 export function ProfileSidebarPanel({
   tier,
-  mode,
   profiles,
   selectedProfileIds,
   onToggleProfile,
   onSaveProfile,
   onDeleteProfile,
-  onOpenUpgrade,
 }: ProfileSidebarPanelProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | undefined>(undefined);
@@ -56,6 +51,7 @@ export function ProfileSidebarPanel({
   const [allowAnalytics, setAllowAnalytics] = useState(false);
 
   const tierMeta = TIER_META[tier];
+  const maxSelectable = Math.max(1, tierMeta.maxSynastryProfiles);
 
   const resetForm = () => {
     setFormOpen(false);
@@ -139,9 +135,7 @@ export function ProfileSidebarPanel({
     <div className="px-3 py-2 flex flex-col gap-2 border-b border-[#1e2740]">
       <div className="flex items-center justify-between px-1">
         <span className="text-[12px] font-medium text-[#a3b0c5]">
-          {mode === 'synastry'
-            ? `合盘档案 (${selectedProfileIds.length}/${tierMeta.maxSynastryProfiles || 2})`
-            : '出生档案'}
+          出生档案 ({selectedProfileIds.length}/{maxSelectable})
         </span>
         <button
           type="button"
@@ -151,16 +145,6 @@ export function ProfileSidebarPanel({
           {formOpen ? '收起' : '+ 添加'}
         </button>
       </div>
-
-      {mode === 'synastry' && tierMeta.maxSynastryProfiles < 2 && (
-        <button
-          type="button"
-          onClick={onOpenUpgrade}
-          className="text-left px-2.5 py-2 rounded-[8px] border border-[#e0b64a]/40 bg-[#1d1a0f] text-[12px] text-[#f7d57f] cursor-pointer"
-        >
-          多人合盘需 Go（双人）或 Pro（最多 4 个）→ 点击升级
-        </button>
-      )}
 
       {profiles.length === 0 && !formOpen ? (
         <button
@@ -192,7 +176,7 @@ export function ProfileSidebarPanel({
                   className="flex-1 min-w-0 flex items-center gap-1.5 bg-transparent border-0 text-left text-inherit cursor-pointer disabled:opacity-45 p-0"
                 >
                   <span className="text-[#e0b64a] shrink-0 text-[12px]">
-                    {mode === 'synastry' ? (active ? '☑' : '☐') : active ? '★' : '☆'}
+                    {maxSelectable >= 2 ? (active ? '☑' : '☐') : active ? '★' : '☆'}
                   </span>
                   <span className="truncate font-medium">{p.name}</span>
                   {et !== 'person' && (
