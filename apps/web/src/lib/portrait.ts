@@ -25,15 +25,17 @@ export interface PortraitSummary {
 }
 
 const SIGN_EN: Record<string, string> = {
-  白羊座: 'aries', 金牛座: 'taurus', 双子座: 'gemini', 巨蟹座: 'cancer',
-  狮子座: 'leo', 处女座: 'virgo', 天秤座: 'libra', 天蝎座: 'scorpio',
-  射手座: 'sagittarius', 摩羯座: 'capricorn', 水瓶座: 'aquarius', 双鱼座: 'pisces',
+  白羊: 'aries', 金牛: 'taurus', 双子: 'gemini', 巨蟹: 'cancer',
+  狮子: 'leo', 处女: 'virgo', 天秤: 'libra', 天蝎: 'scorpio',
+  射手: 'sagittarius', 摩羯: 'capricorn', 水瓶: 'aquarius', 双鱼: 'pisces',
 };
-const FIRE = new Set(['白羊座', '狮子座', '射手座']);
-const EARTH = new Set(['金牛座', '处女座', '摩羯座']);
-const AIR = new Set(['双子座', '天秤座', '水瓶座']);
-const CARDINAL = new Set(['白羊座', '巨蟹座', '天秤座', '摩羯座']);
-const FIXED = new Set(['金牛座', '狮子座', '天蝎座', '水瓶座']);
+const FIRE = new Set(['白羊', '狮子', '射手']);
+const EARTH = new Set(['金牛', '处女', '摩羯']);
+const AIR = new Set(['双子', '天秤', '水瓶']);
+const CARDINAL = new Set(['白羊', '巨蟹', '天秤', '摩羯']);
+const FIXED = new Set(['金牛', '狮子', '天蝎', '水瓶']);
+
+const normalizeSign = (sign: string) => sign.replace(/座$/, '').trim();
 
 const ELEMENT_TRAITS: Record<string, string> = {
   fire: '行动派 · 直觉爆发的开拓者',
@@ -43,23 +45,23 @@ const ELEMENT_TRAITS: Record<string, string> = {
 };
 
 const ARCHETYPES: Record<string, [string, string, string]> = {
-  白羊座: ['破晓先驱', '赤焰行者', '直觉与行动力同步点燃，擅长在混沌中率先破局。'],
-  金牛座: ['大地筑梦', '静水流深', '以笃定节奏沉淀价值，在真实质感中长出长期主义。'],
-  双子座: ['星辰信使', '多维共鸣者', '思维灵动如风，善于把零散线索编织成清晰洞察。'],
-  巨蟹座: ['潮汐守望', '温柔铠甲', '拥有极深的情感雷达，在守护与共情中凝聚内在力量。'],
-  狮子座: ['曜石恒星', '炽光创造者', '天生带着舞台感与热忱，用真诚照亮身边人的坐标。'],
-  处女座: ['精密织星', '秩序炼金师', '于细微处见真章，擅长把复杂现实打磨成优雅解法。'],
-  天秤座: ['风雅衡器', '关系诗人', '敏锐捕捉美与分寸，在共振与平衡中建立深度连接。'],
-  天蝎座: ['深渊潜行', '蜕变炼魂者', '目光穿透表象，越是关键转折越能展现破茧定力。'],
-  射手座: ['远方旅人', '真理追光者', '心向辽阔边界，用探索与信念把当下活成旷野。'],
-  摩羯座: ['山巅行者', '时间雕塑家', '冷静而坚韧，懂得把宏大愿景拆解成步步兑现的阶梯。'],
-  水瓶座: ['星际观测者', '未来解码人', '不被常规框架束缚，总能以独立视角看见下一程风向。'],
-  双鱼座: ['梦境潮汐', '灵性共鸣体', '想像力与直觉无界流动，在感知万象中沉淀温柔智慧。'],
+  白羊: ['破晓先驱', '赤焰行者', '直觉与行动力同步点燃，擅长在混沌中率先破局。'],
+  金牛: ['大地筑梦', '静水流深', '以笃定节奏沉淀价值，在真实质感中长出长期主义。'],
+  双子: ['星辰信使', '多维共鸣者', '思维灵动如风，善于把零散线索编织成清晰洞察。'],
+  巨蟹: ['潮汐守望', '温柔铠甲', '拥有极深的情感雷达，在守护与共情中凝聚内在力量。'],
+  狮子: ['曜石恒星', '炽光创造者', '天生带着舞台感与热忱，用真诚照亮身边人的坐标。'],
+  处女: ['精密织星', '秩序炼金师', '于细微处见真章，擅长把复杂现实打磨成优雅解法。'],
+  天秤: ['风雅衡器', '关系诗人', '敏锐捕捉美与分寸，在共振与平衡中建立深度连接。'],
+  天蝎: ['深渊潜行', '蜕变炼魂者', '目光穿透表象，越是关键转折越能展现破茧定力。'],
+  射手: ['远方旅人', '真理追光者', '心向辽阔边界，用探索与信念把当下活成旷野。'],
+  摩羯: ['山巅行者', '时间雕塑家', '冷静而坚韧，懂得把宏大愿景拆解成步步兑现的阶梯。'],
+  水瓶: ['星际观测者', '未来解码人', '不被常规框架束缚，总能以独立视角看见下一程风向。'],
+  双鱼: ['梦境潮汐', '灵性共鸣体', '想像力与直觉无界流动，在感知万象中沉淀温柔智慧。'],
 };
 
 export function sunriseImageUrl(sunZh: string, ascZh: string, gender?: string): string {
-  const sun = SIGN_EN[sunZh];
-  const asc = SIGN_EN[ascZh];
+  const sun = SIGN_EN[normalizeSign(sunZh)];
+  const asc = SIGN_EN[normalizeSign(ascZh)];
   if (!sun || !asc) return '';
   return `/avatar_designs_v2/${sun}/${sun}-${asc}-${gender === 'male' ? 'masc' : 'fem'}.webp`;
 }
@@ -86,15 +88,16 @@ export function computePortraitSummary(natal: NonNullable<ChartSnapshot['natal']
   const planetWeights: Array<{ name: string; sign: string; weight: number }> = [];
 
   planets.forEach((p, idx) => {
+    const signKey = normalizeSign(p.signZh);
     const w = idx <= 1 ? 3 : idx <= 4 ? 2 : 1;
     signWeights[p.signZh] = (signWeights[p.signZh] ?? 0) + w;
     planetWeights.push({ name: p.nameZh, sign: p.signZh, weight: Number((w + (p.house === 1 || p.house === 10 ? 0.5 : 0)).toFixed(1)) });
-    if (FIRE.has(p.signZh)) el.fire += 1;
-    else if (EARTH.has(p.signZh)) el.earth += 1;
-    else if (AIR.has(p.signZh)) el.air += 1;
+    if (FIRE.has(signKey)) el.fire += 1;
+    else if (EARTH.has(signKey)) el.earth += 1;
+    else if (AIR.has(signKey)) el.air += 1;
     else el.water += 1;
-    if (CARDINAL.has(p.signZh)) mod.cardinal += 1;
-    else if (FIXED.has(p.signZh)) mod.fixed += 1;
+    if (CARDINAL.has(signKey)) mod.cardinal += 1;
+    else if (FIXED.has(signKey)) mod.fixed += 1;
     else mod.mutable += 1;
   });
 
@@ -128,7 +131,7 @@ export function computePortraitSummary(natal: NonNullable<ChartSnapshot['natal']
     return { day, score, phase, events };
   });
   const average = Math.round(days.reduce((s, d) => s + d.score, 0) / days.length);
-  const [epithet, archetype, insight] = ARCHETYPES[sunSign] ?? ['观星行者', '本命星图', '每一颗星体落点都在讲述你独特的节奏与天赋坐标。'];
+  const [epithet, archetype, insight] = ARCHETYPES[normalizeSign(sunSign)] ?? ['观星行者', '本命星图', '每一颗星体落点都在讲述你独特的节奏与天赋坐标。'];
 
   return {
     sunSign, moonSign, ascSign, epithet, archetype, insight, elementTraits, elements,

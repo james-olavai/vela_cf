@@ -19,13 +19,20 @@ interface ShareBonusModalProps {
 export function ShareBonusModal({ open, uid, tier, usage, profile, chart, onClose, onClaimed, onOpenUpgrade }: ShareBonusModalProps) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sharedActionDone, setSharedActionDone] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const summary = chart?.natal ? computePortraitSummary(chart.natal) : null;
   const shareUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   useEffect(() => {
-    if (!open || !canvasRef.current) return;
+    if (!open) {
+      setSharedActionDone(false);
+      setNotice(null);
+      return;
+    }
+    if (!canvasRef.current) return;
     void renderVelaSharePoster(canvasRef.current, profile, summary, shareUrl);
   }, [open, profile, summary, shareUrl]);
 
@@ -47,19 +54,69 @@ export function ShareBonusModal({ open, uid, tier, usage, profile, chart, onClos
     link.download = `vela-portrait-${profile?.name || 'card'}.png`;
     link.href = canvasRef.current.toDataURL('image/png');
     link.click();
+    setSharedActionDone(true);
+    setNotice('已保存分享海报图片，发送给好友后即可点击下方领取。');
+  };
+
+  const handleCopyShareText = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareText);
+      } else {
+        throw new Error('NO_CLIPBOARD');
+      }
+      setSharedActionDone(true);
+      setNotice('已复制分享文案与链接，发送给好友后即可点击下方领取。');
+    } catch {
+      setNotice('当前浏览器限制自动复制，请先保存分享海报图片再领取。');
+    }
+  };
+
+  const triggerNativeShare = async (): Promise<boolean> => {
+    const title = 'Vela 观星台 · 星盘能量画像';
+    const canvas = canvasRef.current;
+    if (canvas && typeof navigator.canShare === 'function') {
+      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
+      if (blob) {
+        const file = new File([blob], `vela-portrait-${profile?.name || 'card'}.png`, { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ title, text: shareText, url: shareUrl, files: [file] });
+            return true;
+          } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') return false;
+          }
+        }
+      }
+    }
+    try {
+      await navigator.share({ title, text: shareText, url: shareUrl });
+      return true;
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return false;
+      throw err;
+    }
   };
 
   const handleShareAndClaim = async () => {
     if (disabled) return;
+    if (!canNativeShare && !sharedActionDone) {
+      setNotice('请先保存分享海报或复制分享文案，完成分享后再领取额度。');
+      return;
+    }
     setBusy(true);
     setNotice(null);
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareText).catch(() => undefined);
+      if (canNativeShare) {
+        const completed = await triggerNativeShare();
+        if (!completed) {
+          setNotice('已取消系统分享，完成分享后即可领取 +1 次额度。');
+          return;
+        }
       }
       const next = await claimDailyShareBonus(uid);
       onClaimed(next);
-      setNotice('已复制分享卡片文案，成功领取 +1 次深度推演额度！');
+      setNotice(canNativeShare ? '已完成系统分享，成功领取 +1 次深度推演额度！' : '已确认分享，成功领取 +1 次深度推演额度！');
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       setNotice(
@@ -107,11 +164,28 @@ export function ShareBonusModal({ open, uid, tier, usage, profile, chart, onClos
           {notice && <div role="status" className="px-4 py-2 rounded-[10px] border border-[#e0b64a]/40 bg-[#1d1a0f] text-[12.5px] text-[#f7d57f]">{notice}</div>}
 
           <div className="flex flex-col gap-2">
-            <button type="button" onClick={handleSavePoster} className="min-h-[40px] w-full rounded-[10px] border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#f8fafc] text-[13.5px] font-medium cursor-pointer">
-              保存 Vela 分享卡片图片 (PNG)
-            </button>
-            <button type="button" disabled={disabled} onClick={handleShareAndClaim} className="min-h-[44px] w-full rounded-[10px] border-0 bg-[#e0b64a] text-[#0d111d] text-[14px] font-bold hover:bg-[#f7d57f] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
-              {busy ? '领取中...' : sharedToday ? '今日已领取分享奖励' : limitReached ? '本月奖励已领满（3/3）' : '分享卡片并领取 +1 次额度'}
+            <div className={canNativeShare ? 'flex flex-col gap-2' : 'grid grid-cols-2 gap-2'}>
+              <button type="button" onClick={handleSavePoster} className="min-h-[40px] w-full rounded-[10px] border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#f8fafc] text-[13px] font-medium cursor-pointer">
+                保存分享海报 (PNG)
+              </button>
+              {!canNativeShare && (
+                <button type="button" onClick={handleCopyShareText} className="min-h-[40px] w-full rounded-[10px] border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#f8fafc] text-[13px] font-medium cursor-pointer">
+                  复制分享文案与链接
+                </button>
+              )}
+            </div>
+            <button type="button" disabled={disabled || (!canNativeShare && !sharedActionDone)} onClick={handleShareAndClaim} className="min-h-[44px] w-full rounded-[10px] border-0 bg-[#e0b64a] text-[#0d111d] text-[14px] font-bold hover:bg-[#f7d57f] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
+              {busy
+                ? '分享处理中...'
+                : sharedToday
+                  ? '今日已领取分享奖励'
+                  : limitReached
+                    ? '本月奖励已领满（3/3）'
+                    : canNativeShare
+                      ? '调起系统分享并领取 +1 次额度'
+                      : sharedActionDone
+                        ? '确认已分享，领取 +1 次额度'
+                        : '请先保存海报或复制文案后再领取'}
             </button>
           </div>
 
