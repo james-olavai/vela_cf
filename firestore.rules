@@ -50,7 +50,7 @@ service cloud.firestore {
       allow list, delete: if false;
       allow create: if isValidId(uid) && isOwner(uid)
         && request.resource.data.keys().hasOnly(['periodStart', 'used', 'bonusMicroUsd', 'shareCount', 'lastShareDate'])
-        && request.resource.data.periodStart is string && request.resource.data.periodStart.size() == 7
+        && request.resource.data.periodStart is string && request.resource.data.periodStart.size() >= 7 && request.resource.data.periodStart.size() <= 24
         && request.resource.data.used == 0
         && request.resource.data.bonusMicroUsd == 30000
         && request.resource.data.shareCount == 1
