@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   nextUtcMonthResetLabel,
-  QUOTA_LIMIT,
+  QUOTA_BUDGET_MICRO_USD,
   TIER_META,
   type ConsultationMode,
   type MessageRecord,
@@ -221,8 +221,7 @@ export function WorkbenchPage({
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
-  const limit = QUOTA_LIMIT[tier];
-  const quotaExhausted = Boolean(uid) && usage.used >= limit;
+  const quotaExhausted = Boolean(uid) && usage.used >= QUOTA_BUDGET_MICRO_USD[tier];
   const activeProfiles = effectiveProfiles.filter((p) => selectedProfileIds.includes(p.id));
   const needsMoreProfiles =
     effectiveProfiles.length === 0 ||
@@ -563,7 +562,7 @@ export function WorkbenchPage({
         <div className="p-4 rounded-[20px] border border-[#e0b64a]/50 bg-[#101527] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <p className="m-0 text-[14px] font-bold text-[#f8fafc]">
-              本月免费次数已用完（{usage.used} / {limit}）
+              本月额度已用完（100%）
             </p>
             <p className="m-0 text-[12px] text-[#a3b0c5]">
               下次重置：{nextUtcMonthResetLabel()}（UTC）

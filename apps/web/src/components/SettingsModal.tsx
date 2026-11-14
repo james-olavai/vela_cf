@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
+  computeUsagePercent,
   nextUtcMonthResetLabel,
-  QUOTA_LIMIT,
   TIER_META,
   type EntityType,
   type Gender,
@@ -79,8 +79,7 @@ export function SettingsModal({
 
   if (!open) return null;
 
-  const limit = QUOTA_LIMIT[tier];
-  const pct = Math.min(100, Math.round((usage.used / limit) * 100));
+  const pct = computeUsagePercent(usage.used, tier);
 
   const handleUpgrade = async (target: 'go' | 'pro') => {
     if (!uid) {
@@ -214,14 +213,14 @@ export function SettingsModal({
                     当前方案：{TIER_META[tier].label}
                   </span>
                   <span className="font-mono-num text-[#f7d57f]">
-                    已用 {pct}%（{usage.used} / {limit} 次）
+                    已用 {pct}%
                   </span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-[#070812] overflow-hidden">
                   <div className="h-full bg-[#e0b64a] transition-[width]" style={{ width: `${pct}%` }} />
                 </div>
                 <p className="m-0 text-[12px] text-[#a3b0c5]">
-                  按发送对话消息计次（新建会话不扣次），{nextUtcMonthResetLabel()}（UTC）重置。
+                  按 Gemini 4 Hydrogen 实际对话与推理 Token 用量实时折算，{nextUtcMonthResetLabel()}（UTC）重置。
                 </p>
               </div>
 
@@ -242,8 +241,8 @@ export function SettingsModal({
                         </span>
                         <span className="font-mono-num text-[14px] text-[#f7d57f]">{meta.priceLabel}</span>
                       </div>
-                      <p className="m-0 text-[13px] text-[#c3cde0]">
-                        每月 {QUOTA_LIMIT[plan]} 次对话 · {plan === 'go' ? '含行运时间线' : '含全套中西排盘与八字紫微'}
+                      <p className="m-0 text-[13px] text-[#c3cde0] leading-[1.6]">
+                        {meta.highlights.join(' · ')}
                       </p>
                       <button
                         type="button"

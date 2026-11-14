@@ -16,7 +16,7 @@ export const DEFAULT_PRESETS: Record<string, ServerPresetConfig> = {
     systemPrompt:
       '你是 Vela 的占星顾问。请先调用 natalWheel 工具取得准确的个人西洋本命盘事实，再结合用户的具体问题，用清晰、温和、有依据的中文回答，并在末尾给出 2-3 个简短追问建议。' +
       GUARDRAIL_TAIL,
-    modelName: 'vertexai/gemini-2.5-flash',
+    modelName: 'vertexai/gemini-4-hydrogen',
     temperature: 0.6,
     allowedTools: ['natalWheel'],
   },
@@ -24,7 +24,7 @@ export const DEFAULT_PRESETS: Record<string, ServerPresetConfig> = {
     systemPrompt:
       '你是 Vela 的西洋占星顾问。请调用 natalWheel 与 transitEvents 工具获取完整的个人西洋本命盘与近期行运时间线事实，围绕用户的问题提供清晰、聚焦且可落地的解读。' +
       GUARDRAIL_TAIL,
-    modelName: 'vertexai/gemini-2.5-flash',
+    modelName: 'vertexai/gemini-4-hydrogen',
     temperature: 0.6,
     allowedTools: ['natalWheel', 'transitEvents'],
   },
@@ -32,7 +32,7 @@ export const DEFAULT_PRESETS: Record<string, ServerPresetConfig> = {
     systemPrompt:
       '你是 Vela 的合盘占星顾问。请先调用 synastryAspects 工具计算双方跨盘相位（必要时辅以 natalWheel），客观分析两位对象的互动张力、契合点与相处建议。' +
       GUARDRAIL_TAIL,
-    modelName: 'vertexai/gemini-2.5-flash',
+    modelName: 'vertexai/gemini-4-hydrogen',
     temperature: 0.6,
     allowedTools: ['natalWheel', 'synastryAspects'],
   },
@@ -40,7 +40,7 @@ export const DEFAULT_PRESETS: Record<string, ServerPresetConfig> = {
     systemPrompt:
       '你是 Vela 的中西合参高级占星顾问。请结合 natalWheel、transitEvents、baziPillars 与 ziweiPalaces 工具，进行西洋占星、东方八字与紫微斗数交叉对比，给出严谨、结构化的多维解读。' +
       GUARDRAIL_TAIL,
-    modelName: 'vertexai/gemini-2.5-pro',
+    modelName: 'vertexai/gemini-4-hydrogen',
     temperature: 0.6,
     allowedTools: ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces'],
   },
@@ -48,7 +48,7 @@ export const DEFAULT_PRESETS: Record<string, ServerPresetConfig> = {
     systemPrompt:
       '你是 Vela 的多维合盘顾问（支持最多 4 个个人、公司或国家档案）。请调用 synastryAspects（并可结合 natalWheel、transitEvents、baziPillars、ziweiPalaces）交叉对比多方结构、合作/关系张力与时间窗口。' +
       GUARDRAIL_TAIL,
-    modelName: 'vertexai/gemini-2.5-pro',
+    modelName: 'vertexai/gemini-4-hydrogen',
     temperature: 0.6,
     allowedTools: ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces', 'synastryAspects'],
   },

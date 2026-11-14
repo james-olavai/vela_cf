@@ -11,8 +11,9 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import {
+  computeTokenCostMicroUsd,
   ProfileInputSchema,
-  QUOTA_LIMIT,
+  QUOTA_BUDGET_MICRO_USD,
   utcMonthPeriodStart,
   type AstrologyToolName,
   type ConsultationMode,
@@ -294,7 +295,7 @@ export function createConsultationSession(
     profileName: names,
     title: `${modeLabel} · ${names}`,
     frozenPrompt: `${modeLabel}（${tier.toUpperCase()}）`,
-    frozenModel: tier === 'pro' ? 'vertexai/gemini-2.5-pro' : 'vertexai/gemini-2.5-flash',
+    frozenModel: 'vertexai/gemini-4-hydrogen',
     frozenTools: resolveToolsForTierAndMode(tier, mode),
     createdAt: now,
     updatedAt: now,
@@ -331,7 +332,7 @@ export async function streamConsultationReply(params: {
   const primaryProfile = profiles[0];
 
   const usage = loadLocalUsage(uid);
-  if (usage.used >= QUOTA_LIMIT[tier]) {
+  if (usage.used >= QUOTA_BUDGET_MICRO_USD[tier]) {
     onQuotaExceeded();
     return;
   }
@@ -356,9 +357,13 @@ export async function streamConsultationReply(params: {
   saveLocalMessages(uid, session.id, currentMsgs);
   onUpdateMessages(currentMsgs);
 
+  const estimatedCost = computeTokenCostMicroUsd(
+    Math.max(4000, userText.length * 2),
+    2500,
+  );
   const nextUsage: UsageRecord = {
     periodStart: usage.periodStart,
-    used: usage.used + 1,
+    used: usage.used + estimatedCost,
   };
   saveLocalUsage(uid, nextUsage);
   onUpdateUsage(nextUsage);
@@ -466,7 +471,7 @@ export async function streamConsultationReply(params: {
     if (!receivedAnyDelta) {
       const refunded: UsageRecord = {
         periodStart: nextUsage.periodStart,
-        used: Math.max(0, nextUsage.used - 1),
+        used: usage.used,
       };
       saveLocalUsage(uid, refunded);
       onUpdateUsage(refunded);

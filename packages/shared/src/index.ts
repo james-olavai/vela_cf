@@ -3,18 +3,36 @@ import { z } from 'zod';
 export const TierSchema = z.enum(['free', 'go', 'pro']);
 export type Tier = z.infer<typeof TierSchema>;
 
-export const QUOTA_LIMIT: Record<Tier, number> = {
-  free: 3,
-  go: 30,
-  pro: 120,
+/**
+ * Monthly LLM cost budget in micro-USD (1 USD = 1_000_000 micro-USD)
+ * calibrated to Gemini 4 Hydrogen (asia-southeast1: $1.65/1M in, $8.25/1M out)
+ * preserving ~75% gross margin on paid tiers.
+ */
+export const QUOTA_BUDGET_MICRO_USD: Record<Tier, number> = {
+  free: 100_000, // $0.10 (~3 standard readings)
+  go: 2_300_000, // $2.30 (~55-70 readings on $9.9/mo)
+  pro: 6_500_000, // $6.50 (~100-120 readings incl. heavy synastry on $24.9/mo)
 };
+
+export const QUOTA_LIMIT = QUOTA_BUDGET_MICRO_USD;
+
+export function computeTokenCostMicroUsd(inputTokens: number, outputTokens: number): number {
+  const cost = Math.round((inputTokens * 1_650_000 + outputTokens * 8_250_000) / 1_000_000);
+  return Math.max(1_000, cost);
+}
+
+export function computeUsagePercent(usedMicroUsd: number, tier: Tier): number {
+  const budget = QUOTA_BUDGET_MICRO_USD[tier];
+  if (budget <= 0) return 100;
+  return Math.min(100, Math.round((usedMicroUsd / budget) * 100));
+}
 
 export const TIER_META: Record<
   Tier,
   {
     label: string;
     priceLabel: string;
-    monthlyQuota: number;
+    monthlyBudgetMicroUsd: number;
     maxSynastryProfiles: number;
     allowsEntityCharts: boolean;
     highlights: string[];
@@ -23,27 +41,27 @@ export const TIER_META: Record<
   free: {
     label: '免费档',
     priceLabel: '$0',
-    monthlyQuota: 3,
+    monthlyBudgetMicroUsd: QUOTA_BUDGET_MICRO_USD.free,
     maxSynastryProfiles: 0,
     allowsEntityCharts: false,
-    highlights: ['每月 3 次个人星盘', '西洋本命盘基础解读'],
+    highlights: ['每月约 3 次免费体验', '个人西洋本命盘基础解读'],
   },
   go: {
     label: 'Go',
     priceLabel: '$9.9',
-    monthlyQuota: 30,
+    monthlyBudgetMicroUsd: QUOTA_BUDGET_MICRO_USD.go,
     maxSynastryProfiles: 2,
     allowsEntityCharts: false,
-    highlights: ['每月 30 次咨询', '个人西洋占星全部盘面（本命 + 行运）', '双人合盘（2 个档案）'],
+    highlights: ['每月约 55–70 次常规对话额度', '个人西洋占星全部盘面（本命 + 行运）', '双人合盘（2 个档案）'],
   },
   pro: {
     label: 'Pro',
     priceLabel: '$24.9',
-    monthlyQuota: 120,
+    monthlyBudgetMicroUsd: QUOTA_BUDGET_MICRO_USD.pro,
     maxSynastryProfiles: 4,
     allowsEntityCharts: true,
     highlights: [
-      '每月 120 次咨询',
+      '每月约 100–120 次多维合盘额度',
       '个人西洋 + 八字 + 紫微交叉对比',
       '最多 4 个档案多人合盘（含个人 / 公司 / 国家盘）',
     ],

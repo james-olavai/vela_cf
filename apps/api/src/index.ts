@@ -8,8 +8,9 @@ import { vertexAI } from '@genkit-ai/vertexai';
 import Stripe from 'stripe';
 import {
   ChatRequestSchema,
+  computeTokenCostMicroUsd,
   CreateSessionRequestSchema,
-  QUOTA_LIMIT,
+  QUOTA_BUDGET_MICRO_USD,
   ResolveLocationRequestSchema,
   TIER_META,
   TierSchema,
@@ -109,20 +110,13 @@ const chatFlow = ai.defineFlow(
     const { tier, periodStart } = await resolveUserPeriodAndTier(uid, context.auth?.token?.stripeRole);
     const usageRef = db.collection('usage').doc(uid);
 
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(usageRef);
-      const data = snap.data();
-      const isNewPeriod = !data || String(data.periodStart) < periodStart;
-      const currentUsed = isNewPeriod ? 0 : Number(data.used ?? 0);
-      if (currentUsed >= QUOTA_LIMIT[tier]) {
-        throw new HttpsError('resource-exhausted', 'QUOTA_EXCEEDED');
-      }
-      tx.set(usageRef, {
-        periodStart,
-        used: currentUsed + 1,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    });
+    const preSnap = await usageRef.get();
+    const preData = preSnap.data();
+    const isNewPeriod = !preData || String(preData.periodStart) < periodStart;
+    const preUsed = isNewPeriod ? 0 : Number(preData?.used ?? 0);
+    if (preUsed >= QUOTA_BUDGET_MICRO_USD[tier]) {
+      throw new HttpsError('resource-exhausted', 'QUOTA_EXCEEDED');
+    }
 
     await sessionRef.collection('messages').add({
       role: 'user',
@@ -155,7 +149,6 @@ const chatFlow = ai.defineFlow(
     const tools = allowedToolNames.map((name) => astrologyTools[name]).filter(Boolean);
 
     let fullText = '';
-    let sentAnyChunk = false;
 
     try {
       const entityLabel = (et?: string) =>
@@ -167,7 +160,7 @@ const chatFlow = ai.defineFlow(
         )
         .join('\n');
       const { stream, response } = ai.generateStream({
-        model: session.frozenModel || 'vertexai/gemini-2.5-flash',
+        model: session.frozenModel || 'vertexai/gemini-4-hydrogen',
         system: `${session.frozenPrompt}\n\n${profileContext}`,
         prompt: `${historyContext}\n用户最新消息: ${input.message}`,
         tools,
@@ -176,7 +169,6 @@ const chatFlow = ai.defineFlow(
 
       for await (const chunk of stream) {
         if (chunk.text) {
-          sentAnyChunk = true;
           fullText += chunk.text;
           sendChunk({ type: 'text', text: chunk.text });
         }
@@ -187,6 +179,26 @@ const chatFlow = ai.defineFlow(
         fullText = finalResp.text;
       }
 
+      const usageMeta = finalResp.usage;
+      const inTokens = Number(usageMeta?.inputTokens ?? 0);
+      const outTokens = Number(usageMeta?.outputTokens ?? 0) + Number(usageMeta?.thoughtsTokens ?? 0);
+      const costMicroUsd =
+        inTokens > 0 || outTokens > 0
+          ? computeTokenCostMicroUsd(inTokens, outTokens)
+          : 30_000;
+
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(usageRef);
+        const data = snap.data();
+        const reset = !data || String(data.periodStart) < periodStart;
+        const baseUsed = reset ? 0 : Number(data?.used ?? 0);
+        tx.set(usageRef, {
+          periodStart,
+          used: baseUsed + costMicroUsd,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      });
+
       await sessionRef.collection('messages').add({
         role: 'assistant',
         parts: [{ type: 'text', text: fullText }],
@@ -196,15 +208,6 @@ const chatFlow = ai.defineFlow(
 
       return { text: fullText };
     } catch (err) {
-      if (!sentAnyChunk) {
-        await db.runTransaction(async (tx) => {
-          const snap = await tx.get(usageRef);
-          const data = snap.data();
-          if (data && Number(data.used) > 0) {
-            tx.update(usageRef, { used: Number(data.used) - 1 });
-          }
-        });
-      }
       throw err;
     }
   },
