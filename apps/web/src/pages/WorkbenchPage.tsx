@@ -118,6 +118,7 @@ export function WorkbenchPage({
   const [inputText, setInputText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -286,8 +287,9 @@ export function WorkbenchPage({
           ? [...prev, nextId]
           : [...prev.slice(1), nextId],
     );
-    const preview = await fetchNatalChart(null, record);
-    setChart(preview);
+    void fetchNatalChart(null, record)
+      .then((preview) => setChart(preview))
+      .catch(() => undefined);
   };
 
   const handleDeleteSidebarProfile = async (id: string) => {
@@ -368,6 +370,28 @@ export function WorkbenchPage({
       setIsStreaming(false);
       abortRef.current = null;
     }
+  };
+
+  const handleCopyMessage = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMsgId(id);
+      setTimeout(() => setCopiedMsgId((cur) => (cur === id ? null : cur)), 1800);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleRegenerate = () => {
+    if (isStreaming) return;
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (!lastUser) return;
+    const text = lastUser.parts
+      .filter((p) => p.type === 'text')
+      .map((p) => p.text)
+      .join('\n')
+      .trim();
+    if (text) void handleSend(text);
   };
 
   const handleSubmitForm = (e: FormEvent) => {
@@ -781,6 +805,27 @@ export function WorkbenchPage({
                         </div>
                       ) : (
                         <div className="py-1">{renderFormattedText(textContent)}</div>
+                      )}
+
+                      {textContent && !(isLastAssistant && isStreaming) && (
+                        <div className="no-print flex items-center gap-2 pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyMessage(msg.id, textContent)}
+                            className="px-2.5 py-1 rounded-[8px] border border-[#26304d] bg-transparent text-[11.5px] text-[#a3b0c5] hover:text-[#f8fafc] hover:border-[#3a4668] cursor-pointer"
+                          >
+                            {copiedMsgId === msg.id ? '已复制' : '复制'}
+                          </button>
+                          {isLastAssistant && !quotaExhausted && (
+                            <button
+                              type="button"
+                              onClick={handleRegenerate}
+                              className="px-2.5 py-1 rounded-[8px] border border-[#26304d] bg-transparent text-[11.5px] text-[#a3b0c5] hover:text-[#f8fafc] hover:border-[#3a4668] cursor-pointer"
+                            >
+                              重新生成
+                            </button>
+                          )}
+                        </div>
                       )}
 
                       {msg.suggestions && msg.suggestions.length > 0 && !isStreaming && (
