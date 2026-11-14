@@ -15,6 +15,8 @@ export const TIER_META: Record<
     label: string;
     priceLabel: string;
     monthlyQuota: number;
+    maxSynastryProfiles: number;
+    allowsEntityCharts: boolean;
     highlights: string[];
   }
 > = {
@@ -22,19 +24,29 @@ export const TIER_META: Record<
     label: '免费档',
     priceLabel: '$0',
     monthlyQuota: 3,
-    highlights: ['每月 3 次咨询', '免费本命盘'],
+    maxSynastryProfiles: 0,
+    allowsEntityCharts: false,
+    highlights: ['每月 3 次个人星盘', '西洋本命盘基础解读'],
   },
   go: {
     label: 'Go',
     priceLabel: '$9.9',
     monthlyQuota: 30,
-    highlights: ['每月 30 次咨询', '解忧速读', '行运时间线'],
+    maxSynastryProfiles: 2,
+    allowsEntityCharts: false,
+    highlights: ['每月 30 次咨询', '个人西洋占星全部盘面（本命 + 行运）', '双人合盘（2 个档案）'],
   },
   pro: {
     label: 'Pro',
     priceLabel: '$24.9',
     monthlyQuota: 120,
-    highlights: ['每月 120 次咨询', '人生教练', '八字四柱与紫微斗数', '包含 Go 的全部内容'],
+    maxSynastryProfiles: 4,
+    allowsEntityCharts: true,
+    highlights: [
+      '每月 120 次咨询',
+      '个人西洋 + 八字 + 紫微交叉对比',
+      '最多 4 个档案多人合盘（含个人 / 公司 / 国家盘）',
+    ],
   },
 };
 
@@ -49,11 +61,18 @@ export function hasTierAccess(userTier: Tier, minTier: Tier): boolean {
 export const GenderSchema = z.enum(['male', 'female', 'unset']);
 export type Gender = z.infer<typeof GenderSchema>;
 
+export const EntityTypeSchema = z.enum(['person', 'company', 'country']);
+export type EntityType = z.infer<typeof EntityTypeSchema>;
+
+export const ConsultationModeSchema = z.enum(['personal', 'synastry']);
+export type ConsultationMode = z.infer<typeof ConsultationModeSchema>;
+
 export const AstrologyToolNameSchema = z.enum([
   'natalWheel',
   'transitEvents',
   'baziPillars',
   'ziweiPalaces',
+  'synastryAspects',
 ]);
 export type AstrologyToolName = z.infer<typeof AstrologyToolNameSchema>;
 
@@ -107,10 +126,11 @@ export const DEFAULT_PRODUCTS: CatalogProduct[] = [
 
 export const ProfileInputSchema = z.object({
   name: z.string().trim().min(1, '请填写称呼').max(64, '称呼最多 64 个字'),
+  entityType: EntityTypeSchema.default('person'),
   birthDateTime: z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, '请选择完整的出生日期与时间'),
-  locationName: z.string().trim().min(1, '请选择出生城市').max(200),
+    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, '请选择完整的日期与时间'),
+  locationName: z.string().trim().min(1, '请选择地点').max(200),
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   timezone: z.string().trim().min(1).max(80),
@@ -148,9 +168,11 @@ export interface MessageRecord {
 
 export interface SessionRecord {
   id: string;
-  productSlug: string;
-  productTitle: string;
+  mode: ConsultationMode;
+  productSlug?: string;
+  productTitle?: string;
   profileId: string;
+  profileIds: string[];
   profileName: string;
   title: string;
   frozenPrompt: string;
@@ -174,8 +196,8 @@ export interface UserRecord {
 }
 
 export const CreateSessionRequestSchema = z.object({
-  productSlug: z.string().min(1).max(64),
-  profileId: z.string().min(1).max(128),
+  mode: ConsultationModeSchema.default('personal'),
+  profileIds: z.array(z.string().min(1).max(128)).min(1).max(4),
 });
 
 export const ChatRequestSchema = z.object({

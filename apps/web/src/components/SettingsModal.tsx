@@ -3,6 +3,7 @@ import {
   nextUtcMonthResetLabel,
   QUOTA_LIMIT,
   TIER_META,
+  type EntityType,
   type Gender,
   type LocationCandidate,
   type ProfileInput,
@@ -53,6 +54,7 @@ export function SettingsModal({
   // Profile form state
   const [editingId, setEditingId] = useState<string | undefined>(undefined);
   const [name, setName] = useState('');
+  const [entityType, setEntityType] = useState<EntityType>('person');
   const [birthDateTime, setBirthDateTime] = useState('1994-06-03T08:20');
   const [cityQuery, setCityQuery] = useState('');
   const [candidates, setCandidates] = useState<LocationCandidate[]>([]);
@@ -116,16 +118,18 @@ export function SettingsModal({
     try {
       const payload: ProfileInput = {
         name: name.trim(),
+        entityType,
         birthDateTime,
         locationName: selectedLoc.displayName,
         latitude: selectedLoc.latitude,
         longitude: selectedLoc.longitude,
         timezone: selectedLoc.timezone,
-        gender,
+        gender: entityType === 'person' ? gender : 'unset',
       };
       await saveProfile(uid, editingId ?? null, payload);
       setEditingId(undefined);
       setName('');
+      setEntityType('person');
       setCityQuery('');
       setSelectedLoc(null);
       setCandidates([]);
@@ -264,6 +268,7 @@ export function SettingsModal({
                           onClick={() => {
                             setEditingId(p.id);
                             setName(p.name);
+                            setEntityType(p.entityType ?? 'person');
                             setBirthDateTime(p.birthDateTime);
                             setCityQuery(p.locationName);
                             setSelectedLoc({
@@ -312,6 +317,29 @@ export function SettingsModal({
                     onChange={(e) => setBirthDateTime(e.target.value)}
                     className="min-h-[42px] px-3 rounded-[8px] border border-[#3a4668] bg-[#101527] text-[#f8fafc] text-[14px]"
                   />
+                </div>
+                <div className="flex gap-2">
+                  {(
+                    [
+                      { id: 'person', label: '个人' },
+                      { id: 'company', label: '公司 (Pro)' },
+                      { id: 'country', label: '国家 (Pro)' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      disabled={opt.id !== 'person' && !TIER_META[tier].allowsEntityCharts}
+                      onClick={() => setEntityType(opt.id)}
+                      className={`min-h-[34px] px-3 rounded-[8px] border text-[12px] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
+                        entityType === opt.id
+                          ? 'border-[#e0b64a] bg-[#1d1a0f] text-[#f7d57f]'
+                          : 'border-[#26304d] bg-[#101527] text-[#c3cde0]'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
                 <div className="flex gap-2">
                   <input

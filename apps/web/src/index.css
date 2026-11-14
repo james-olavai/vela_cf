@@ -45,6 +45,19 @@ a:hover {
   font-family: 'Cinzel', Georgia, serif;
 }
 
+.wordmark {
+  font-family: 'Cinzel', Georgia, serif;
+  letter-spacing: 0.28em;
+}
+
+.brand-logo {
+  width: 3.6rem;
+  height: 3.6rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
 .font-serif-sc {
   font-family: 'Noto Serif SC', Georgia, serif;
 }

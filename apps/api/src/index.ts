@@ -9,10 +9,9 @@ import Stripe from 'stripe';
 import {
   ChatRequestSchema,
   CreateSessionRequestSchema,
-  DEFAULT_PRODUCTS,
-  hasTierAccess,
   QUOTA_LIMIT,
   ResolveLocationRequestSchema,
+  TIER_META,
   TierSchema,
   utcMonthPeriodStart,
   type AstrologyToolName,
@@ -90,14 +89,20 @@ const chatFlow = ai.defineFlow(
       throw new HttpsError('not-found', 'SESSION_NOT_FOUND');
     }
 
-    const profileSnap = await db
-      .collection('users')
-      .doc(uid)
-      .collection('profiles')
-      .doc(session.profileId)
-      .get();
-    const profile = profileSnap.data();
-    if (!profileSnap.exists || !profile) {
+    const profileIds: string[] =
+      Array.isArray(session.profileIds) && session.profileIds.length > 0
+        ? session.profileIds
+        : [session.profileId];
+
+    const profileSnaps = await Promise.all(
+      profileIds.map((pid) =>
+        db.collection('users').doc(uid).collection('profiles').doc(pid).get(),
+      ),
+    );
+    const profiles = profileSnaps
+      .filter((s) => s.exists && s.data())
+      .map((s) => s.data()!);
+    if (profiles.length === 0) {
       throw new HttpsError('not-found', 'PROFILE_NOT_FOUND');
     }
 
@@ -153,7 +158,14 @@ const chatFlow = ai.defineFlow(
     let sentAnyChunk = false;
 
     try {
-      const profileContext = `当前档案：称呼=${profile.name}，出生时间=${profile.birthDateTime}，出生地=${profile.locationName}（纬度 ${profile.latitude}，经度 ${profile.longitude}，时区 ${profile.timezone}），性别=${profile.gender ?? 'unset'}。`;
+      const entityLabel = (et?: string) =>
+        et === 'company' ? '公司' : et === 'country' ? '国家' : '个人';
+      const profileContext = profiles
+        .map(
+          (p, idx) =>
+            `档案${profiles.length > 1 ? idx + 1 : ''}：类型=${entityLabel(p.entityType)}，称呼=${p.name}，出生/成立时间=${p.birthDateTime}，地点=${p.locationName}（纬度 ${p.latitude}，经度 ${p.longitude}，时区 ${p.timezone}），性别=${p.gender ?? 'unset'}。`,
+        )
+        .join('\n');
       const { stream, response } = ai.generateStream({
         model: session.frozenModel || 'vertexai/gemini-2.5-flash',
         system: `${session.frozenPrompt}\n\n${profileContext}`,
@@ -214,43 +226,49 @@ export const createSession = onCall(
     if (!uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
 
     const input = CreateSessionRequestSchema.parse(req.data);
-    const productSnap = await db.collection('products').doc(input.productSlug).get();
-    const productData = productSnap.data();
-    const fallbackProduct = DEFAULT_PRODUCTS.find((p) => p.slug === input.productSlug);
-
-    if (!productData && !fallbackProduct) {
-      throw new HttpsError('not-found', 'PRODUCT_NOT_FOUND');
-    }
-
-    const minTier = TierSchema.parse(productData?.minTier ?? fallbackProduct?.minTier ?? 'free');
-    const title = String(productData?.title ?? fallbackProduct?.title ?? '咨询');
     const { tier } = await resolveUserPeriodAndTier(uid, req.auth?.token?.stripeRole);
+    const tierMeta = TIER_META[tier];
 
-    if (!hasTierAccess(tier, minTier)) {
-      throw new HttpsError('permission-denied', 'TIER_UPGRADE_REQUIRED');
+    if (input.mode === 'synastry') {
+      if (tierMeta.maxSynastryProfiles < 2) {
+        throw new HttpsError('permission-denied', 'SYNASTRY_REQUIRES_GO');
+      }
+      if (input.profileIds.length < 2 || input.profileIds.length > tierMeta.maxSynastryProfiles) {
+        throw new HttpsError('invalid-argument', 'INVALID_SYNASTRY_PROFILE_COUNT');
+      }
+    } else if (input.profileIds.length !== 1) {
+      throw new HttpsError('invalid-argument', 'PERSONAL_REQUIRES_ONE_PROFILE');
     }
 
-    const profileSnap = await db
-      .collection('users')
-      .doc(uid)
-      .collection('profiles')
-      .doc(input.profileId)
-      .get();
-    const profile = profileSnap.data();
-    if (!profileSnap.exists || !profile) {
-      throw new HttpsError('not-found', 'PROFILE_NOT_FOUND');
+    const profileSnaps = await Promise.all(
+      input.profileIds.map((pid) =>
+        db.collection('users').doc(uid).collection('profiles').doc(pid).get(),
+      ),
+    );
+    const profiles = profileSnaps.map((s) => {
+      const data = s.data();
+      if (!s.exists || !data) {
+        throw new HttpsError('not-found', 'PROFILE_NOT_FOUND');
+      }
+      return data;
+    });
+
+    if (!tierMeta.allowsEntityCharts && profiles.some((p) => p.entityType && p.entityType !== 'person')) {
+      throw new HttpsError('permission-denied', 'ENTITY_CHART_REQUIRES_PRO');
     }
 
-    const preset = await getServerPreset(input.productSlug);
+    const preset = await getServerPreset(tier, input.mode);
     const now = new Date().toISOString();
     const sessionRef = db.collection('users').doc(uid).collection('sessions').doc();
+    const names = profiles.map((p) => String(p.name)).join(' × ');
+    const modeLabel = input.mode === 'synastry' ? '多人合盘' : '个人星盘';
 
     await sessionRef.set({
-      productSlug: input.productSlug,
-      productTitle: title,
-      profileId: input.profileId,
-      profileName: profile.name,
-      title: `${title} · ${profile.name}`,
+      mode: input.mode,
+      profileIds: input.profileIds,
+      profileId: input.profileIds[0],
+      profileName: names,
+      title: `${modeLabel} · ${names}`,
       frozenPrompt: preset.systemPrompt,
       frozenModel: preset.modelName,
       frozenTools: preset.allowedTools,

@@ -17,3 +17,11 @@ export {
   type ZiweiPalacesInput,
   computeTrueSolarTime,
 } from './eastern.js';
+
+export {
+  synastryAspects,
+  SynastryAspectsInputSchema,
+  SynastryChartEntrySchema,
+  type SynastryAspectsInput,
+  type SynastryAspectsResult,
+} from './synastry.js';

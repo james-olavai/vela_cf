@@ -11,14 +11,11 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import {
-  DEFAULT_PRESETS_INFO,
-} from './presetsInfo';
-import {
-  DEFAULT_PRODUCTS,
   ProfileInputSchema,
   QUOTA_LIMIT,
   utcMonthPeriodStart,
-  type CatalogProduct,
+  type AstrologyToolName,
+  type ConsultationMode,
   type LocationCandidate,
   type MessagePart,
   type MessageRecord,
@@ -235,33 +232,6 @@ export async function removeProfile(uid: string, profileId: string): Promise<voi
   }
 }
 
-export async function fetchPublishedProducts(): Promise<CatalogProduct[]> {
-  try {
-    const snap = await getDocs(collection(db, 'products'));
-    const fromDb = snap.docs
-      .map((d) => {
-        const data = d.data();
-        const fallback = DEFAULT_PRODUCTS.find((p) => p.slug === d.id);
-        return {
-          slug: d.id,
-          title: String(data.title ?? fallback?.title ?? d.id),
-          description: String(data.description ?? fallback?.description ?? ''),
-          minTier: (data.minTier as Tier) ?? fallback?.minTier ?? 'free',
-          isPublished: Boolean(data.isPublished),
-          sortOrder: Number(data.sortOrder ?? fallback?.sortOrder ?? 99),
-          tools: fallback?.tools ?? ['natalWheel'],
-          toolLabels: fallback?.toolLabels ?? ['西洋本命盘'],
-          requiresGender: fallback?.requiresGender ?? false,
-        } satisfies CatalogProduct;
-      })
-      .filter((p) => p.isPublished)
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-    return fromDb.length > 0 ? fromDb : DEFAULT_PRODUCTS;
-  } catch {
-    return DEFAULT_PRODUCTS;
-  }
-}
-
 export async function searchLocations(query: string): Promise<LocationCandidate[]> {
   const q = query.trim();
   if (!q) return [];
@@ -272,7 +242,7 @@ export async function searchLocations(query: string): Promise<LocationCandidate[
 }
 
 export async function fetchNatalChart(
-  uid: string,
+  uid: string | null,
   profile: ProfileRecord,
 ): Promise<ChartSnapshot> {
   const resp = await fetch('/api/astrology', {
@@ -284,30 +254,48 @@ export async function fetchNatalChart(
     throw new Error('排盘计算失败');
   }
   const data = (await resp.json()) as { natal: ChartSnapshot['natal'] };
-  const prev = loadCachedChart(uid, profile.id);
+  const prev = uid ? loadCachedChart(uid, profile.id) : null;
   const next: ChartSnapshot = { ...prev, natal: data.natal };
-  saveCachedChart(uid, profile.id, next);
+  if (uid) {
+    saveCachedChart(uid, profile.id, next);
+  }
   return next;
+}
+
+function resolveToolsForTierAndMode(tier: Tier, mode: ConsultationMode): AstrologyToolName[] {
+  if (tier === 'pro') {
+    return mode === 'synastry'
+      ? ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces', 'synastryAspects']
+      : ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces'];
+  }
+  if (tier === 'go') {
+    return mode === 'synastry'
+      ? ['natalWheel', 'synastryAspects']
+      : ['natalWheel', 'transitEvents'];
+  }
+  return ['natalWheel'];
 }
 
 export function createConsultationSession(
   uid: string,
-  product: CatalogProduct,
-  profile: ProfileRecord,
+  tier: Tier,
+  mode: ConsultationMode,
+  profiles: ProfileRecord[],
 ): SessionRecord {
   const now = new Date().toISOString();
   const id = `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-  const preset = DEFAULT_PRESETS_INFO[product.slug] ?? DEFAULT_PRESETS_INFO['free-natal'];
+  const names = profiles.map((p) => p.name).join(' × ');
+  const modeLabel = mode === 'synastry' ? '多人合盘' : '个人星盘';
   const session: SessionRecord = {
     id,
-    productSlug: product.slug,
-    productTitle: product.title,
-    profileId: profile.id,
-    profileName: profile.name,
-    title: `${product.title} · ${profile.name}`,
-    frozenPrompt: preset.summary,
-    frozenModel: 'gemini-4-hydrogen',
-    frozenTools: product.tools,
+    mode,
+    profileIds: profiles.map((p) => p.id),
+    profileId: profiles[0].id,
+    profileName: names,
+    title: `${modeLabel} · ${names}`,
+    frozenPrompt: `${modeLabel}（${tier.toUpperCase()}）`,
+    frozenModel: tier === 'pro' ? 'vertexai/gemini-2.5-pro' : 'vertexai/gemini-2.5-flash',
+    frozenTools: resolveToolsForTierAndMode(tier, mode),
     createdAt: now,
     updatedAt: now,
   };
@@ -320,7 +308,7 @@ export async function streamConsultationReply(params: {
   uid: string;
   tier: Tier;
   session: SessionRecord;
-  profile: ProfileRecord;
+  profiles: ProfileRecord[];
   userText: string;
   signal: AbortSignal;
   onUpdateMessages: (msgs: MessageRecord[]) => void;
@@ -332,7 +320,7 @@ export async function streamConsultationReply(params: {
     uid,
     tier,
     session,
-    profile,
+    profiles,
     userText,
     signal,
     onUpdateMessages,
@@ -340,6 +328,7 @@ export async function streamConsultationReply(params: {
     onUpdateUsage,
     onQuotaExceeded,
   } = params;
+  const primaryProfile = profiles[0];
 
   const usage = loadLocalUsage(uid);
   if (usage.used >= QUOTA_LIMIT[tier]) {
@@ -391,8 +380,9 @@ export async function streamConsultationReply(params: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        productSlug: session.productSlug,
-        profile,
+        tier,
+        mode: session.mode,
+        profiles,
         history,
         message: userText,
       }),
@@ -448,7 +438,7 @@ export async function streamConsultationReply(params: {
           updateAssistant();
         } else if (eventName === 'chart') {
           const chart = parsed as unknown as ChartSnapshot;
-          saveCachedChart(uid, profile.id, chart);
+          saveCachedChart(uid, primaryProfile.id, chart);
           onUpdateChart(chart);
         } else if (eventName === 'delta') {
           receivedAnyDelta = true;

@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 import {
   baziPillars,
   natalWheel,
+  synastryAspects,
   transitEvents,
   ziweiPalaces,
 } from '../../packages/astrology/src/index.ts';
@@ -272,9 +273,11 @@ function velaApiPlugin(): Plugin {
           return;
         }
 
-        const productSlug = String(body.productSlug ?? 'free-natal');
-        const profile = body.profile as {
+        const tier = String(body.tier ?? 'free');
+        const mode = String(body.mode ?? 'personal');
+        type ProfilePayload = {
           name: string;
+          entityType?: 'person' | 'company' | 'country';
           birthDateTime: string;
           locationName: string;
           latitude: number;
@@ -282,6 +285,10 @@ function velaApiPlugin(): Plugin {
           timezone: string;
           gender?: 'male' | 'female' | 'unset';
         };
+        const rawProfiles = Array.isArray(body.profiles) && body.profiles.length > 0
+          ? (body.profiles as ProfilePayload[])
+          : [body.profile as ProfilePayload];
+        const profile = rawProfiles[0];
         const history = Array.isArray(body.history)
           ? (body.history as Array<{ role: string; text: string }>)
           : [];
@@ -290,14 +297,14 @@ function velaApiPlugin(): Plugin {
         sendSse(res, 'tool', { toolName: 'natalWheel', label: '已排盘：西洋本命盘' });
 
         let transits: ReturnType<typeof transitEvents> | null = null;
-        if (productSlug === 'go-quick-read' || productSlug === 'pro-life-coach') {
+        if ((tier === 'go' || tier === 'pro') && mode === 'personal') {
           transits = transitEvents({ ...profile, windowMonths: 6 });
           sendSse(res, 'tool', { toolName: 'transitEvents', label: '已排盘：行运时间线' });
         }
 
         let bazi: ReturnType<typeof baziPillars> | null = null;
         let ziwei: ReturnType<typeof ziweiPalaces> | null = null;
-        if (productSlug === 'pro-life-coach') {
+        if (tier === 'pro') {
           bazi = baziPillars({
             ...profile,
             yearBoundary: 'lichun',
@@ -310,16 +317,36 @@ function velaApiPlugin(): Plugin {
           }
         }
 
+        let synastry: ReturnType<typeof synastryAspects> | null = null;
+        if (mode === 'synastry' && rawProfiles.length >= 2) {
+          synastry = synastryAspects({
+            charts: rawProfiles.slice(0, 4).map((p) => ({
+              birthDateTime: p.birthDateTime,
+              latitude: p.latitude,
+              longitude: p.longitude,
+              timezone: p.timezone,
+              label: p.name,
+              entityType: p.entityType ?? 'person',
+            })),
+          });
+          sendSse(res, 'tool', {
+            toolName: 'synastryAspects',
+            label: `已排盘：${rawProfiles.length} 方合盘相位`,
+          });
+        }
+
         sendSse(res, 'chart', { natal, transits, bazi, ziwei });
 
         const apiKey = process.env.GEMINI_API_KEY;
         const chartFacts = JSON.stringify({
-          profile: {
-            name: profile.name,
-            birthDateTime: profile.birthDateTime,
-            locationName: profile.locationName,
-            timezone: profile.timezone,
-          },
+          mode,
+          profiles: rawProfiles.map((p) => ({
+            name: p.name,
+            entityType: p.entityType ?? 'person',
+            birthDateTime: p.birthDateTime,
+            locationName: p.locationName,
+            timezone: p.timezone,
+          })),
           natal: {
             ascendant: natal.ascendant.formatted,
             midheaven: natal.midheaven.formatted,
@@ -329,6 +356,7 @@ function velaApiPlugin(): Plugin {
           transits: transits?.events.slice(0, 6) ?? null,
           bazi: bazi ? { trueSolarTime: bazi.trueSolarTime, pillars: bazi.pillars, dayMaster: bazi.dayMaster } : null,
           ziwei: ziwei ? { fiveElementsClass: ziwei.fiveElementsClass, soulStar: ziwei.soulStar, bodyStar: ziwei.bodyStar } : null,
+          synastry,
         });
 
         let streamed = false;

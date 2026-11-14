@@ -2,6 +2,7 @@ import { z, type Genkit } from 'genkit';
 import {
   baziPillars,
   natalWheel,
+  synastryAspects,
   transitEvents,
   ziweiPalaces,
 } from '@vela-cf/astrology';
@@ -58,10 +59,30 @@ export function createAstrologyTools(ai: Genkit) {
     async (input) => ziweiPalaces(input),
   );
 
+  const synastryAspectsTool = ai.defineTool(
+    {
+      name: 'synastryAspects',
+      description: '计算 2 至 4 个档案（个人、公司或国家）之间的跨盘主要相位与核心配置对照。',
+      inputSchema: z.object({
+        charts: z
+          .array(
+            baseBirthSchema.extend({
+              label: z.string(),
+              entityType: z.enum(['person', 'company', 'country']).default('person'),
+            }),
+          )
+          .min(2)
+          .max(4),
+      }),
+    },
+    async (input) => synastryAspects(input),
+  );
+
   return {
     natalWheel: natalWheelTool,
     transitEvents: transitEventsTool,
     baziPillars: baziPillarsTool,
     ziweiPalaces: ziweiPalacesTool,
+    synastryAspects: synastryAspectsTool,
   };
 }

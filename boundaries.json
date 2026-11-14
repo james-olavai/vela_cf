@@ -75,7 +75,7 @@
     "security": {
       "maxChatInputChars": 2000,
       "maxToolTurns": 3,
-      "maxAstrologyTools": 4,
+      "maxAstrologyTools": 5,
       "forbidSideEffectsInTools": true,
       "forbidOpenFirestoreWrites": true
     }

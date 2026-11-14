@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { onIdTokenChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
 import {
-  DEFAULT_PRODUCTS,
   TierSchema,
-  type CatalogProduct,
+  type ConsultationMode,
   type ProfileRecord,
   type SessionRecord,
   type Tier,
@@ -16,7 +15,6 @@ import { navigate, usePathname } from './lib/router';
 import {
   createConsultationSession,
   ensureUserRecord,
-  fetchPublishedProducts,
   loadLocalSessions,
   loadLocalUsage,
   saveCachedChart,
@@ -32,7 +30,6 @@ export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [tier, setTier] = useState<Tier>('free');
   const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
-  const [products, setProducts] = useState<CatalogProduct[]>(DEFAULT_PRODUCTS);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [usage, setUsage] = useState<UsageRecord>(() => ({
     periodStart: utcMonthPeriodStart(),
@@ -46,7 +43,6 @@ export function App() {
 
   useEffect(() => {
     void initAnalyticsConsent();
-    void fetchPublishedProducts().then(setProducts);
   }, []);
 
   useEffect(() => {
@@ -97,19 +93,30 @@ export function App() {
       await ensureUserRecord(uid, cred.user.email ?? '', cred.user.displayName ?? '');
 
       if (pendingHandoff) {
-        const savedProfileId = await saveProfile(uid, null, pendingHandoff.draftProfile);
         const now = new Date().toISOString();
-        const savedProfile: ProfileRecord = {
-          ...pendingHandoff.draftProfile,
-          id: savedProfileId,
-          createdAt: now,
-          updatedAt: now,
-        };
-        if (pendingHandoff.chart) {
-          saveCachedChart(uid, savedProfileId, pendingHandoff.chart);
+        const savedProfiles: ProfileRecord[] = [];
+        for (const dp of pendingHandoff.draftProfiles) {
+          const savedId = await saveProfile(uid, null, dp);
+          savedProfiles.push({
+            ...dp,
+            id: savedId,
+            createdAt: now,
+            updatedAt: now,
+          });
         }
-        if (pendingHandoff.question) {
-          const session = createConsultationSession(uid, pendingHandoff.product, savedProfile);
+        if (pendingHandoff.chart && savedProfiles[0]) {
+          saveCachedChart(uid, savedProfiles[0].id, pendingHandoff.chart);
+        }
+        if (pendingHandoff.question && savedProfiles.length > 0) {
+          const chosen = pendingHandoff.selectedIndices
+            .map((idx) => savedProfiles[idx])
+            .filter(Boolean);
+          const session = createConsultationSession(
+            uid,
+            tier,
+            pendingHandoff.mode,
+            chosen.length > 0 ? chosen : [savedProfiles[0]],
+          );
           setSessions(loadLocalSessions(uid));
           navigate(`/consult/${session.id}`);
         } else {
@@ -129,8 +136,8 @@ export function App() {
     navigate('/');
   };
 
-  const handleStartSession = (product: CatalogProduct, profile: ProfileRecord): SessionRecord => {
-    const session = createConsultationSession(user!.uid, product, profile);
+  const handleStartSession = (mode: ConsultationMode, selectedProfiles: ProfileRecord[]): SessionRecord => {
+    const session = createConsultationSession(user!.uid, tier, mode, selectedProfiles);
     setSessions(loadLocalSessions(user!.uid));
     navigate(`/consult/${session.id}`);
     return session;
@@ -166,7 +173,6 @@ export function App() {
         tier={tier}
         usage={usage}
         profiles={profiles}
-        products={products}
         sessions={sessions}
         activeSession={activeSession}
         pendingHandoff={pendingHandoff}
