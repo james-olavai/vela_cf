@@ -365,21 +365,30 @@ export function WorkbenchPage({
     void handleSend();
   };
 
+  const avatarRingClass =
+    tier === 'pro'
+      ? 'ring-2 ring-[#e0b64a] shadow-[0_0_10px_rgba(224,182,74,0.55)]'
+      : tier === 'go'
+        ? 'ring-2 ring-[#cbd5e1] shadow-[0_0_8px_rgba(203,213,225,0.45)]'
+        : 'ring-2 ring-[#64748b]';
+
   const renderAvatar = () =>
     photoURL ? (
       <img
         src={photoURL}
         alt={displayName}
-        className="w-8 h-8 rounded-full object-cover shrink-0 border border-[#26304d]"
+        className={`w-8 h-8 rounded-full object-cover shrink-0 ${avatarRingClass}`}
       />
     ) : (
-      <div className="w-8 h-8 rounded-full bg-[#1d2540] border border-[#26304d] flex items-center justify-center text-[12px] font-bold text-[#f7d57f] shrink-0">
+      <div
+        className={`w-8 h-8 rounded-full bg-[#1d2540] flex items-center justify-center text-[12px] font-bold text-[#f7d57f] shrink-0 ${avatarRingClass}`}
+      >
         {displayName.slice(0, 1).toUpperCase()}
       </div>
     );
 
   const renderCollapsedRail = () => (
-    <div className="flex flex-col items-center justify-between h-full bg-[#101527] border-r border-[#1e2740]">
+    <div className="flex flex-col items-center justify-between h-full bg-[#070812]">
       <div className="w-full flex flex-col items-center gap-2">
         <div className="w-full h-[64px] px-2.5 flex items-center justify-center shrink-0">
           <button
@@ -387,7 +396,7 @@ export function WorkbenchPage({
             onClick={() => setSidebarOpen(true)}
             title="展开侧栏"
             aria-label="展开侧栏"
-            className="flex items-center justify-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#161d33] cursor-pointer"
+            className="flex items-center justify-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#101527] cursor-pointer"
           >
             <img src="/assets/logo-small.webp" alt="Vela" className="brand-logo" />
           </button>
@@ -398,7 +407,7 @@ export function WorkbenchPage({
           onClick={() => onSelectSession(null)}
           title="新咨询"
           aria-label="新咨询"
-          className="w-11 h-11 rounded-full border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#e0b64a] flex items-center justify-center cursor-pointer"
+          className="w-11 h-11 rounded-full border border-[#26304d] bg-[#101527] hover:border-[#e0b64a] text-[#e0b64a] flex items-center justify-center cursor-pointer"
         >
           <IconPlus size={18} />
         </button>
@@ -408,7 +417,7 @@ export function WorkbenchPage({
           onClick={() => setHistorySearchOpen(true)}
           title="搜索历史对话"
           aria-label="搜索历史对话"
-          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#161d33] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
+          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
         >
           <IconSearch size={18} />
         </button>
@@ -418,35 +427,22 @@ export function WorkbenchPage({
           onClick={() => setSidebarOpen(true)}
           title="出生档案与合盘"
           aria-label="出生档案与合盘"
-          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#161d33] text-[#f7d57f] flex items-center justify-center cursor-pointer"
+          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#f7d57f] flex items-center justify-center cursor-pointer"
         >
           <IconSparkles size={18} />
         </button>
       </div>
 
-      <div className="pb-3 flex flex-col items-center gap-2">
+      <div className="pb-3 flex flex-col items-center">
         <button
           type="button"
           onClick={() => {
             setSettingsTab('subscription');
             setSettingsOpen(true);
           }}
-          title="订阅与额度"
-          aria-label="订阅与额度"
-          className="px-2.5 min-h-[28px] rounded-[14px] border border-[#e0b64a]/40 bg-[#1d1a0f] hover:border-[#e0b64a] text-[11px] font-medium text-[#f7d57f] cursor-pointer"
-        >
-          订阅
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setSettingsTab('account');
-            setSettingsOpen(true);
-          }}
-          title={displayName}
-          aria-label={`账号：${displayName}`}
-          className="w-11 h-11 rounded-full border-0 bg-transparent hover:bg-[#161d33] flex items-center justify-center cursor-pointer"
+          title={`${displayName} · ${TIER_META[tier].label}`}
+          aria-label={`账号与订阅：${displayName}`}
+          className="w-11 h-11 rounded-full border-0 bg-transparent hover:bg-[#101527] flex items-center justify-center cursor-pointer"
         >
           {renderAvatar()}
         </button>
@@ -522,29 +518,20 @@ export function WorkbenchPage({
         />
       </div>
 
-      <div className="p-3 border-t border-[#1e2740] flex flex-col items-start gap-2.5">
+      <div className="p-3 border-t border-[#1e2740]">
         <button
           type="button"
           onClick={() => {
             setSettingsTab('subscription');
             setSettingsOpen(true);
           }}
-          className="px-3 min-h-[30px] rounded-[15px] border border-[#e0b64a]/40 bg-[#1d1a0f] hover:border-[#e0b64a] text-[12px] font-medium text-[#f7d57f] flex items-center gap-1.5 cursor-pointer"
-        >
-          <IconSparkles size={13} />
-          <span>订阅方案 · {TIER_META[tier].label}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setSettingsTab('account');
-            setSettingsOpen(true);
-          }}
-          className="w-full flex items-center gap-2.5 min-w-0 p-1 rounded-[10px] border-0 bg-transparent hover:bg-[#161d33] text-left cursor-pointer"
+          className="w-full flex items-center gap-2.5 min-w-0 p-1.5 rounded-[10px] border-0 bg-transparent hover:bg-[#161d33] text-left cursor-pointer"
         >
           {renderAvatar()}
-          <span className="text-[13px] font-medium text-[#f8fafc] truncate">{displayName}</span>
+          <div className="min-w-0 flex flex-col">
+            <span className="text-[13px] font-medium text-[#f8fafc] truncate">{displayName}</span>
+            <span className="text-[11px] text-[#a3b0c5]">{TIER_META[tier].label}</span>
+          </div>
         </button>
       </div>
     </div>
@@ -655,29 +642,6 @@ export function WorkbenchPage({
           </div>
         </form>
       )}
-
-      <p className="m-0 text-center text-[11px] text-[#a3b0c5]">
-        AI 生成内容仅供自我探索，不构成医疗、法律或财务建议 ·{' '}
-        <a
-          href="/privacy"
-          onClick={(e) => {
-            e.preventDefault();
-            navigate('/privacy');
-          }}
-        >
-          隐私政策
-        </a>{' '}
-        ·{' '}
-        <a
-          href="/terms"
-          onClick={(e) => {
-            e.preventDefault();
-            navigate('/terms');
-          }}
-        >
-          服务条款
-        </a>
-      </p>
     </div>
   );
 
@@ -826,11 +790,34 @@ export function WorkbenchPage({
               </div>
             </div>
 
-            <div className="no-print shrink-0 px-4 pb-4 pt-2">
+            <div className="no-print shrink-0 px-4 pb-2 pt-2">
               {renderComposer()}
             </div>
           </>
         )}
+
+        <footer className="no-print shrink-0 px-4 py-2 text-center text-[11px] text-[#a3b0c5]">
+          AI 生成内容仅供自我探索，不构成医疗、法律或财务建议 ·{' '}
+          <a
+            href="/privacy"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/privacy');
+            }}
+          >
+            隐私政策
+          </a>{' '}
+          ·{' '}
+          <a
+            href="/terms"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/terms');
+            }}
+          >
+            服务条款
+          </a>
+        </footer>
       </main>
 
       {/* Right Slide-Over Chart Drawer */}
