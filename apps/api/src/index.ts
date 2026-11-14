@@ -24,7 +24,9 @@ import { createAstrologyTools } from './tools.js';
 import { getServerPreset } from './presets.js';
 
 initializeApp();
-const db = getFirestore();
+const DATABASE_ID =
+  process.env.FIRESTORE_DATABASE_ID || 'ai-studio-velacf-811abd0a-45c7-449f-a973-2e2998b2ac79';
+const db = getFirestore(DATABASE_ID);
 const auth = getAuth();
 
 const REGION = 'asia-southeast1';
@@ -35,6 +37,30 @@ const ai = genkit({
 });
 
 const astrologyTools = createAstrologyTools(ai);
+
+const TOOL_LABELS: Record<string, string> = {
+  natalWheel: '已排盘：西洋本命盘',
+  transitEvents: '已排盘：行运时间线',
+  baziPillars: '已排盘：八字四柱',
+  ziweiPalaces: '已排盘：紫微斗数',
+  synastryAspects: '已排盘：合盘相位',
+};
+
+const FALLBACK_CITIES = [
+  { displayName: '多伦多，安大略省，加拿大', latitude: 43.6532, longitude: -79.3832, timezone: 'America/Toronto', keys: ['toronto', '多伦多'] },
+  { displayName: '台北，台湾', latitude: 25.033, longitude: 121.5654, timezone: 'Asia/Taipei', keys: ['taipei', '台北', '臺北'] },
+  { displayName: '上海，中国', latitude: 31.2304, longitude: 121.4737, timezone: 'Asia/Shanghai', keys: ['shanghai', '上海'] },
+  { displayName: '北京，中国', latitude: 39.9042, longitude: 116.4074, timezone: 'Asia/Shanghai', keys: ['beijing', '北京'] },
+  { displayName: '香港', latitude: 22.3193, longitude: 114.1694, timezone: 'Asia/Hong_Kong', keys: ['hong kong', '香港'] },
+  { displayName: '新加坡', latitude: 1.3521, longitude: 103.8198, timezone: 'Asia/Singapore', keys: ['singapore', '新加坡'] },
+  { displayName: '东京，日本', latitude: 35.6762, longitude: 139.6503, timezone: 'Asia/Tokyo', keys: ['tokyo', '东京', '東京'] },
+  { displayName: '纽约，纽约州，美国', latitude: 40.7128, longitude: -74.006, timezone: 'America/New_York', keys: ['new york', '纽约'] },
+  { displayName: '旧金山，加利福尼亚州，美国', latitude: 37.7749, longitude: -122.4194, timezone: 'America/Los_Angeles', keys: ['san francisco', '旧金山'] },
+  { displayName: '洛杉矶，加利福尼亚州，美国', latitude: 34.0522, longitude: -118.2437, timezone: 'America/Los_Angeles', keys: ['los angeles', '洛杉矶'] },
+  { displayName: '温哥华，不列颠哥伦比亚省，加拿大', latitude: 49.2827, longitude: -123.1207, timezone: 'America/Vancouver', keys: ['vancouver', '温哥华'] },
+  { displayName: '伦敦，英国', latitude: 51.5074, longitude: -0.1278, timezone: 'Europe/London', keys: ['london', '伦敦'] },
+  { displayName: '悉尼，澳大利亚', latitude: -33.8688, longitude: 151.2093, timezone: 'Australia/Sydney', keys: ['sydney', '悉尼'] },
+];
 
 async function resolveUserPeriodAndTier(uid: string, tokenRole?: unknown): Promise<{
   tier: Tier;
@@ -70,11 +96,17 @@ const chatFlow = ai.defineFlow(
       sessionId: z.string().min(1).max(128),
       message: z.string().trim().min(1).max(2000),
     }),
-    outputSchema: z.object({ text: z.string() }),
+    outputSchema: z.object({
+      text: z.string(),
+      suggestions: z.array(z.string()).optional(),
+    }),
     streamSchema: z.object({
-      type: z.enum(['text', 'tool']),
+      type: z.enum(['text', 'tool', 'chart', 'done']),
       text: z.string().optional(),
       toolName: z.string().optional(),
+      label: z.string().optional(),
+      chart: z.any().optional(),
+      suggestions: z.array(z.string()).optional(),
     }),
   },
   async (rawInput, { sendChunk, context }) => {
@@ -119,12 +151,6 @@ const chatFlow = ai.defineFlow(
       throw new HttpsError('resource-exhausted', 'QUOTA_EXCEEDED');
     }
 
-    await sessionRef.collection('messages').add({
-      role: 'user',
-      parts: [{ type: 'text', text: input.message }],
-      createdAt: new Date().toISOString(),
-    });
-
     const historySnap = await sessionRef
       .collection('messages')
       .orderBy('createdAt', 'asc')
@@ -140,9 +166,16 @@ const chatFlow = ai.defineFlow(
               .map((p: { text?: string }) => p.text ?? '')
               .join('\n')
           : '';
-        return `${msg.role === 'user' ? '用户' : '顾问'}: ${txt}`;
+        return txt ? `${msg.role === 'user' ? '用户' : '顾问'}: ${txt}` : '';
       })
+      .filter(Boolean)
       .join('\n');
+
+    await sessionRef.collection('messages').add({
+      role: 'user',
+      parts: [{ type: 'text', text: input.message }],
+      createdAt: new Date().toISOString(),
+    });
 
     const allowedToolNames: AstrologyToolName[] = Array.isArray(session.frozenTools)
       ? (session.frozenTools as AstrologyToolName[])
@@ -150,71 +183,133 @@ const chatFlow = ai.defineFlow(
     const tools = allowedToolNames.map((name) => astrologyTools[name]).filter(Boolean);
 
     let fullText = '';
+    const toolParts: Array<{ type: 'tool-call'; toolName: string; label: string }> = [];
+    const seenTools = new Set<string>();
+    const chartSnapshot: Record<string, unknown> = {};
 
-    try {
-      const entityLabel = (et?: string) =>
-        et === 'company' ? '公司' : et === 'country' ? '国家' : '个人';
-      const profileContext = profiles
-        .map(
-          (p, idx) =>
-            `档案${profiles.length > 1 ? idx + 1 : ''}：类型=${entityLabel(p.entityType)}，称呼=${p.name}，出生/成立时间=${p.birthDateTime}，地点=${p.locationName}（纬度 ${p.latitude}，经度 ${p.longitude}，时区 ${p.timezone}），性别=${p.gender ?? 'unset'}。`,
-        )
-        .join('\n');
-      const { stream, response } = ai.generateStream({
-        model: session.frozenModel || 'vertexai/gemini-4-hydrogen',
-        system: `${session.frozenPrompt}\n\n${profileContext}`,
-        prompt: `${historyContext}\n用户最新消息: ${input.message}`,
-        tools,
-        maxTurns: 3,
-        config: {
-          temperature: 0.6,
-          maxOutputTokens: MAX_OUTPUT_TOKENS_BY_TIER[tier],
-        },
-      });
+    const entityLabel = (et?: string) =>
+      et === 'company' ? '公司' : et === 'country' ? '国家' : '个人';
+    const profileContext = profiles
+      .map(
+        (p, idx) =>
+          `档案${profiles.length > 1 ? idx + 1 : ''}：类型=${entityLabel(p.entityType)}，称呼=${p.name}，出生/成立时间=${p.birthDateTime}，地点=${p.locationName}（纬度 ${p.latitude}，经度 ${p.longitude}，时区 ${p.timezone}），性别=${p.gender ?? 'unset'}。`,
+      )
+      .join('\n');
 
-      for await (const chunk of stream) {
-        if (chunk.text) {
-          fullText += chunk.text;
-          sendChunk({ type: 'text', text: chunk.text });
+    const { stream, response } = ai.generateStream({
+      model: session.frozenModel || 'vertexai/gemini-4-hydrogen',
+      system:
+        `${session.frozenPrompt}\n` +
+        '在回复正文最后，请另起一行输出 `SUGGESTIONS:` 后跟 2 个简短追问（用 `|` 分隔），例如 `SUGGESTIONS:天顶在水瓶意味着什么？|土星六宫该如何减负？`。\n\n' +
+        profileContext,
+      prompt: `${historyContext ? `${historyContext}\n` : ''}用户最新消息: ${input.message}`,
+      tools,
+      maxTurns: 3,
+      config: {
+        temperature: 0.6,
+        maxOutputTokens: MAX_OUTPUT_TOKENS_BY_TIER[tier],
+      },
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.toolRequests.length > 0) {
+        for (const req of chunk.toolRequests) {
+          const toolName = req.toolRequest.name;
+          if (!seenTools.has(toolName)) {
+            seenTools.add(toolName);
+            const label = TOOL_LABELS[toolName] ?? `已排盘：${toolName}`;
+            toolParts.push({ type: 'tool-call', toolName, label });
+            sendChunk({ type: 'tool', toolName, label });
+          }
         }
       }
 
-      const finalResp = await response;
-      if (!fullText && finalResp.text) {
-        fullText = finalResp.text;
+      for (const part of chunk.content) {
+        const tr = (part as { toolResponse?: { name?: string; output?: unknown } }).toolResponse;
+        if (tr?.name && tr.output !== undefined) {
+          if (tr.name === 'natalWheel' && !chartSnapshot.natal) {
+            chartSnapshot.natal = tr.output;
+          } else if (tr.name === 'transitEvents') {
+            chartSnapshot.transits = tr.output;
+          } else if (tr.name === 'baziPillars') {
+            chartSnapshot.bazi = tr.output;
+          } else if (tr.name === 'ziweiPalaces') {
+            chartSnapshot.ziwei = tr.output;
+          }
+          if (chartSnapshot.natal) {
+            sendChunk({ type: 'chart', chart: { ...chartSnapshot } });
+          }
+        }
       }
 
-      const usageMeta = finalResp.usage;
-      const inTokens = Number(usageMeta?.inputTokens ?? 0);
-      const outTokens = Number(usageMeta?.outputTokens ?? 0) + Number(usageMeta?.thoughtsTokens ?? 0);
-      const costMicroUsd =
-        inTokens > 0 || outTokens > 0
-          ? computeTokenCostMicroUsd(inTokens, outTokens)
-          : 30_000;
-
-      await db.runTransaction(async (tx) => {
-        const snap = await tx.get(usageRef);
-        const data = snap.data();
-        const reset = !data || String(data.periodStart) < periodStart;
-        const baseUsed = reset ? 0 : Number(data?.used ?? 0);
-        tx.set(usageRef, {
-          periodStart,
-          used: baseUsed + costMicroUsd,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-      });
-
-      await sessionRef.collection('messages').add({
-        role: 'assistant',
-        parts: [{ type: 'text', text: fullText }],
-        createdAt: new Date().toISOString(),
-      });
-      await sessionRef.update({ updatedAt: new Date().toISOString() });
-
-      return { text: fullText };
-    } catch (err) {
-      throw err;
+      if (chunk.role === 'model' && chunk.text) {
+        fullText += chunk.text;
+        sendChunk({ type: 'text', text: chunk.text });
+      }
     }
+
+    const finalResp = await response;
+    if (!fullText && finalResp.text) {
+      fullText = finalResp.text;
+    }
+
+    if (!chartSnapshot.natal) {
+      try {
+        const primary = profiles[0];
+        chartSnapshot.natal = natalWheel({
+          birthDateTime: String(primary.birthDateTime),
+          latitude: Number(primary.latitude),
+          longitude: Number(primary.longitude),
+          timezone: String(primary.timezone),
+        });
+        sendChunk({ type: 'chart', chart: { ...chartSnapshot } });
+      } catch {
+        // ignore chart preview fallback errors
+      }
+    }
+
+    const sugMatch = fullText.match(/\n?SUGGESTIONS:\s*(.+)$/s);
+    const suggestions = sugMatch
+      ? sugMatch[1]
+          .split('|')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 3)
+      : [];
+    const cleanText = fullText.replace(/\n?SUGGESTIONS:\s*.+$/s, '').trim();
+
+    const usageMeta = finalResp.usage;
+    const inTokens = Number(usageMeta?.inputTokens ?? 0);
+    const outTokens = Number(usageMeta?.outputTokens ?? 0) + Number(usageMeta?.thoughtsTokens ?? 0);
+    const costMicroUsd =
+      inTokens > 0 || outTokens > 0 ? computeTokenCostMicroUsd(inTokens, outTokens) : 30_000;
+
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(usageRef);
+      const data = snap.data();
+      const reset = !data || String(data.periodStart) < periodStart;
+      const baseUsed = reset ? 0 : Number(data?.used ?? 0);
+      tx.set(usageRef, {
+        periodStart,
+        used: baseUsed + costMicroUsd,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    const assistantParts = [
+      ...toolParts,
+      ...(cleanText ? [{ type: 'text', text: cleanText }] : []),
+    ];
+    await sessionRef.collection('messages').add({
+      role: 'assistant',
+      parts: assistantParts,
+      suggestions,
+      createdAt: new Date().toISOString(),
+    });
+    await sessionRef.update({ updatedAt: new Date().toISOString() });
+
+    sendChunk({ type: 'done', suggestions });
+    return { text: cleanText, suggestions };
   },
 );
 
@@ -269,22 +364,22 @@ export const createSession = onCall(
     const now = new Date().toISOString();
     const sessionRef = db.collection('users').doc(uid).collection('sessions').doc();
     const names = profiles.map((p) => String(p.name)).join(' × ');
-    const modeLabel = input.mode === 'synastry' ? '多人合盘' : '个人星盘';
-
-    await sessionRef.set({
+    const sessionDoc = {
       mode: input.mode,
       profileIds: input.profileIds,
       profileId: input.profileIds[0],
       profileName: names,
-      title: `${modeLabel} · ${names}`,
+      title: input.mode === 'synastry' ? `合盘 · ${names}` : names,
       frozenPrompt: preset.systemPrompt,
       frozenModel: preset.modelName,
       frozenTools: preset.allowedTools,
       createdAt: now,
       updatedAt: now,
-    });
+    };
 
-    return { sessionId: sessionRef.id };
+    await sessionRef.set(sessionDoc);
+
+    return { sessionId: sessionRef.id, session: { id: sessionRef.id, ...sessionDoc } };
   },
 );
 
@@ -302,35 +397,64 @@ export const resolveLocation = onCall(
     const { query } = ResolveLocationRequestSchema.parse(req.data);
     const cacheKey = query.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/g, '_').slice(0, 100);
     const cacheRef = db.collection('locations_cache').doc(cacheKey);
-    const cached = await cacheRef.get();
-    if (cached.exists && Array.isArray(cached.data()?.results)) {
-      return { results: cached.data()!.results };
+    try {
+      const cached = await cacheRef.get();
+      if (cached.exists && Array.isArray(cached.data()?.results)) {
+        return { results: cached.data()!.results };
+      }
+    } catch {
+      // ignore cache read failures
     }
 
-    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=zh&format=json`;
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      throw new HttpsError('unavailable', 'LOCATION_SERVICE_UNAVAILABLE');
+    let results: Array<{
+      displayName: string;
+      latitude: number;
+      longitude: number;
+      timezone: string;
+    }> = [];
+
+    try {
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=zh&format=json`;
+      const resp = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (resp.ok) {
+        const json = (await resp.json()) as {
+          results?: Array<{
+            name: string;
+            admin1?: string;
+            country?: string;
+            latitude: number;
+            longitude: number;
+            timezone?: string;
+          }>;
+        };
+        results = (json.results ?? []).map((item) => ({
+          displayName: [item.name, item.admin1, item.country].filter(Boolean).join('，'),
+          latitude: Number(item.latitude.toFixed(4)),
+          longitude: Number(item.longitude.toFixed(4)),
+          timezone: item.timezone || 'UTC',
+        }));
+      }
+    } catch {
+      // fallback below
     }
-    const json = (await resp.json()) as {
-      results?: Array<{
-        name: string;
-        admin1?: string;
-        country?: string;
-        latitude: number;
-        longitude: number;
-        timezone?: string;
-      }>;
-    };
 
-    const results = (json.results ?? []).map((item) => ({
-      displayName: [item.name, item.admin1, item.country].filter(Boolean).join('，'),
-      latitude: Number(item.latitude.toFixed(4)),
-      longitude: Number(item.longitude.toFixed(4)),
-      timezone: item.timezone || 'UTC',
-    }));
+    if (results.length === 0) {
+      const lower = query.toLowerCase();
+      results = FALLBACK_CITIES.filter(
+        (c) =>
+          c.displayName.toLowerCase().includes(lower) ||
+          c.keys.some((k) => k.includes(lower) || lower.includes(k)),
+      ).map(({ displayName, latitude, longitude, timezone }) => ({
+        displayName,
+        latitude,
+        longitude,
+        timezone,
+      }));
+    }
 
-    await cacheRef.set({ results, createdAt: new Date().toISOString() });
+    if (results.length > 0) {
+      await cacheRef.set({ results, createdAt: new Date().toISOString() }).catch(() => undefined);
+    }
     return { results };
   },
 );

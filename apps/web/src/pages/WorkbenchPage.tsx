@@ -29,10 +29,10 @@ import { navigate } from '../lib/router';
 import {
   fetchNatalChart,
   loadCachedChart,
-  loadLocalMessages,
   removeProfile,
   saveProfile,
   streamConsultationReply,
+  subscribeMessages,
   type ChartSnapshot,
 } from '../lib/store';
 
@@ -57,9 +57,8 @@ interface WorkbenchPageProps {
   pendingHandoff: PendingHandoff | null;
   onClearPendingHandoff: () => void;
   onRequireAuth: (handoff: PendingHandoff) => void;
-  onStartSession: (mode: ConsultationMode, profiles: ProfileRecord[]) => SessionRecord;
+  onStartSession: (mode: ConsultationMode, profiles: ProfileRecord[]) => Promise<SessionRecord>;
   onSelectSession: (sessionId: string | null) => void;
-  onUsageChange: (usage: UsageRecord) => void;
   onSignOut: () => void;
 }
 
@@ -99,7 +98,6 @@ export function WorkbenchPage({
   onRequireAuth,
   onStartSession,
   onSelectSession,
-  onUsageChange,
   onSignOut,
 }: WorkbenchPageProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -125,6 +123,7 @@ export function WorkbenchPage({
   const endRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const handoffConsumedRef = useRef(false);
+  const isStreamingRef = useRef(false);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -151,7 +150,7 @@ export function WorkbenchPage({
     }
   }, [effectiveProfiles, maxSelectable]);
 
-  // Sync active session messages & chart
+  // Sync active session messages & chart from Firestore
   useEffect(() => {
     if (!uid || !activeSession) {
       setMessages([]);
@@ -163,8 +162,12 @@ export function WorkbenchPage({
         : [activeSession.profileId];
     setSelectedProfileIds(sessionPids);
 
-    const msgs = loadLocalMessages(uid, activeSession.id);
-    setMessages(msgs);
+    const unsubMsgs = subscribeMessages(uid, activeSession.id, (serverMsgs) => {
+      if (!isStreamingRef.current) {
+        setMessages(serverMsgs);
+      }
+    });
+
     const cached = loadCachedChart(uid, sessionPids[0]);
     if (cached) {
       setChart(cached);
@@ -174,6 +177,7 @@ export function WorkbenchPage({
         void fetchNatalChart(uid, p).then(setChart).catch(() => {});
       }
     }
+    return () => unsubMsgs();
   }, [uid, activeSession?.id]);
 
   // Preview primary profile's chart in drawer
@@ -195,25 +199,28 @@ export function WorkbenchPage({
 
     const controller = new AbortController();
     abortRef.current = controller;
+    isStreamingRef.current = true;
     setIsStreaming(true);
     setStreamError(null);
 
     void streamConsultationReply({
       uid,
       tier,
+      usage,
       session: activeSession,
       profiles: sessionProfiles,
+      existingMessages: [],
       userText: pendingHandoff.question,
       signal: controller.signal,
       onUpdateMessages: setMessages,
       onUpdateChart: setChart,
-      onUpdateUsage: onUsageChange,
       onQuotaExceeded: () => {},
     })
       .catch((err) => {
         setStreamError(err instanceof Error ? err.message : '生成回复失败');
       })
       .finally(() => {
+        isStreamingRef.current = false;
         setIsStreaming(false);
         abortRef.current = null;
         onClearPendingHandoff();
@@ -329,32 +336,35 @@ export function WorkbenchPage({
     if (quotaExhausted) return;
     setInputText('');
 
-    const targetSession = activeSession ?? onStartSession(mode, activeProfiles);
-    const sessionProfiles =
-      activeSession && activeSession.profileIds?.length
-        ? profiles.filter((p) => activeSession.profileIds.includes(p.id))
-        : activeProfiles;
-
     const controller = new AbortController();
     abortRef.current = controller;
+    isStreamingRef.current = true;
     setIsStreaming(true);
 
     try {
+      const targetSession = activeSession ?? (await onStartSession(mode, activeProfiles));
+      const sessionProfiles =
+        activeSession && activeSession.profileIds?.length
+          ? profiles.filter((p) => activeSession.profileIds.includes(p.id))
+          : activeProfiles;
+
       await streamConsultationReply({
         uid,
         tier,
+        usage,
         session: targetSession,
         profiles: sessionProfiles.length > 0 ? sessionProfiles : activeProfiles,
+        existingMessages: messages,
         userText: text,
         signal: controller.signal,
         onUpdateMessages: setMessages,
         onUpdateChart: setChart,
-        onUpdateUsage: onUsageChange,
         onQuotaExceeded: () => {},
       });
     } catch (err) {
       setStreamError(err instanceof Error ? err.message : '发送失败，请重试');
     } finally {
+      isStreamingRef.current = false;
       setIsStreaming(false);
       abortRef.current = null;
     }

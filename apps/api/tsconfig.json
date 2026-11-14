@@ -3,11 +3,15 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "rootDir": "../..",
     "outDir": "dist",
-    "rootDir": "src",
     "types": ["node"],
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@vela-cf/shared": ["../../packages/shared/src/index.ts"],
+      "@vela-cf/astrology": ["../../packages/astrology/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

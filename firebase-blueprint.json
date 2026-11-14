@@ -33,6 +33,7 @@
       "type": "object",
       "properties": {
         "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "entityType": { "type": "string", "enum": ["person", "company", "country"] },
         "birthDateTime": { "type": "string", "maxLength": 32 },
         "locationName": { "type": "string", "minLength": 1, "maxLength": 200 },
         "latitude": { "type": "number" },
@@ -50,15 +51,19 @@
       "description": "Consultation session with frozen preset config.",
       "type": "object",
       "properties": {
+        "mode": { "type": "string", "enum": ["personal", "synastry"] },
         "productSlug": { "type": "string", "maxLength": 64 },
         "profileId": { "type": "string", "maxLength": 128 },
+        "profileIds": { "type": "array" },
+        "profileName": { "type": "string", "maxLength": 200 },
         "title": { "type": "string", "maxLength": 120 },
         "frozenPrompt": { "type": "string" },
         "frozenModel": { "type": "string" },
+        "frozenTools": { "type": "array" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["productSlug", "profileId", "title", "frozenPrompt", "frozenModel"]
+      "required": ["mode", "profileId", "title", "frozenPrompt", "frozenModel"]
     },
     "Message": {
       "title": "Message",
@@ -66,10 +71,11 @@
       "type": "object",
       "properties": {
         "role": { "type": "string", "enum": ["user", "assistant", "tool"] },
-        "text": { "type": "string" },
+        "parts": { "type": "array" },
+        "suggestions": { "type": "array" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["role", "createdAt"]
+      "required": ["role", "parts", "createdAt"]
     },
     "Usage": {
       "title": "Usage",

@@ -1,17 +1,17 @@
-import { deleteUser } from 'firebase/auth';
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
+  orderBy,
+  query,
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import {
-  computeTokenCostMicroUsd,
   ProfileInputSchema,
   QUOTA_BUDGET_MICRO_USD,
   utcMonthPeriodStart,
@@ -27,7 +27,6 @@ import {
   type UsageRecord,
   type UserRecord,
 } from '@vela-cf/shared';
-import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions, handleFirestoreError, OperationType } from './firebase';
 
 export interface ChartPlanet {
@@ -72,57 +71,7 @@ export interface ChartSnapshot {
   } | null;
 }
 
-const sessionsKey = (uid: string) => `vela_sessions_v1_${uid}`;
-const messagesKey = (uid: string, sessionId: string) => `vela_messages_v1_${uid}_${sessionId}`;
-const usageKey = (uid: string) => `vela_usage_v1_${uid}`;
 const chartKey = (uid: string, profileId: string) => `vela_chart_v1_${uid}_${profileId}`;
-
-export function loadLocalSessions(uid: string): SessionRecord[] {
-  try {
-    const raw = localStorage.getItem(sessionsKey(uid));
-    if (!raw) return [];
-    const list = JSON.parse(raw) as SessionRecord[];
-    return list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  } catch {
-    return [];
-  }
-}
-
-export function saveLocalSessions(uid: string, sessions: SessionRecord[]): void {
-  localStorage.setItem(sessionsKey(uid), JSON.stringify(sessions));
-}
-
-export function loadLocalMessages(uid: string, sessionId: string): MessageRecord[] {
-  try {
-    const raw = localStorage.getItem(messagesKey(uid, sessionId));
-    return raw ? (JSON.parse(raw) as MessageRecord[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveLocalMessages(uid: string, sessionId: string, messages: MessageRecord[]): void {
-  localStorage.setItem(messagesKey(uid, sessionId), JSON.stringify(messages));
-}
-
-export function loadLocalUsage(uid: string): UsageRecord {
-  const periodStart = utcMonthPeriodStart();
-  try {
-    const raw = localStorage.getItem(usageKey(uid));
-    if (!raw) return { periodStart, used: 0 };
-    const parsed = JSON.parse(raw) as UsageRecord;
-    if (parsed.periodStart < periodStart) {
-      return { periodStart, used: 0 };
-    }
-    return parsed;
-  } catch {
-    return { periodStart, used: 0 };
-  }
-}
-
-export function saveLocalUsage(uid: string, usage: UsageRecord): void {
-  localStorage.setItem(usageKey(uid), JSON.stringify(usage));
-}
 
 export function loadCachedChart(uid: string, profileId: string): ChartSnapshot | null {
   try {
@@ -148,8 +97,7 @@ export async function ensureUserRecord(
     const snap = await getDoc(ref);
     const now = new Date().toISOString();
     if (snap.exists()) {
-      const data = snap.data() as UserRecord;
-      return data;
+      return snap.data() as UserRecord;
     }
     const payload: UserRecord = {
       email,
@@ -177,10 +125,77 @@ export function subscribeProfiles(
         id: d.id,
         ...(d.data() as Omit<ProfileRecord, 'id'>),
       }));
-      list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      list.sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
       onData(list);
     },
     (err) => handleFirestoreError(err, OperationType.LIST, path),
+  );
+}
+
+export function subscribeSessions(
+  uid: string,
+  onData: (sessions: SessionRecord[]) => void,
+): () => void {
+  const path = `users/${uid}/sessions`;
+  return onSnapshot(
+    collection(db, 'users', uid, 'sessions'),
+    (snap) => {
+      const list: SessionRecord[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<SessionRecord, 'id'>),
+      }));
+      list.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+      onData(list);
+    },
+    (err) => handleFirestoreError(err, OperationType.LIST, path),
+  );
+}
+
+export function subscribeMessages(
+  uid: string,
+  sessionId: string,
+  onData: (messages: MessageRecord[]) => void,
+): () => void {
+  const path = `users/${uid}/sessions/${sessionId}/messages`;
+  const q = query(
+    collection(db, 'users', uid, 'sessions', sessionId, 'messages'),
+    orderBy('createdAt', 'asc'),
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list: MessageRecord[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<MessageRecord, 'id'>),
+      }));
+      onData(list);
+    },
+    (err) => handleFirestoreError(err, OperationType.LIST, path),
+  );
+}
+
+export function subscribeUsage(
+  uid: string,
+  onData: (usage: UsageRecord) => void,
+): () => void {
+  const path = `usage/${uid}`;
+  return onSnapshot(
+    doc(db, 'usage', uid),
+    (snap) => {
+      const currentStart = utcMonthPeriodStart();
+      if (!snap.exists()) {
+        onData({ periodStart: currentStart, used: 0 });
+        return;
+      }
+      const raw = snap.data() as { periodStart?: string; used?: number };
+      const periodStart = String(raw.periodStart ?? currentStart);
+      if (periodStart < currentStart) {
+        onData({ periodStart: currentStart, used: 0 });
+        return;
+      }
+      onData({ periodStart, used: Number(raw.used ?? 0) });
+    },
+    (err) => handleFirestoreError(err, OperationType.GET, path),
   );
 }
 
@@ -193,6 +208,7 @@ export async function saveProfile(
   const now = new Date().toISOString();
   const payload = {
     name: validated.name,
+    entityType: validated.entityType,
     birthDateTime: validated.birthDateTime,
     locationName: validated.locationName,
     latitude: validated.latitude,
@@ -234,113 +250,119 @@ export async function removeProfile(uid: string, profileId: string): Promise<voi
   }
 }
 
-export async function searchLocations(query: string): Promise<LocationCandidate[]> {
-  const q = query.trim();
+export async function searchLocations(queryText: string): Promise<LocationCandidate[]> {
+  const q = queryText.trim();
   if (!q) return [];
-  const resp = await fetch(`/api/locations?q=${encodeURIComponent(q)}`);
-  if (!resp.ok) throw new Error('城市搜索服务暂时不可用');
-  const data = (await resp.json()) as { results?: LocationCandidate[] };
-  return data.results ?? [];
+  try {
+    const fn = httpsCallable<{ query: string }, { results?: LocationCandidate[] }>(
+      functions,
+      'resolveLocation',
+    );
+    const res = await fn({ query: q });
+    return res.data?.results ?? [];
+  } catch {
+    const resp = await fetch(`/api/locations?q=${encodeURIComponent(q)}`);
+    if (!resp.ok) throw new Error('城市搜索服务暂时不可用');
+    const data = (await resp.json()) as { results?: LocationCandidate[] };
+    return data.results ?? [];
+  }
 }
 
 export async function fetchNatalChart(
   uid: string | null,
   profile: ProfileRecord,
 ): Promise<ChartSnapshot> {
-  const resp = await fetch('/api/astrology', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ profile }),
-  });
-  if (!resp.ok) {
-    throw new Error('排盘计算失败');
+  let natal: ChartSnapshot['natal'] | null = null;
+  try {
+    const fn = httpsCallable<
+      { birthDateTime: string; latitude: number; longitude: number; timezone: string },
+      { natal: ChartSnapshot['natal'] }
+    >(functions, 'previewNatalWheel');
+    const res = await fn({
+      birthDateTime: profile.birthDateTime,
+      latitude: profile.latitude,
+      longitude: profile.longitude,
+      timezone: profile.timezone,
+    });
+    natal = res.data.natal;
+  } catch {
+    const resp = await fetch('/api/astrology', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile }),
+    });
+    if (!resp.ok) throw new Error('排盘计算失败');
+    const data = (await resp.json()) as { natal: ChartSnapshot['natal'] };
+    natal = data.natal;
   }
-  const data = (await resp.json()) as { natal: ChartSnapshot['natal'] };
   const prev = uid ? loadCachedChart(uid, profile.id) : null;
-  const next: ChartSnapshot = { ...prev, natal: data.natal };
+  const next: ChartSnapshot = { ...prev, natal };
   if (uid) {
     saveCachedChart(uid, profile.id, next);
   }
   return next;
 }
 
-function resolveToolsForTier(tier: Tier): AstrologyToolName[] {
-  if (tier === 'pro') {
-    return ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces', 'synastryAspects'];
-  }
-  if (tier === 'go') {
-    return ['natalWheel', 'transitEvents', 'synastryAspects'];
-  }
-  return ['natalWheel'];
-}
-
-export function createConsultationSession(
-  uid: string,
-  tier: Tier,
+export async function createConsultationSession(
   mode: ConsultationMode,
   profiles: ProfileRecord[],
-): SessionRecord {
-  const now = new Date().toISOString();
-  const id = `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-  const names = profiles.map((p) => p.name).join(' × ');
-  const session: SessionRecord = {
-    id,
+): Promise<SessionRecord> {
+  const fn = httpsCallable<
+    { mode: ConsultationMode; profileIds: string[] },
+    { sessionId: string; session: SessionRecord }
+  >(functions, 'createSession');
+  const res = await fn({
     mode,
     profileIds: profiles.map((p) => p.id),
-    profileId: profiles[0].id,
-    profileName: names,
-    title: profiles.length >= 2 ? `合盘 · ${names}` : names,
-    frozenPrompt: `${profiles.length >= 2 ? '多人合盘' : '个人星盘'}（${tier.toUpperCase()}）`,
-    frozenModel: 'vertexai/gemini-4-hydrogen',
-    frozenTools: resolveToolsForTier(tier),
-    createdAt: now,
-    updatedAt: now,
-  };
-  const existing = loadLocalSessions(uid);
-  saveLocalSessions(uid, [session, ...existing]);
-  return session;
+  });
+  return res.data.session;
 }
+
+type ChatStreamChunk =
+  | { type: 'tool'; toolName?: string; label?: string }
+  | { type: 'chart'; chart?: ChartSnapshot }
+  | { type: 'text'; text?: string }
+  | { type: 'done'; suggestions?: string[] };
 
 export async function streamConsultationReply(params: {
   uid: string;
   tier: Tier;
+  usage: UsageRecord;
   session: SessionRecord;
   profiles: ProfileRecord[];
+  existingMessages: MessageRecord[];
   userText: string;
   signal: AbortSignal;
   onUpdateMessages: (msgs: MessageRecord[]) => void;
   onUpdateChart: (chart: ChartSnapshot) => void;
-  onUpdateUsage: (usage: UsageRecord) => void;
   onQuotaExceeded: () => void;
 }): Promise<void> {
   const {
     uid,
     tier,
+    usage,
     session,
     profiles,
+    existingMessages,
     userText,
     signal,
     onUpdateMessages,
     onUpdateChart,
-    onUpdateUsage,
     onQuotaExceeded,
   } = params;
   const primaryProfile = profiles[0];
 
-  const usage = loadLocalUsage(uid);
   if (usage.used >= QUOTA_BUDGET_MICRO_USD[tier]) {
     onQuotaExceeded();
     return;
   }
 
-  const prevMessages = loadLocalMessages(uid, session.id);
   const userMsg: MessageRecord = {
     id: `m_${Date.now()}_u`,
     role: 'user',
     parts: [{ type: 'text', text: userText }],
     createdAt: new Date().toISOString(),
   };
-
   const assistantId = `m_${Date.now()}_a`;
   const assistantMsg: MessageRecord = {
     id: assistantId,
@@ -349,148 +371,76 @@ export async function streamConsultationReply(params: {
     createdAt: new Date().toISOString(),
   };
 
-  let currentMsgs = [...prevMessages, userMsg, assistantMsg];
-  saveLocalMessages(uid, session.id, currentMsgs);
+  let currentMsgs = [...existingMessages, userMsg, assistantMsg];
   onUpdateMessages(currentMsgs);
 
-  const estimatedCost = computeTokenCostMicroUsd(
-    Math.max(4000, userText.length * 2),
-    2500,
-  );
-  const nextUsage: UsageRecord = {
-    periodStart: usage.periodStart,
-    used: usage.used + estimatedCost,
-  };
-  saveLocalUsage(uid, nextUsage);
-  onUpdateUsage(nextUsage);
-
-  const history = prevMessages.map((m) => ({
-    role: m.role,
-    text: m.parts
-      .filter((p): p is Extract<MessagePart, { type: 'text' }> => p.type === 'text')
-      .map((p) => p.text)
-      .join('\n'),
-  }));
-
-  let receivedAnyDelta = false;
   let fullText = '';
   const toolParts: MessagePart[] = [];
 
-  try {
-    const resp = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tier,
-        mode: session.mode,
-        profiles,
-        history,
-        message: userText,
-      }),
-      signal,
-    });
-
-    if (!resp.ok || !resp.body) {
-      throw new Error('对话服务请求失败');
+  const updateAssistant = (suggestions?: string[]) => {
+    const cleanText = fullText.replace(/\n?SUGGESTIONS:\s*.+$/s, '').trim();
+    const parts: MessagePart[] = [...toolParts];
+    if (cleanText) {
+      parts.push({ type: 'text', text: cleanText });
     }
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    const updateAssistant = (suggestions?: string[]) => {
-      const cleanText = fullText.replace(/\n?SUGGESTIONS:\s*.+$/s, '').trim();
-      const parts: MessagePart[] = [...toolParts];
-      if (cleanText) {
-        parts.push({ type: 'text', text: cleanText });
-      }
-      currentMsgs = currentMsgs.map((m) =>
-        m.id === assistantId ? { ...m, parts, suggestions } : m,
-      );
-      saveLocalMessages(uid, session.id, currentMsgs);
-      onUpdateMessages(currentMsgs);
-    };
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const blocks = buffer.split('\n\n');
-      buffer = blocks.pop() ?? '';
-
-      for (const block of blocks) {
-        const lines = block.split('\n');
-        let eventName = 'message';
-        let dataLine = '';
-        for (const line of lines) {
-          if (line.startsWith('event:')) eventName = line.slice(6).trim();
-          if (line.startsWith('data:')) dataLine += line.slice(5).trim();
-        }
-        if (!dataLine) continue;
-        const parsed = JSON.parse(dataLine) as Record<string, unknown>;
-
-        if (eventName === 'tool') {
-          toolParts.push({
-            type: 'tool-call',
-            toolName: parsed.toolName as SessionRecord['frozenTools'][number],
-            label: String(parsed.label ?? ''),
-          });
-          updateAssistant();
-        } else if (eventName === 'chart') {
-          const chart = parsed as unknown as ChartSnapshot;
-          saveCachedChart(uid, primaryProfile.id, chart);
-          onUpdateChart(chart);
-        } else if (eventName === 'delta') {
-          receivedAnyDelta = true;
-          fullText += String(parsed.text ?? '');
-          updateAssistant();
-        } else if (eventName === 'done') {
-          const suggestions = Array.isArray(parsed.suggestions)
-            ? (parsed.suggestions as string[])
-            : [];
-          updateAssistant(suggestions);
-        } else if (eventName === 'error') {
-          throw new Error(String(parsed.message ?? '生成失败'));
-        }
-      }
-    }
-
-    const sessions = loadLocalSessions(uid).map((s) =>
-      s.id === session.id ? { ...s, updatedAt: new Date().toISOString() } : s,
+    currentMsgs = currentMsgs.map((m) =>
+      m.id === assistantId ? { ...m, parts, suggestions } : m,
     );
-    saveLocalSessions(uid, sessions);
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      return;
+    onUpdateMessages(currentMsgs);
+  };
+
+  try {
+    const callable = httpsCallable<
+      { sessionId: string; message: string },
+      { text: string; suggestions?: string[] },
+      ChatStreamChunk
+    >(functions, 'chat');
+    const { stream, data } = await callable.stream(
+      { sessionId: session.id, message: userText },
+      { signal },
+    );
+
+    for await (const chunk of stream) {
+      if (chunk.type === 'tool' && chunk.toolName) {
+        toolParts.push({
+          type: 'tool-call',
+          toolName: chunk.toolName as AstrologyToolName,
+          label: chunk.label ?? chunk.toolName,
+        });
+        updateAssistant();
+      } else if (chunk.type === 'chart' && chunk.chart) {
+        if (primaryProfile) {
+          saveCachedChart(uid, primaryProfile.id, chunk.chart);
+        }
+        onUpdateChart(chunk.chart);
+      } else if (chunk.type === 'text' && chunk.text) {
+        fullText += chunk.text;
+        updateAssistant();
+      } else if (chunk.type === 'done') {
+        updateAssistant(chunk.suggestions ?? []);
+      }
     }
-    if (!receivedAnyDelta) {
-      const refunded: UsageRecord = {
-        periodStart: nextUsage.periodStart,
-        used: usage.used,
-      };
-      saveLocalUsage(uid, refunded);
-      onUpdateUsage(refunded);
+
+    const finalRes = await data;
+    if (!fullText && finalRes?.text) {
+      fullText = finalRes.text;
+      updateAssistant(finalRes.suggestions ?? []);
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return;
+    if (err instanceof Error && err.message.includes('cancelled')) return;
+    if (err instanceof Error && err.message.includes('QUOTA_EXCEEDED')) {
+      onQuotaExceeded();
+      return;
     }
     throw err;
   }
 }
 
-export async function exportUserDataJson(uid: string): Promise<void> {
-  const userSnap = await getDoc(doc(db, 'users', uid));
-  const profilesSnap = await getDocs(collection(db, 'users', uid, 'profiles'));
-  const sessions = loadLocalSessions(uid);
-  const payload = {
-    exportedAt: new Date().toISOString(),
-    user: userSnap.data() ?? null,
-    profiles: profilesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-    sessions: sessions.map((s) => ({
-      ...s,
-      messages: loadLocalMessages(uid, s.id),
-    })),
-  };
-
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+export async function exportUserDataJson(_uid: string): Promise<void> {
+  const fn = httpsCallable<void, Record<string, unknown>>(functions, 'exportUserData');
+  const res = await fn();
+  const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -499,27 +449,10 @@ export async function exportUserDataJson(uid: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-export async function deleteUserAccount(uid: string): Promise<void> {
-  const profilesSnap = await getDocs(collection(db, 'users', uid, 'profiles'));
-  for (const p of profilesSnap.docs) {
-    await deleteDoc(doc(db, 'users', uid, 'profiles', p.id));
-  }
-  await deleteDoc(doc(db, 'users', uid)).catch(() => undefined);
-
-  const sessions = loadLocalSessions(uid);
-  for (const s of sessions) {
-    localStorage.removeItem(messagesKey(uid, s.id));
-  }
-  localStorage.removeItem(sessionsKey(uid));
-  localStorage.removeItem(usageKey(uid));
-
-  if (auth.currentUser) {
-    try {
-      await deleteUser(auth.currentUser);
-    } catch {
-      await auth.signOut();
-    }
-  }
+export async function deleteUserAccount(_uid: string): Promise<void> {
+  const fn = httpsCallable<void, { deleted: boolean }>(functions, 'deleteAccount');
+  await fn();
+  await auth.signOut().catch(() => undefined);
 }
 
 export async function createStripeCheckout(uid: string, tier: 'go' | 'pro'): Promise<string | null> {

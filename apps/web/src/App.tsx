@@ -15,11 +15,11 @@ import { navigate, usePathname } from './lib/router';
 import {
   createConsultationSession,
   ensureUserRecord,
-  loadLocalSessions,
-  loadLocalUsage,
   saveCachedChart,
   saveProfile,
   subscribeProfiles,
+  subscribeSessions,
+  subscribeUsage,
 } from './lib/store';
 import { LegalPage } from './pages/LegalPage';
 import { WorkbenchPage, type PendingHandoff } from './pages/WorkbenchPage';
@@ -47,11 +47,26 @@ export function App() {
 
   useEffect(() => {
     let unsubProfiles: (() => void) | undefined;
-    const unsubAuth = onIdTokenChanged(auth, async (nextUser) => {
+    let unsubSessions: (() => void) | undefined;
+    let unsubUsage: (() => void) | undefined;
+
+    const cleanupSubs = () => {
       if (unsubProfiles) {
         unsubProfiles();
         unsubProfiles = undefined;
       }
+      if (unsubSessions) {
+        unsubSessions();
+        unsubSessions = undefined;
+      }
+      if (unsubUsage) {
+        unsubUsage();
+        unsubUsage = undefined;
+      }
+    };
+
+    const unsubAuth = onIdTokenChanged(auth, async (nextUser) => {
+      cleanupSubs();
 
       setUser(nextUser);
       if (!nextUser) {
@@ -71,16 +86,15 @@ export function App() {
         setTier('free');
       }
 
-      setSessions(loadLocalSessions(nextUser.uid));
-      setUsage(loadLocalUsage(nextUser.uid));
-
       unsubProfiles = subscribeProfiles(nextUser.uid, setProfiles);
+      unsubSessions = subscribeSessions(nextUser.uid, setSessions);
+      unsubUsage = subscribeUsage(nextUser.uid, setUsage);
       setAuthReady(true);
     });
 
     return () => {
       unsubAuth();
-      if (unsubProfiles) unsubProfiles();
+      cleanupSubs();
     };
   }, []);
 
@@ -111,13 +125,11 @@ export function App() {
           const chosen = pendingHandoff.selectedIndices
             .map((idx) => savedProfiles[idx])
             .filter(Boolean);
-          const session = createConsultationSession(
-            uid,
-            tier,
+          const session = await createConsultationSession(
             pendingHandoff.mode,
             chosen.length > 0 ? chosen : [savedProfiles[0]],
           );
-          setSessions(loadLocalSessions(uid));
+          setSessions((prev) => (prev.some((s) => s.id === session.id) ? prev : [session, ...prev]));
           navigate(`/consult/${session.id}`);
         } else {
           setPendingHandoff(null);
@@ -136,9 +148,12 @@ export function App() {
     navigate('/');
   };
 
-  const handleStartSession = (mode: ConsultationMode, selectedProfiles: ProfileRecord[]): SessionRecord => {
-    const session = createConsultationSession(user!.uid, tier, mode, selectedProfiles);
-    setSessions(loadLocalSessions(user!.uid));
+  const handleStartSession = async (
+    mode: ConsultationMode,
+    selectedProfiles: ProfileRecord[],
+  ): Promise<SessionRecord> => {
+    const session = await createConsultationSession(mode, selectedProfiles);
+    setSessions((prev) => (prev.some((s) => s.id === session.id) ? prev : [session, ...prev]));
     navigate(`/consult/${session.id}`);
     return session;
   };
@@ -186,7 +201,6 @@ export function App() {
         }}
         onStartSession={handleStartSession}
         onSelectSession={(sid) => navigate(sid ? `/consult/${sid}` : '/')}
-        onUsageChange={setUsage}
         onSignOut={() => void handleSignOut()}
       />
 

@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
   "engines": {
     "node": "22"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --noEmit && node -e \"const {execSync}=require('child_process');const fs=require('fs');const bin=['../../node_modules/.bun/node_modules/esbuild/bin/esbuild','../../node_modules/esbuild/bin/esbuild'].find(p=>fs.existsSync(p))||'npx esbuild';execSync(bin+' src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/index.cjs --external:firebase-admin --external:firebase-admin/* --external:firebase-functions --external:firebase-functions/* --external:genkit --external:@genkit-ai/* --external:stripe --external:zod',{stdio:'inherit'})\"",
     "dev": "npx firebase-tools emulators:start --only functions,firestore,auth",
     "deploy": "npx firebase-tools deploy --only functions,firestore",
     "typecheck": "tsc --noEmit"
@@ -17,8 +17,6 @@
     "@genkit-ai/firebase": "^1.0.0",
     "@genkit-ai/google-genai": "^1.0.0",
     "@genkit-ai/vertexai": "^1.0.0",
-    "@vela-cf/astrology": "*",
-    "@vela-cf/shared": "*",
     "firebase-admin": "^13.0.0",
     "firebase-functions": "^6.0.0",
     "genkit": "^1.0.0",

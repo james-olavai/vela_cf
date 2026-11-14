@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported, setConsent } from 'firebase/analytics';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
@@ -7,9 +8,18 @@ import firebaseConfig from '../../../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
+const recaptchaKey =
+  import.meta.env.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY || firebaseConfig.recaptchaSiteKey;
+if (typeof window !== 'undefined' && recaptchaKey) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(recaptchaKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+}
+
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const functions = getFunctions(app);
+export const functions = getFunctions(app, 'asia-southeast1');
 export const googleProvider = new GoogleAuthProvider();
 
 export enum OperationType {
