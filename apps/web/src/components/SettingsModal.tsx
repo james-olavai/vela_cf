@@ -82,7 +82,7 @@ export function SettingsModal({
 
   if (!open) return null;
 
-  const pct = computeUsagePercent(usage.used, tier);
+  const pct = computeUsagePercent(usage.used, tier, usage.bonusMicroUsd ?? 0);
 
   const handleUpgrade = async (target: 'go' | 'pro') => {
     if (!uid) {

@@ -15,6 +15,9 @@ export const QUOTA_BUDGET_MICRO_USD: Record<Tier, number> = {
 };
 
 export const QUOTA_LIMIT = QUOTA_BUDGET_MICRO_USD;
+export const SHARE_BONUS_MICRO_USD = 30_000;
+export const MAX_MONTHLY_SHARE_BONUSES = 3;
+export const MAX_MONTHLY_SHARE_BONUS_MICRO_USD = SHARE_BONUS_MICRO_USD * MAX_MONTHLY_SHARE_BONUSES;
 
 export const MAX_OUTPUT_TOKENS_BY_TIER: Record<Tier, number> = {
   free: 2048,
@@ -27,8 +30,13 @@ export function computeTokenCostMicroUsd(inputTokens: number, outputTokens: numb
   return Math.max(1_000, cost);
 }
 
-export function computeUsagePercent(usedMicroUsd: number, tier: Tier): number {
-  const budget = QUOTA_BUDGET_MICRO_USD[tier];
+export function computeEffectiveBudget(tier: Tier, bonusMicroUsd = 0): number {
+  const cappedBonus = Math.max(0, Math.min(MAX_MONTHLY_SHARE_BONUS_MICRO_USD, bonusMicroUsd));
+  return QUOTA_BUDGET_MICRO_USD[tier] + cappedBonus;
+}
+
+export function computeUsagePercent(usedMicroUsd: number, tier: Tier, bonusMicroUsd = 0): number {
+  const budget = computeEffectiveBudget(tier, bonusMicroUsd);
   if (budget <= 0) return 100;
   return Math.min(100, Math.round((usedMicroUsd / budget) * 100));
 }
@@ -209,6 +217,9 @@ export interface SessionRecord {
 export interface UsageRecord {
   periodStart: string;
   used: number;
+  bonusMicroUsd?: number;
+  shareCount?: number;
+  lastShareDate?: string;
 }
 
 export interface UserRecord {

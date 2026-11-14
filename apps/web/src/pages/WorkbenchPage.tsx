@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
+  computeEffectiveBudget,
   computeUsagePercent,
   nextUtcMonthResetLabel,
-  QUOTA_BUDGET_MICRO_USD,
   TIER_META,
   type ConsultationMode,
   type MessageRecord,
@@ -17,6 +17,7 @@ import { HistorySearchModal } from '../components/HistorySearchModal';
 import {
   IconArrowUp,
   IconChevronsLeft,
+  IconGift,
   IconNotebook,
   IconSearch,
   IconSquarePen,
@@ -24,6 +25,7 @@ import {
 } from '../components/Icons';
 import { ProfileSidebarPanel } from '../components/ProfileSidebarPanel';
 import { SettingsModal, type SettingsTab } from '../components/SettingsModal';
+import { ShareBonusModal } from '../components/ShareBonusModal';
 import { navigate } from '../lib/router';
 import {
   fetchNatalChart,
@@ -104,6 +106,14 @@ export function WorkbenchPage({
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('subscription');
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [usageOverride, setUsageOverride] = useState<UsageRecord | null>(null);
+
+  useEffect(() => {
+    setUsageOverride(null);
+  }, [usage]);
+
+  const effectiveUsage = usageOverride ?? usage;
 
   // Visitor local draft profiles before login
   const [draftProfiles, setDraftProfiles] = useState<ProfileRecord[]>([]);
@@ -206,7 +216,7 @@ export function WorkbenchPage({
     void streamConsultationReply({
       uid,
       tier,
-      usage,
+      usage: effectiveUsage,
       session: activeSession,
       profiles: sessionProfiles,
       existingMessages: [],
@@ -231,8 +241,14 @@ export function WorkbenchPage({
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
-  const quotaExhausted = Boolean(uid) && usage.used >= QUOTA_BUDGET_MICRO_USD[tier];
-  const usagePercent = computeUsagePercent(usage.used, tier);
+  const quotaExhausted =
+    Boolean(uid) &&
+    effectiveUsage.used >= computeEffectiveBudget(tier, effectiveUsage.bonusMicroUsd ?? 0);
+  const usagePercent = computeUsagePercent(
+    effectiveUsage.used,
+    tier,
+    effectiveUsage.bonusMicroUsd ?? 0,
+  );
   const quotaNearLimit = !quotaExhausted && Boolean(uid) && usagePercent >= 80;
   const activeProfiles = effectiveProfiles.filter((p) => selectedProfileIds.includes(p.id));
   const mode: ConsultationMode = activeProfiles.length >= 2 ? 'synastry' : 'personal';
@@ -352,7 +368,7 @@ export function WorkbenchPage({
       await streamConsultationReply({
         uid,
         tier,
-        usage,
+        usage: effectiveUsage,
         session: targetSession,
         profiles: sessionProfiles.length > 0 ? sessionProfiles : activeProfiles,
         existingMessages: messages,
@@ -716,6 +732,25 @@ export function WorkbenchPage({
               </span>
             )}
           </div>
+          {uid && (
+            <button
+              type="button"
+              onClick={() => setShareModalOpen(true)}
+              title="每日分享领额度"
+              aria-label="每日分享领额度"
+              className="relative min-h-[38px] min-w-[38px] flex items-center justify-center rounded-[10px] border-0 bg-transparent text-[#c3cde0] hover:text-[#f7d57f] hover:bg-[#101527] cursor-pointer transition-colors"
+            >
+              <IconGift size={18} />
+              {(tier === 'free' || quotaNearLimit || quotaExhausted) &&
+                (effectiveUsage.shareCount ?? 0) < 3 &&
+                effectiveUsage.lastShareDate !== new Date().toISOString().slice(0, 10) && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#e0b64a]"
+                  />
+                )}
+            </button>
+          )}
         </header>
 
         {messages.length === 0 ? (
@@ -878,7 +913,7 @@ export function WorkbenchPage({
         uid={uid}
         email={email}
         tier={tier}
-        usage={usage}
+        usage={effectiveUsage}
         profiles={effectiveProfiles}
         onClose={() => setSettingsOpen(false)}
         onSignOut={onSignOut}
@@ -902,6 +937,21 @@ export function WorkbenchPage({
           });
         }}
       />
+
+      {uid && (
+        <ShareBonusModal
+          open={shareModalOpen}
+          uid={uid}
+          tier={tier}
+          usage={effectiveUsage}
+          onClose={() => setShareModalOpen(false)}
+          onClaimed={(next) => setUsageOverride(next)}
+          onOpenUpgrade={() => {
+            setSettingsTab('subscription');
+            setSettingsOpen(true);
+          }}
+        />
+      )}
     </div>
   );
 }

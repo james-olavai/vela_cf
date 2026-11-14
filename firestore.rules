@@ -44,10 +44,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // 配额：客户端本人只读，仅服务端事务写
+    // 配额：客户端本人只读；仅允许本人按日领取分享奖励（上限 3 次/月，每次 +30000 micro-USD）
     match /usage/{uid} {
       allow get: if isValidId(uid) && isOwner(uid);
-      allow list, write: if false;
+      allow list, delete: if false;
+      allow create: if isValidId(uid) && isOwner(uid)
+        && request.resource.data.keys().hasOnly(['periodStart', 'used', 'bonusMicroUsd', 'shareCount', 'lastShareDate'])
+        && request.resource.data.periodStart is string && request.resource.data.periodStart.size() == 7
+        && request.resource.data.used == 0
+        && request.resource.data.bonusMicroUsd == 30000
+        && request.resource.data.shareCount == 1
+        && request.resource.data.lastShareDate is string && request.resource.data.lastShareDate.size() == 10;
+      allow update: if isValidId(uid) && isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bonusMicroUsd', 'shareCount', 'lastShareDate'])
+        && request.resource.data.bonusMicroUsd == resource.data.get('bonusMicroUsd', 0) + 30000
+        && request.resource.data.bonusMicroUsd <= 90000
+        && request.resource.data.shareCount == resource.data.get('shareCount', 0) + 1
+        && request.resource.data.shareCount <= 3
+        && request.resource.data.lastShareDate is string
+        && request.resource.data.lastShareDate.size() == 10
+        && request.resource.data.lastShareDate != resource.data.get('lastShareDate', '');
     }
 
     // 用户主文档与子集合

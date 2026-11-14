@@ -7,13 +7,16 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import {
+  computeEffectiveBudget,
+  MAX_MONTHLY_SHARE_BONUSES,
   ProfileInputSchema,
-  QUOTA_BUDGET_MICRO_USD,
+  SHARE_BONUS_MICRO_USD,
   utcMonthPeriodStart,
   type AstrologyToolName,
   type ConsultationMode,
@@ -210,19 +213,85 @@ export function subscribeUsage(
     (snap) => {
       const currentStart = utcMonthPeriodStart();
       if (!snap.exists()) {
-        onData({ periodStart: currentStart, used: 0 });
+        onData({ periodStart: currentStart, used: 0, bonusMicroUsd: 0, shareCount: 0, lastShareDate: '' });
         return;
       }
-      const raw = snap.data() as { periodStart?: string; used?: number };
+      const raw = snap.data() as Partial<UsageRecord>;
       const periodStart = String(raw.periodStart ?? currentStart);
       if (periodStart < currentStart) {
-        onData({ periodStart: currentStart, used: 0 });
+        onData({ periodStart: currentStart, used: 0, bonusMicroUsd: 0, shareCount: 0, lastShareDate: '' });
         return;
       }
-      onData({ periodStart, used: Number(raw.used ?? 0) });
+      onData({
+        periodStart,
+        used: Number(raw.used ?? 0),
+        bonusMicroUsd: Number(raw.bonusMicroUsd ?? 0),
+        shareCount: Number(raw.shareCount ?? 0),
+        lastShareDate: String(raw.lastShareDate ?? ''),
+      });
     },
     (err) => handleFirestoreError(err, OperationType.GET, path),
   );
+}
+
+export async function claimDailyShareBonus(uid: string): Promise<UsageRecord> {
+  const today = new Date().toISOString().slice(0, 10);
+  const currentStart = utcMonthPeriodStart();
+
+  if (import.meta.env.DEV && uid === 'e2e_test_user') {
+    const raw = localStorage.getItem('vela_e2e_usage');
+    const prev: UsageRecord = raw
+      ? (JSON.parse(raw) as UsageRecord)
+      : { periodStart: currentStart, used: 0, bonusMicroUsd: 0, shareCount: 0, lastShareDate: '' };
+    if (prev.lastShareDate === today) throw new Error('ALREADY_SHARED_TODAY');
+    if ((prev.shareCount ?? 0) >= MAX_MONTHLY_SHARE_BONUSES) throw new Error('MONTHLY_SHARE_LIMIT_REACHED');
+    const next: UsageRecord = {
+      periodStart: currentStart,
+      used: prev.used ?? 0,
+      bonusMicroUsd: (prev.bonusMicroUsd ?? 0) + SHARE_BONUS_MICRO_USD,
+      shareCount: (prev.shareCount ?? 0) + 1,
+      lastShareDate: today,
+    };
+    localStorage.setItem('vela_e2e_usage', JSON.stringify(next));
+    return next;
+  }
+
+  const ref = doc(db, 'usage', uid);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) {
+      const next: UsageRecord = {
+        periodStart: currentStart,
+        used: 0,
+        bonusMicroUsd: SHARE_BONUS_MICRO_USD,
+        shareCount: 1,
+        lastShareDate: today,
+      };
+      tx.set(ref, next);
+      return next;
+    }
+    const data = snap.data() as Partial<UsageRecord>;
+    const count = Number(data.shareCount ?? 0);
+    const bonus = Number(data.bonusMicroUsd ?? 0);
+    const lastDate = String(data.lastShareDate ?? '');
+    if (lastDate === today) throw new Error('ALREADY_SHARED_TODAY');
+    if (count >= MAX_MONTHLY_SHARE_BONUSES) throw new Error('MONTHLY_SHARE_LIMIT_REACHED');
+
+    const nextBonus = bonus + SHARE_BONUS_MICRO_USD;
+    const nextCount = count + 1;
+    tx.update(ref, {
+      bonusMicroUsd: nextBonus,
+      shareCount: nextCount,
+      lastShareDate: today,
+    });
+    return {
+      periodStart: String(data.periodStart ?? currentStart),
+      used: Number(data.used ?? 0),
+      bonusMicroUsd: nextBonus,
+      shareCount: nextCount,
+      lastShareDate: today,
+    };
+  });
 }
 
 export async function saveProfile(
@@ -414,7 +483,7 @@ export async function streamConsultationReply(params: {
   } = params;
   const primaryProfile = profiles[0];
 
-  if (usage.used >= QUOTA_BUDGET_MICRO_USD[tier]) {
+  if (usage.used >= computeEffectiveBudget(tier, usage.bonusMicroUsd ?? 0)) {
     onQuotaExceeded();
     return;
   }

@@ -8,10 +8,10 @@ import { vertexAI } from '@genkit-ai/google-genai';
 import Stripe from 'stripe';
 import {
   ChatRequestSchema,
+  computeEffectiveBudget,
   computeTokenCostMicroUsd,
   CreateSessionRequestSchema,
   MAX_OUTPUT_TOKENS_BY_TIER,
-  QUOTA_BUDGET_MICRO_USD,
   ResolveLocationRequestSchema,
   TIER_META,
   TierSchema,
@@ -184,7 +184,8 @@ const chatFlow = ai.defineFlow(
       const preData = preSnap.data();
       const isNewPeriod = !preData || String(preData.periodStart) < periodStart;
       const preUsed = isNewPeriod ? 0 : Number(preData?.used ?? 0);
-      if (preUsed >= QUOTA_BUDGET_MICRO_USD[tier]) {
+      const preBonus = isNewPeriod ? 0 : Number(preData?.bonusMicroUsd ?? 0);
+      if (preUsed >= computeEffectiveBudget(tier, preBonus)) {
         throw new HttpsError('resource-exhausted', 'QUOTA_EXCEEDED');
       }
 
@@ -323,11 +324,17 @@ const chatFlow = ai.defineFlow(
       const data = snap.data();
       const reset = !data || String(data.periodStart) < periodStart;
       const baseUsed = reset ? 0 : Number(data?.used ?? 0);
-      tx.set(usageRef, {
+      const nextPayload: Record<string, unknown> = {
         periodStart,
         used: baseUsed + costMicroUsd,
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      };
+      if (reset) {
+        nextPayload.bonusMicroUsd = 0;
+        nextPayload.shareCount = 0;
+        nextPayload.lastShareDate = '';
+      }
+      tx.set(usageRef, nextPayload, { merge: true });
     });
 
     const assistantParts = [
