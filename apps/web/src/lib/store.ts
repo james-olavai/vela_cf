@@ -619,3 +619,29 @@ export async function createStripePortal(): Promise<string | null> {
     return null;
   }
 }
+
+export function formatAppError(err: unknown, fallback: string): string {
+  const code = (err as { code?: string })?.code ?? '';
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  if (code === 'functions/unauthenticated' || msg.includes('AUTH_REQUIRED')) {
+    return '登录状态已失效，请重新登录后重试';
+  }
+  if (code === 'functions/permission-denied') {
+    return `权限或套餐受限：${msg}`;
+  }
+  if (code === 'functions/resource-exhausted' || msg.includes('QUOTA_EXCEEDED')) {
+    return '本月额度或服务请求已达上限，请稍后再试或升级套餐';
+  }
+  if (code === 'functions/not-found') {
+    return `未找到目标记录或模型：${msg}`;
+  }
+  if (code === 'functions/invalid-argument') {
+    return `参数有误：${msg}`;
+  }
+  if (code === 'functions/internal' || msg === 'INTERNAL') {
+    return msg && msg !== 'INTERNAL'
+      ? `云端函数异常：${msg}`
+      : '云端函数返回 INTERNAL（请确认已部署最新 functions，并检查 Vertex AI 权限/模型配置）';
+  }
+  return msg || fallback;
+}

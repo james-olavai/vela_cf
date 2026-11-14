@@ -17,6 +17,7 @@ import {
   createStripePortal,
   deleteUserAccount,
   exportUserDataJson,
+  formatAppError,
   removeProfile,
   saveProfile,
   searchLocations,
@@ -71,9 +72,10 @@ export function SettingsModal({
   const [gender, setGender] = useState<Gender>('unset');
   const [profileBusy, setProfileBusy] = useState(false);
 
-  // Delete confirm
+  // Delete & export confirm
   const [deleteText, setDeleteText] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
   const [analyticsEnabled, setAnalyticsEnabled] = useState(
     () => typeof window !== 'undefined' && window.localStorage.getItem('vela_consent_choice') === 'granted',
   );
@@ -519,10 +521,21 @@ export function SettingsModal({
                     </div>
                     <button
                       type="button"
-                      onClick={() => void exportUserDataJson(uid)}
-                      className="min-h-[40px] px-4 rounded-[8px] border border-[#3a4668] bg-[#161d33] text-[13px] text-[#f8fafc] cursor-pointer shrink-0"
+                      disabled={exportBusy}
+                      onClick={async () => {
+                        setExportBusy(true);
+                        setNotice(null);
+                        try {
+                          await exportUserDataJson(uid);
+                        } catch (err) {
+                          setNotice(formatAppError(err, '导出失败，请重试'));
+                        } finally {
+                          setExportBusy(false);
+                        }
+                      }}
+                      className="min-h-[40px] px-4 rounded-[8px] border border-[#3a4668] bg-[#161d33] text-[13px] text-[#f8fafc] cursor-pointer shrink-0 disabled:opacity-45"
                     >
-                      导出 JSON
+                      {exportBusy ? '导出中…' : '导出 JSON'}
                     </button>
                   </div>
 
@@ -547,7 +560,7 @@ export function SettingsModal({
                             await deleteUserAccount(uid);
                             onClose();
                           } catch (err) {
-                            setNotice(err instanceof Error ? err.message : '删除失败，请重新登录后重试');
+                            setNotice(formatAppError(err, '删除失败，请重新登录后重试'));
                           } finally {
                             setDeleteBusy(false);
                           }

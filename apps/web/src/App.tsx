@@ -15,6 +15,7 @@ import { navigate, usePathname } from './lib/router';
 import {
   createConsultationSession,
   ensureUserRecord,
+  formatAppError,
   saveCachedChart,
   saveProfile,
   subscribeProfiles,
@@ -155,7 +156,7 @@ export function App() {
       }
       setAuthModalOpen(false);
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Google 登录失败，请重试');
+      setAuthError(formatAppError(err, 'Google 登录失败，请重试'));
     } finally {
       setAuthBusy(false);
     }

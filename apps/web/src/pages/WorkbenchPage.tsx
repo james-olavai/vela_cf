@@ -29,6 +29,7 @@ import { SettingsModal, type SettingsTab } from '../components/SettingsModal';
 import { navigate } from '../lib/router';
 import {
   fetchNatalChart,
+  formatAppError,
   loadCachedChart,
   removeProfile,
   saveProfile,
@@ -219,7 +220,7 @@ export function WorkbenchPage({
       onQuotaExceeded: () => {},
     })
       .catch((err) => {
-        setStreamError(err instanceof Error ? err.message : '生成回复失败');
+        setStreamError(formatAppError(err, '生成回复失败'));
       })
       .finally(() => {
         isStreamingRef.current = false;
@@ -365,7 +366,7 @@ export function WorkbenchPage({
         onQuotaExceeded: () => {},
       });
     } catch (err) {
-      setStreamError(err instanceof Error ? err.message : '发送失败，请重试');
+      setStreamError(formatAppError(err, '发送失败，请重试'));
     } finally {
       isStreamingRef.current = false;
       setIsStreaming(false);
@@ -617,7 +618,7 @@ export function WorkbenchPage({
       ) : (
         <form
           onSubmit={handleSubmitForm}
-          className="rounded-[24px] border border-[#26304d] bg-[#101527] px-3.5 py-2.5 flex flex-col gap-2 focus-within:border-[#3a4668]"
+          className="rounded-[26px] border border-[#26304d] bg-[#101527] pl-4 pr-2 py-2 flex items-end gap-2 focus-within:border-[#3a4668]"
         >
           <textarea
             ref={textareaRef}
@@ -637,38 +638,34 @@ export function WorkbenchPage({
                 void handleSend();
               }
             }}
-            className="w-full resize-none bg-transparent border-0 text-[15px] leading-[1.6] text-[#f8fafc] placeholder-[#a3b0c5] focus:outline-none disabled:opacity-60"
+            className="flex-1 min-w-0 resize-none bg-transparent border-0 py-[6px] text-[15px] leading-[24px] text-[#f8fafc] placeholder-[#a3b0c5] focus:outline-none disabled:opacity-60"
           />
 
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              {inputText.length > 1500 && (
-                <span className="font-mono-num text-[11px] text-[#a3b0c5]">
-                  {inputText.length}/2000
-                </span>
-              )}
-            </div>
+          {inputText.length > 1500 && (
+            <span className="shrink-0 pb-2 font-mono-num text-[11px] text-[#a3b0c5]">
+              {inputText.length}/2000
+            </span>
+          )}
 
-            {isStreaming ? (
-              <button
-                type="button"
-                onClick={() => abortRef.current?.abort()}
-                aria-label="停止生成"
-                className="w-9 h-9 rounded-full border-0 bg-[#e0b64a] text-[#1a1405] flex items-center justify-center cursor-pointer"
-              >
-                <IconStop size={15} />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!inputText.trim() || needsMoreProfiles}
-                aria-label="发送"
-                className="w-9 h-9 rounded-full border-0 bg-[#e0b64a] text-[#1a1405] flex items-center justify-center cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
-              >
-                <IconArrowUp size={18} />
-              </button>
-            )}
-          </div>
+          {isStreaming ? (
+            <button
+              type="button"
+              onClick={() => abortRef.current?.abort()}
+              aria-label="停止生成"
+              className="shrink-0 w-9 h-9 rounded-full border-0 bg-[#e0b64a] text-[#1a1405] flex items-center justify-center cursor-pointer"
+            >
+              <IconStop size={15} />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!inputText.trim() || needsMoreProfiles}
+              aria-label="发送"
+              className="shrink-0 w-9 h-9 rounded-full border-0 bg-[#e0b64a] text-[#1a1405] flex items-center justify-center cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+            >
+              <IconArrowUp size={18} />
+            </button>
+          )}
         </form>
       )}
     </div>

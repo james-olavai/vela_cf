@@ -4,7 +4,7 @@ import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onCallGenkit } from 'firebase-functions/https';
 import { genkit, z } from 'genkit';
-import { vertexAI } from '@genkit-ai/vertexai';
+import { vertexAI } from '@genkit-ai/google-genai';
 import Stripe from 'stripe';
 import {
   ChatRequestSchema,
@@ -89,6 +89,42 @@ async function resolveUserPeriodAndTier(uid: string, tokenRole?: unknown): Promi
   return { tier, periodStart };
 }
 
+type HttpsErrorCode = ConstructorParameters<typeof HttpsError>[0];
+
+const GENKIT_STATUS_TO_HTTPS: Record<string, HttpsErrorCode> = {
+  INVALID_ARGUMENT: 'invalid-argument',
+  FAILED_PRECONDITION: 'failed-precondition',
+  OUT_OF_RANGE: 'out-of-range',
+  UNAUTHENTICATED: 'unauthenticated',
+  PERMISSION_DENIED: 'permission-denied',
+  NOT_FOUND: 'not-found',
+  ALREADY_EXISTS: 'already-exists',
+  ABORTED: 'aborted',
+  RESOURCE_EXHAUSTED: 'resource-exhausted',
+  CANCELLED: 'cancelled',
+  UNAVAILABLE: 'unavailable',
+  DEADLINE_EXCEEDED: 'deadline-exceeded',
+  UNIMPLEMENTED: 'unimplemented',
+};
+
+function toHttpsError(err: unknown): HttpsError {
+  if (err instanceof HttpsError) return err;
+  if (err instanceof z.ZodError) {
+    return new HttpsError('invalid-argument', err.issues[0]?.message || 'INVALID_REQUEST');
+  }
+  const maybe = err as { status?: string; code?: string; message?: string };
+  const mappedCode = maybe?.status ? GENKIT_STATUS_TO_HTTPS[maybe.status] : undefined;
+  if (mappedCode) {
+    return new HttpsError(mappedCode, (maybe.message || maybe.status || 'REQUEST_FAILED').slice(0, 400));
+  }
+  if (typeof maybe?.code === 'string' && maybe.code.startsWith('auth/')) {
+    return new HttpsError('failed-precondition', (maybe.message || maybe.code).slice(0, 300));
+  }
+  console.error('[vela-api] unhandled error:', err);
+  const msg = err instanceof Error ? err.message : String(err);
+  return new HttpsError('internal', msg.slice(0, 400) || 'INTERNAL_ERROR');
+}
+
 const chatFlow = ai.defineFlow(
   {
     name: 'velaChatFlow',
@@ -110,106 +146,104 @@ const chatFlow = ai.defineFlow(
     }),
   },
   async (rawInput, { sendChunk, context }) => {
-    const input = ChatRequestSchema.parse(rawInput);
-    const uid = context?.auth?.uid;
-    if (!uid) {
-      throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
-    }
+    try {
+      const input = ChatRequestSchema.parse(rawInput);
+      const uid = context?.auth?.uid;
+      if (!uid) {
+        throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
+      }
 
-    const sessionRef = db.collection('users').doc(uid).collection('sessions').doc(input.sessionId);
-    const sessionSnap = await sessionRef.get();
-    const session = sessionSnap.data();
-    if (!sessionSnap.exists || !session) {
-      throw new HttpsError('not-found', 'SESSION_NOT_FOUND');
-    }
+      const sessionRef = db.collection('users').doc(uid).collection('sessions').doc(input.sessionId);
+      const sessionSnap = await sessionRef.get();
+      const session = sessionSnap.data();
+      if (!sessionSnap.exists || !session) {
+        throw new HttpsError('not-found', 'SESSION_NOT_FOUND');
+      }
 
-    const profileIds: string[] =
-      Array.isArray(session.profileIds) && session.profileIds.length > 0
-        ? session.profileIds
-        : [session.profileId];
+      const profileIds: string[] =
+        Array.isArray(session.profileIds) && session.profileIds.length > 0
+          ? session.profileIds
+          : [session.profileId];
 
-    const profileSnaps = await Promise.all(
-      profileIds.map((pid) =>
-        db.collection('users').doc(uid).collection('profiles').doc(pid).get(),
-      ),
-    );
-    const profiles = profileSnaps
-      .filter((s) => s.exists && s.data())
-      .map((s) => s.data()!);
-    if (profiles.length === 0) {
-      throw new HttpsError('not-found', 'PROFILE_NOT_FOUND');
-    }
+      const profileSnaps = await Promise.all(
+        profileIds.map((pid) =>
+          db.collection('users').doc(uid).collection('profiles').doc(pid).get(),
+        ),
+      );
+      const profiles = profileSnaps
+        .filter((s) => s.exists && s.data())
+        .map((s) => s.data()!);
+      if (profiles.length === 0) {
+        throw new HttpsError('not-found', 'PROFILE_NOT_FOUND');
+      }
 
-    const { tier, periodStart } = await resolveUserPeriodAndTier(uid, context.auth?.token?.stripeRole);
-    const usageRef = db.collection('usage').doc(uid);
+      const { tier, periodStart } = await resolveUserPeriodAndTier(uid, context.auth?.token?.stripeRole);
+      const usageRef = db.collection('usage').doc(uid);
 
-    const preSnap = await usageRef.get();
-    const preData = preSnap.data();
-    const isNewPeriod = !preData || String(preData.periodStart) < periodStart;
-    const preUsed = isNewPeriod ? 0 : Number(preData?.used ?? 0);
-    if (preUsed >= QUOTA_BUDGET_MICRO_USD[tier]) {
-      throw new HttpsError('resource-exhausted', 'QUOTA_EXCEEDED');
-    }
+      const preSnap = await usageRef.get();
+      const preData = preSnap.data();
+      const isNewPeriod = !preData || String(preData.periodStart) < periodStart;
+      const preUsed = isNewPeriod ? 0 : Number(preData?.used ?? 0);
+      if (preUsed >= QUOTA_BUDGET_MICRO_USD[tier]) {
+        throw new HttpsError('resource-exhausted', 'QUOTA_EXCEEDED');
+      }
 
-    const historySnap = await sessionRef
-      .collection('messages')
-      .orderBy('createdAt', 'asc')
-      .limit(20)
-      .get();
+      const historySnap = await sessionRef
+        .collection('messages')
+        .orderBy('createdAt', 'asc')
+        .limit(20)
+        .get();
 
-    const historyContext = historySnap.docs
-      .map((d) => {
-        const msg = d.data();
-        const txt = Array.isArray(msg.parts)
-          ? msg.parts
-              .filter((p: { type?: string }) => p.type === 'text')
-              .map((p: { text?: string }) => p.text ?? '')
-              .join('\n')
-          : '';
-        return txt ? `${msg.role === 'user' ? '用户' : '顾问'}: ${txt}` : '';
-      })
-      .filter(Boolean)
-      .join('\n');
+      const historyContext = historySnap.docs
+        .map((d) => {
+          const msg = d.data();
+          const txt = Array.isArray(msg.parts)
+            ? msg.parts
+                .filter((p: { type?: string }) => p.type === 'text')
+                .map((p: { text?: string }) => p.text ?? '')
+                .join('\n')
+            : '';
+          return txt ? `${msg.role === 'user' ? '用户' : '顾问'}: ${txt}` : '';
+        })
+        .filter(Boolean)
+        .join('\n');
 
-    await sessionRef.collection('messages').add({
-      role: 'user',
-      parts: [{ type: 'text', text: input.message }],
-      createdAt: new Date().toISOString(),
-    });
+      const userCreatedAt = new Date().toISOString();
+      const allowedToolNames: AstrologyToolName[] = Array.isArray(session.frozenTools)
+        ? (session.frozenTools as AstrologyToolName[])
+        : ['natalWheel'];
+      const tools = allowedToolNames.map((name) => astrologyTools[name]).filter(Boolean);
 
-    const allowedToolNames: AstrologyToolName[] = Array.isArray(session.frozenTools)
-      ? (session.frozenTools as AstrologyToolName[])
-      : ['natalWheel'];
-    const tools = allowedToolNames.map((name) => astrologyTools[name]).filter(Boolean);
+      let fullText = '';
+      const toolParts: Array<{ type: 'tool-call'; toolName: string; label: string }> = [];
+      const seenTools = new Set<string>();
+      const chartSnapshot: Record<string, unknown> = {};
 
-    let fullText = '';
-    const toolParts: Array<{ type: 'tool-call'; toolName: string; label: string }> = [];
-    const seenTools = new Set<string>();
-    const chartSnapshot: Record<string, unknown> = {};
+      const entityLabel = (et?: string) =>
+        et === 'company' ? '公司' : et === 'country' ? '国家' : '个人';
+      const profileContext = profiles
+        .map(
+          (p, idx) =>
+            `档案${profiles.length > 1 ? idx + 1 : ''}：类型=${entityLabel(p.entityType)}，称呼=${p.name}，出生/成立时间=${p.birthDateTime}，地点=${p.locationName}（纬度 ${p.latitude}，经度 ${p.longitude}，时区 ${p.timezone}），性别=${p.gender ?? 'unset'}。`,
+        )
+        .join('\n');
 
-    const entityLabel = (et?: string) =>
-      et === 'company' ? '公司' : et === 'country' ? '国家' : '个人';
-    const profileContext = profiles
-      .map(
-        (p, idx) =>
-          `档案${profiles.length > 1 ? idx + 1 : ''}：类型=${entityLabel(p.entityType)}，称呼=${p.name}，出生/成立时间=${p.birthDateTime}，地点=${p.locationName}（纬度 ${p.latitude}，经度 ${p.longitude}，时区 ${p.timezone}），性别=${p.gender ?? 'unset'}。`,
-      )
-      .join('\n');
-
-    const { stream, response } = ai.generateStream({
-      model: session.frozenModel || 'vertexai/gemini-4-hydrogen',
-      system:
-        `${session.frozenPrompt}\n` +
-        '在回复正文最后，请另起一行输出 `SUGGESTIONS:` 后跟 2 个简短追问（用 `|` 分隔），例如 `SUGGESTIONS:天顶在水瓶意味着什么？|土星六宫该如何减负？`。\n\n' +
-        profileContext,
-      prompt: `${historyContext ? `${historyContext}\n` : ''}用户最新消息: ${input.message}`,
-      tools,
-      maxTurns: 3,
-      config: {
-        temperature: 0.6,
-        maxOutputTokens: MAX_OUTPUT_TOKENS_BY_TIER[tier],
-      },
-    });
+      const modelName = String(session.frozenModel || 'vertexai/gemini-4-hydrogen');
+      const isGemini4 = modelName.includes('gemini-4-');
+      const { stream, response } = ai.generateStream({
+        model: modelName,
+        system:
+          `${session.frozenPrompt}\n` +
+          '在回复正文最后，请另起一行输出 `SUGGESTIONS:` 后跟 2 个简短追问（用 `|` 分隔），例如 `SUGGESTIONS:天顶在水瓶意味着什么？|土星六宫该如何减负？`。\n\n' +
+          profileContext,
+        prompt: `${historyContext ? `${historyContext}\n` : ''}用户最新消息: ${input.message}`,
+        tools,
+        maxTurns: 3,
+        config: {
+          ...(isGemini4 ? {} : { temperature: 0.6 }),
+          maxOutputTokens: MAX_OUTPUT_TOKENS_BY_TIER[tier],
+        },
+      });
 
     for await (const chunk of stream) {
       if (chunk.toolRequests.length > 0) {
@@ -301,6 +335,11 @@ const chatFlow = ai.defineFlow(
       ...(cleanText ? [{ type: 'text', text: cleanText }] : []),
     ];
     await sessionRef.collection('messages').add({
+      role: 'user',
+      parts: [{ type: 'text', text: input.message }],
+      createdAt: userCreatedAt,
+    });
+    await sessionRef.collection('messages').add({
       role: 'assistant',
       parts: assistantParts,
       suggestions,
@@ -310,6 +349,9 @@ const chatFlow = ai.defineFlow(
 
     sendChunk({ type: 'done', suggestions });
     return { text: cleanText, suggestions };
+    } catch (err) {
+      throw toHttpsError(err);
+    }
   },
 );
 
@@ -325,76 +367,85 @@ export const chat = onCallGenkit(
 export const createSession = onCall(
   { region: REGION, enforceAppCheck: ENFORCE_APP_CHECK },
   async (req) => {
-    const uid = req.auth?.uid;
-    if (!uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
+    try {
+      const uid = req.auth?.uid;
+      if (!uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
 
-    const input = CreateSessionRequestSchema.parse(req.data);
-    const { tier } = await resolveUserPeriodAndTier(uid, req.auth?.token?.stripeRole);
-    const tierMeta = TIER_META[tier];
+      const input = CreateSessionRequestSchema.parse(req.data);
+      const { tier } = await resolveUserPeriodAndTier(uid, req.auth?.token?.stripeRole);
+      const tierMeta = TIER_META[tier];
 
-    if (input.mode === 'synastry') {
-      if (tierMeta.maxSynastryProfiles < 2) {
-        throw new HttpsError('permission-denied', 'SYNASTRY_REQUIRES_GO');
+      if (input.mode === 'synastry') {
+        if (tierMeta.maxSynastryProfiles < 2) {
+          throw new HttpsError('permission-denied', 'SYNASTRY_REQUIRES_GO');
+        }
+        if (input.profileIds.length < 2 || input.profileIds.length > tierMeta.maxSynastryProfiles) {
+          throw new HttpsError('invalid-argument', 'INVALID_SYNASTRY_PROFILE_COUNT');
+        }
+      } else if (input.profileIds.length !== 1) {
+        throw new HttpsError('invalid-argument', 'PERSONAL_REQUIRES_ONE_PROFILE');
       }
-      if (input.profileIds.length < 2 || input.profileIds.length > tierMeta.maxSynastryProfiles) {
-        throw new HttpsError('invalid-argument', 'INVALID_SYNASTRY_PROFILE_COUNT');
+
+      const profileSnaps = await Promise.all(
+        input.profileIds.map((pid) =>
+          db.collection('users').doc(uid).collection('profiles').doc(pid).get(),
+        ),
+      );
+      const profiles = profileSnaps.map((s) => {
+        const data = s.data();
+        if (!s.exists || !data) {
+          throw new HttpsError('not-found', 'PROFILE_NOT_FOUND');
+        }
+        return data;
+      });
+
+      if (!tierMeta.allowsEntityCharts && profiles.some((p) => p.entityType && p.entityType !== 'person')) {
+        throw new HttpsError('permission-denied', 'ENTITY_CHART_REQUIRES_PRO');
       }
-    } else if (input.profileIds.length !== 1) {
-      throw new HttpsError('invalid-argument', 'PERSONAL_REQUIRES_ONE_PROFILE');
+
+      const preset = await getServerPreset(tier, input.mode);
+      const now = new Date().toISOString();
+      const sessionRef = db.collection('users').doc(uid).collection('sessions').doc();
+      const names = profiles.map((p) => String(p.name)).join(' × ');
+      const sessionDoc = {
+        mode: input.mode,
+        profileIds: input.profileIds,
+        profileId: input.profileIds[0],
+        profileName: names,
+        title: input.mode === 'synastry' ? `合盘 · ${names}` : names,
+        frozenPrompt: preset.systemPrompt,
+        frozenModel: preset.modelName,
+        frozenTools: preset.allowedTools,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await sessionRef.set(sessionDoc);
+
+      return { sessionId: sessionRef.id, session: { id: sessionRef.id, ...sessionDoc } };
+    } catch (err) {
+      throw toHttpsError(err);
     }
-
-    const profileSnaps = await Promise.all(
-      input.profileIds.map((pid) =>
-        db.collection('users').doc(uid).collection('profiles').doc(pid).get(),
-      ),
-    );
-    const profiles = profileSnaps.map((s) => {
-      const data = s.data();
-      if (!s.exists || !data) {
-        throw new HttpsError('not-found', 'PROFILE_NOT_FOUND');
-      }
-      return data;
-    });
-
-    if (!tierMeta.allowsEntityCharts && profiles.some((p) => p.entityType && p.entityType !== 'person')) {
-      throw new HttpsError('permission-denied', 'ENTITY_CHART_REQUIRES_PRO');
-    }
-
-    const preset = await getServerPreset(tier, input.mode);
-    const now = new Date().toISOString();
-    const sessionRef = db.collection('users').doc(uid).collection('sessions').doc();
-    const names = profiles.map((p) => String(p.name)).join(' × ');
-    const sessionDoc = {
-      mode: input.mode,
-      profileIds: input.profileIds,
-      profileId: input.profileIds[0],
-      profileName: names,
-      title: input.mode === 'synastry' ? `合盘 · ${names}` : names,
-      frozenPrompt: preset.systemPrompt,
-      frozenModel: preset.modelName,
-      frozenTools: preset.allowedTools,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    await sessionRef.set(sessionDoc);
-
-    return { sessionId: sessionRef.id, session: { id: sessionRef.id, ...sessionDoc } };
   },
 );
 
 export const previewNatalWheel = onCall(
   { region: REGION, enforceAppCheck: ENFORCE_APP_CHECK },
   async (req) => {
-    const input = NatalWheelInputSchema.parse(req.data);
-    return { natal: natalWheel(input) };
+    try {
+      const input = NatalWheelInputSchema.parse(req.data);
+      return { natal: natalWheel(input) };
+    } catch (err) {
+      throw toHttpsError(err);
+    }
   },
 );
 
 export const resolveLocation = onCall(
   { region: REGION, enforceAppCheck: ENFORCE_APP_CHECK },
   async (req) => {
-    const { query } = ResolveLocationRequestSchema.parse(req.data);
+    try {
+      const { query } = ResolveLocationRequestSchema.parse(req.data);
     const cacheKey = query.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5_-]+/g, '_').slice(0, 100);
     const cacheRef = db.collection('locations_cache').doc(cacheKey);
     try {
@@ -455,64 +506,75 @@ export const resolveLocation = onCall(
     if (results.length > 0) {
       await cacheRef.set({ results, createdAt: new Date().toISOString() }).catch(() => undefined);
     }
-    return { results };
+      return { results };
+    } catch (err) {
+      throw toHttpsError(err);
+    }
   },
 );
 
 export const exportUserData = onCall(
   { region: REGION, enforceAppCheck: ENFORCE_APP_CHECK },
   async (req) => {
-    const uid = req.auth?.uid;
-    if (!uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
+    try {
+      const uid = req.auth?.uid;
+      if (!uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
 
-    const userDoc = await db.collection('users').doc(uid).get();
-    const profilesSnap = await db.collection('users').doc(uid).collection('profiles').get();
-    const sessionsSnap = await db.collection('users').doc(uid).collection('sessions').get();
+      const userDoc = await db.collection('users').doc(uid).get();
+      const profilesSnap = await db.collection('users').doc(uid).collection('profiles').get();
+      const sessionsSnap = await db.collection('users').doc(uid).collection('sessions').get();
 
-    const sessions = await Promise.all(
-      sessionsSnap.docs.map(async (s) => {
-        const msgsSnap = await s.ref.collection('messages').orderBy('createdAt', 'asc').get();
-        return {
-          id: s.id,
-          ...s.data(),
-          messages: msgsSnap.docs.map((m) => ({ id: m.id, ...m.data() })),
-        };
-      }),
-    );
+      const sessions = await Promise.all(
+        sessionsSnap.docs.map(async (s) => {
+          const msgsSnap = await s.ref.collection('messages').orderBy('createdAt', 'asc').get();
+          return {
+            id: s.id,
+            ...s.data(),
+            messages: msgsSnap.docs.map((m) => ({ id: m.id, ...m.data() })),
+          };
+        }),
+      );
 
-    return {
-      exportedAt: new Date().toISOString(),
-      user: userDoc.data() ?? null,
-      profiles: profilesSnap.docs.map((p) => ({ id: p.id, ...p.data() })),
-      sessions,
-    };
+      return {
+        exportedAt: new Date().toISOString(),
+        user: userDoc.data() ?? null,
+        profiles: profilesSnap.docs.map((p) => ({ id: p.id, ...p.data() })),
+        sessions,
+      };
+    } catch (err) {
+      throw toHttpsError(err);
+    }
   },
 );
 
 export const deleteAccount = onCall(
   { region: REGION, enforceAppCheck: ENFORCE_APP_CHECK },
   async (req) => {
-    const uid = req.auth?.uid;
-    if (!uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
+    try {
+      const uid = req.auth?.uid;
+      if (!uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
 
-    const stripeKey = process.env.STRIPE_SECRET_KEY;
-    if (stripeKey) {
-      const stripe = new Stripe(stripeKey);
-      const subsSnap = await db
-        .collection('customers')
-        .doc(uid)
-        .collection('subscriptions')
-        .where('status', 'in', ['active', 'trialing'])
-        .get();
-      for (const s of subsSnap.docs) {
-        await stripe.subscriptions.cancel(s.id).catch(() => undefined);
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+      if (stripeKey) {
+        const stripe = new Stripe(stripeKey);
+        const subsSnap = await db
+          .collection('customers')
+          .doc(uid)
+          .collection('subscriptions')
+          .where('status', 'in', ['active', 'trialing'])
+          .get();
+        for (const s of subsSnap.docs) {
+          await stripe.subscriptions.cancel(s.id).catch(() => undefined);
+        }
       }
+
+      await db.recursiveDelete(db.collection('users').doc(uid));
+      await db.collection('usage').doc(uid).delete().catch(() => undefined);
+      await auth.deleteUser(uid);
+
+      return { deleted: true };
+    } catch (err) {
+      throw toHttpsError(err);
     }
-
-    await db.recursiveDelete(db.collection('users').doc(uid));
-    await db.collection('usage').doc(uid).delete().catch(() => undefined);
-    await auth.deleteUser(uid);
-
-    return { deleted: true };
   },
 );
