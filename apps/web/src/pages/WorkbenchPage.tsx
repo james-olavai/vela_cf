@@ -31,6 +31,7 @@ import { NatalPortraitModal } from '../components/NatalPortraitModal';
 import { ProfileSidebarPanel } from '../components/ProfileSidebarPanel';
 import { SettingsModal, type SettingsTab } from '../components/SettingsModal';
 import { ShareBonusModal } from '../components/ShareBonusModal';
+import { SoftAurora } from '../components/SoftAurora';
 import { computePortraitSummary } from '../lib/portrait';
 import { navigate } from '../lib/router';
 import {
@@ -382,6 +383,16 @@ export function WorkbenchPage({
     if (editLastTurn) setEditingMsgId(null);
     else setInputText('');
 
+    const prevMessages = messages;
+    const lastUserIdx = editLastTurn ? prevMessages.map((m) => m.role).lastIndexOf('user') : -1;
+    const baseMessages = editLastTurn && lastUserIdx >= 0 ? prevMessages.slice(0, lastUserIdx) : prevMessages;
+    const nowIso = new Date().toISOString();
+    setMessages([
+      ...baseMessages,
+      { id: `opt_${Date.now()}_u`, role: 'user', parts: [{ type: 'text', text }], createdAt: nowIso },
+      { id: `opt_${Date.now()}_a`, role: 'assistant', parts: [], createdAt: nowIso },
+    ]);
+
     const controller = new AbortController();
     abortRef.current = controller;
     isStreamingRef.current = true;
@@ -400,7 +411,7 @@ export function WorkbenchPage({
         usage: effectiveUsage,
         session: targetSession,
         profiles: sessionProfiles.length > 0 ? sessionProfiles : activeProfiles,
-        existingMessages: messages,
+        existingMessages: prevMessages,
         userText: text,
         editLastTurn,
         signal: controller.signal,
@@ -409,6 +420,7 @@ export function WorkbenchPage({
         onQuotaExceeded: notifyQuotaExceeded,
       });
     } catch (err) {
+      setMessages(prevMessages);
       setStreamError(formatAppError(err, '发送失败，请重试'));
     } finally {
       isStreamingRef.current = false;
@@ -460,7 +472,7 @@ export function WorkbenchPage({
       <div className="flex flex-col items-center justify-between h-full bg-[#070812]">
         <div className="w-full flex flex-col items-center gap-2">
           <div className="w-full h-[64px] px-2.5 flex items-center justify-center shrink-0">
-            <button type="button" onClick={() => setSidebarOpen(true)} title="展开侧栏" aria-label="展开侧栏" className="flex items-center justify-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#101527] cursor-pointer">
+            <button type="button" onClick={() => setSidebarOpen(true)} title="展开侧栏" aria-label="展开侧栏" className="flex items-center justify-center bg-transparent border-0 p-0.5 rounded-[12px] hover:bg-[#101527] cursor-pointer">
               <img src="/assets/logo-small.webp" alt="Vela" className="brand-logo" />
             </button>
           </div>
@@ -671,7 +683,7 @@ export function WorkbenchPage({
             placeholder={
               effectiveProfiles.length === 0
                 ? '点击左上角 Logo 添加出生信息'
-                : '问 Vela 任何关于星盘、行运或关系的问题…'
+                : '问问Vela，问问宇宙'
             }
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
@@ -735,15 +747,10 @@ export function WorkbenchPage({
       )}
 
       {/* Main Column */}
-      <main className="flex-1 min-w-0 flex flex-col h-full relative">
-        {isStreaming && (
-          <div
-            aria-hidden="true"
-            className="no-print pointer-events-none absolute inset-x-0 top-0 h-[240px] vela-aurora-glow"
-          />
-        )}
+      <main className="flex-1 min-w-0 flex flex-col h-full relative overflow-hidden isolate">
+        {isStreaming && <SoftAurora />}
         {/* Unified Borderless Top Header */}
-        <header className="no-print shrink-0 h-[64px] px-2.5 lg:px-5 flex items-center justify-between">
+        <header className="no-print relative z-10 shrink-0 h-[64px] px-2.5 lg:px-5 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
@@ -754,11 +761,9 @@ export function WorkbenchPage({
             >
               <img src="/assets/logo-small.webp" alt="Vela" className="brand-logo" />
             </button>
-            {(activeSession || activeProfiles.length > 0) && (
+            {activeSession && (
               <span className="hidden sm:inline text-[13px] text-[#a3b0c5] truncate">
-                {activeSession
-                  ? activeSession.title
-                  : activeProfiles.map((p) => p.name).join(' × ')}
+                {activeSession.title}
               </span>
             )}
           </div>
@@ -786,7 +791,7 @@ export function WorkbenchPage({
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center px-4 pb-10">
             <h1 className="m-0 mb-6 font-serif-sc text-[28px] sm:text-[34px] font-bold text-[#f8fafc] text-center">
-              此刻最在意什么？
+              此刻你最在意什么？
             </h1>
             {renderComposer()}
           </div>
