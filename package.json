@@ -7,8 +7,11 @@
     "packages/*"
   ],
   "scripts": {
+    "build": "npm --workspace=apps/web run build",
     "check": "node scripts/check-boundaries.mjs",
+    "dev": "npm --workspace=apps/web run dev",
     "dev:api": "npm --workspace=apps/api run dev",
+    "preview": "npm --workspace=apps/web run preview",
     "typecheck": "npm --workspaces --if-present run typecheck",
     "deploy:api": "npm --workspace=apps/api run deploy"
   }
