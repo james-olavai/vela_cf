@@ -1,0 +1,115 @@
+name: Vela CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_deepseek_smoke:
+        description: 'Run low-cost DeepSeek tool-calling smoke test'
+        type: boolean
+        default: false
+      deploy_firebase:
+        description: 'Deploy Firebase Functions, Hosting, and Firestore rules'
+        type: boolean
+        default: false
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run typecheck
+      - run: npm --workspace apps/web run build
+      - run: npm --workspace apps/api run build
+
+  mock-gateway-e2e:
+    needs: lint-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Start Mock LLM Gateway & Vite Dev Server and run E2E smoke
+        run: |
+          node scripts/mock-llm-gateway.mjs &
+          MOCK_PID=$!
+          npm run dev &
+          WEB_PID=$!
+          trap "kill $MOCK_PID $WEB_PID 2>/dev/null || true" EXIT
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null && curl -fsS http://127.0.0.1:3000/ >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          LLM_BASE_URL=http://127.0.0.1:8787/v1 \
+          WEB_BASE_URL=http://127.0.0.1:3000 \
+          node scripts/ci-smoke.mjs
+
+  deepseek-smoke:
+    needs: mock-gateway-e2e
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.run_deepseek_smoke) ||
+      contains(github.event.head_commit.message, '[smoke]') ||
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run low-cost DeepSeek function-calling smoke
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          if [ -z "$DEEPSEEK_API_KEY" ]; then
+            echo "DEEPSEEK_API_KEY secret not set; skipping."
+            exit 0
+          fi
+          LLM_BASE_URL=https://api.deepseek.com/v1 \
+          LLM_API_KEY="$DEEPSEEK_API_KEY" \
+          LLM_MODEL=deepseek-chat \
+          node scripts/ci-smoke.mjs
+
+  deploy-firebase:
+    needs: mock-gateway-e2e
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_firebase)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm --workspace apps/web run build
+      - run: npm --workspace apps/api run build
+      - name: Deploy to Firebase
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$GOOGLE_APPLICATION_CREDENTIALS_JSON" ]; then
+            echo "FIREBASE_SERVICE_ACCOUNT secret not set."
+            exit 1
+          fi
+          printf '%s' "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > /tmp/gcp-sa.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-sa.json
+          npx --yes firebase-tools deploy --only functions,hosting,firestore:rules --non-interactive
+          rm -f /tmp/gcp-sa.json
