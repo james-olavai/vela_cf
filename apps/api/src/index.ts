@@ -4,6 +4,7 @@ import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onCallGenkit } from 'firebase-functions/https';
 import { genkit, z } from 'genkit';
+import { enableFirebaseTelemetry } from '@genkit-ai/firebase';
 import { vertexAI } from '@genkit-ai/google-genai';
 import Stripe from 'stripe';
 import {
@@ -26,6 +27,7 @@ import { getServerPreset } from './presets.js';
 import { buildNatalFactSummary, filterHallucinatedUiBlocks, verifyKeySignClaims } from './guard.js';
 
 initializeApp();
+enableFirebaseTelemetry();
 const DATABASE_ID =
   process.env.FIRESTORE_DATABASE_ID || 'ai-studio-velacf-811abd0a-45c7-449f-a973-2e2998b2ac79';
 const db = getFirestore(DATABASE_ID);

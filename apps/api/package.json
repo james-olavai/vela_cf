@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc --noEmit && node -e \"const {execSync}=require('child_process');const fs=require('fs');const bin=['../../node_modules/.bun/node_modules/esbuild/bin/esbuild','../../node_modules/esbuild/bin/esbuild'].find(p=>fs.existsSync(p))||'npx esbuild';execSync(bin+' src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/index.cjs --external:firebase-admin --external:firebase-admin/* --external:firebase-functions --external:firebase-functions/* --external:genkit --external:@genkit-ai/* --external:stripe --external:zod',{stdio:'inherit'})\"",
     "dev": "npx firebase-tools emulators:start --only functions,firestore,auth",
+    "genkit:ui": "npm run build && npx -y genkit-cli start -- node dist/index.cjs",
     "deploy": "npx firebase-tools deploy --only functions,firestore",
     "typecheck": "tsc --noEmit"
   },

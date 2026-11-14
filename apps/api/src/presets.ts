@@ -60,9 +60,8 @@ export async function getServerPreset(
     }
     const template = await getRemoteConfig().getServerTemplate({ defaultConfig });
     const evaluated = template.evaluate();
-    const raw =
-      evaluated.getString(`preset_${tier}`) ||
-      (mode ? evaluated.getString(`preset_${tier}_${mode}`) : '');
+    const modeRaw = mode ? evaluated.getString(`preset_${tier}_${mode}`) : '';
+    const raw = modeRaw || evaluated.getString(`preset_${tier}`);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<ServerPresetConfig>;
     return {
