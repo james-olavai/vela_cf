@@ -9,6 +9,7 @@ import {
   type ProfileRecord,
   type Tier,
 } from '@vela-cf/shared';
+import { updateAnalyticsConsent } from '../lib/firebase';
 import { searchLocations } from '../lib/store';
 
 interface ProfileSidebarPanelProps {
@@ -49,6 +50,10 @@ export function ProfileSidebarPanel({
   const [gender, setGender] = useState<Gender>('unset');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [needsConsent, setNeedsConsent] = useState(
+    () => typeof window !== 'undefined' && !window.localStorage.getItem('vela_consent_choice'),
+  );
+  const [allowAnalytics, setAllowAnalytics] = useState(false);
 
   const tierMeta = TIER_META[tier];
 
@@ -117,6 +122,11 @@ export function ProfileSidebarPanel({
         },
         editingId,
       );
+      if (needsConsent && !editingId) {
+        window.localStorage.setItem('vela_consent_choice', allowAnalytics ? 'granted' : 'denied');
+        void updateAnalyticsConsent(allowAnalytics);
+        setNeedsConsent(false);
+      }
       resetForm();
     } catch (e) {
       setErr(e instanceof Error ? e.message : '保存失败');
@@ -296,6 +306,17 @@ export function ProfileSidebarPanel({
               <option value="female">女</option>
               <option value="male">男</option>
             </select>
+          )}
+          {needsConsent && !editingId && (
+            <label className="flex items-start gap-2 text-[11px] text-[#a3b0c5] cursor-pointer leading-[1.4]">
+              <input
+                type="checkbox"
+                checked={allowAnalytics}
+                onChange={(e) => setAllowAnalytics(e.target.checked)}
+                className="mt-0.5 accent-[#e0b64a]"
+              />
+              <span>允许匿名使用统计以改善体验（可选）</span>
+            </label>
           )}
           {err && <p className="m-0 text-[11px] text-[#ff9d8a]">{err}</p>}
           <div className="flex gap-1.5">

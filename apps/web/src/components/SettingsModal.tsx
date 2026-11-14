@@ -11,6 +11,7 @@ import {
   type Tier,
   type UsageRecord,
 } from '@vela-cf/shared';
+import { updateAnalyticsConsent } from '../lib/firebase';
 import {
   createStripeCheckout,
   deleteUserAccount,
@@ -72,6 +73,9 @@ export function SettingsModal({
   // Delete confirm
   const [deleteText, setDeleteText] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(
+    () => typeof window !== 'undefined' && window.localStorage.getItem('vela_consent_choice') === 'granted',
+  );
 
   if (!open) return null;
 
@@ -405,6 +409,24 @@ export function SettingsModal({
 
           {tab === 'account' && (
             <div className="flex flex-col gap-5">
+              <label className="p-4 rounded-[12px] border border-[#26304d] bg-[#070812] flex items-center justify-between gap-4 cursor-pointer">
+                <div>
+                  <p className="m-0 text-[14px] font-bold text-[#f8fafc]">匿名使用统计</p>
+                  <p className="m-0 text-[12px] text-[#a3b0c5]">允许使用匿名统计改善产品体验（默认仅必要存储）。</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={analyticsEnabled}
+                  onChange={(e) => {
+                    const granted = e.target.checked;
+                    setAnalyticsEnabled(granted);
+                    window.localStorage.setItem('vela_consent_choice', granted ? 'granted' : 'denied');
+                    void updateAnalyticsConsent(granted);
+                  }}
+                  className="w-4 h-4 accent-[#e0b64a]"
+                />
+              </label>
+
               {!uid ? (
                 <div className="p-4 rounded-[12px] border border-[#26304d] bg-[#161d33] flex items-center justify-between">
                   <span className="text-[14px] text-[#c3cde0]">当前为访客预览模式</span>

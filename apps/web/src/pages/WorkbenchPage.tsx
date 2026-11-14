@@ -24,7 +24,6 @@ import {
 import { NatalWheelSvg } from '../components/NatalWheelSvg';
 import { ProfileSidebarPanel } from '../components/ProfileSidebarPanel';
 import { SettingsModal, type SettingsTab } from '../components/SettingsModal';
-import { updateAnalyticsConsent } from '../lib/firebase';
 import { navigate } from '../lib/router';
 import {
   fetchNatalChart,
@@ -120,9 +119,6 @@ export function WorkbenchPage({
   const [inputText, setInputText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
-  const [consentVisible, setConsentVisible] = useState(
-    () => typeof window !== 'undefined' && !window.localStorage.getItem('vela_consent_choice'),
-  );
 
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -915,36 +911,6 @@ export function WorkbenchPage({
           });
         }}
       />
-
-      {consentVisible && (
-        <div className="no-print fixed bottom-3 right-3 z-30 max-w-[320px] p-3 rounded-[12px] border border-[#26304d] bg-[#101527] text-[12px] text-[#c3cde0] flex flex-col gap-2">
-          <p className="m-0">我们使用必要存储与匿名统计改善体验。</p>
-          <div className="flex gap-2 justify-end">
-            <button
-              type="button"
-              onClick={() => {
-                window.localStorage.setItem('vela_consent_choice', 'denied');
-                void updateAnalyticsConsent(false);
-                setConsentVisible(false);
-              }}
-              className="px-2.5 py-1 rounded-[6px] border border-[#3a4668] bg-transparent text-[#c3cde0] cursor-pointer"
-            >
-              仅必要
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                window.localStorage.setItem('vela_consent_choice', 'granted');
-                void updateAnalyticsConsent(true);
-                setConsentVisible(false);
-              }}
-              className="px-2.5 py-1 rounded-[6px] border-0 bg-[#e0b64a] text-[#1a1405] font-bold cursor-pointer"
-            >
-              同意
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
