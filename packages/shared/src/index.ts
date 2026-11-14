@@ -20,7 +20,7 @@ export const MAX_MONTHLY_SHARE_BONUSES = 3;
 export const MAX_MONTHLY_SHARE_BONUS_MICRO_USD = SHARE_BONUS_MICRO_USD * MAX_MONTHLY_SHARE_BONUSES;
 
 export const MAX_OUTPUT_TOKENS_BY_TIER: Record<Tier, number> = {
-  free: 2048,
+  free: 4096,
   go: 4096,
   pro: 8192,
 };
@@ -258,6 +258,7 @@ export const CreateSessionRequestSchema = z.object({
 export const ChatRequestSchema = z.object({
   sessionId: z.string().min(1).max(128),
   message: z.string().trim().min(1).max(2000),
+  editLastTurn: z.boolean().optional(),
 });
 
 export const ResolveLocationRequestSchema = z.object({

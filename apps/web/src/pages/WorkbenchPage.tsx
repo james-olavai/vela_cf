@@ -21,6 +21,7 @@ import {
   IconChevronsLeft,
   IconGift,
   IconNotebook,
+  IconPencil,
   IconSearch,
   IconSparkles,
   IconSquarePen,
@@ -134,6 +135,8 @@ export function WorkbenchPage({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
 
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -169,6 +172,7 @@ export function WorkbenchPage({
 
   // Sync active session messages & chart from Firestore
   useEffect(() => {
+    setEditingMsgId(null);
     if (!uid || !activeSession) {
       setMessages([]);
       return;
@@ -205,6 +209,33 @@ export function WorkbenchPage({
     void fetchNatalChart(uid, primary).then(setChart).catch(() => {});
   }, [uid, selectedProfileIds[0], activeSession?.id]);
 
+  const notifyQuotaExceeded = () => {
+    const budget = computeEffectiveBudget(tier, effectiveUsage.bonusMicroUsd ?? 0);
+    setUsageOverride({ ...effectiveUsage, used: Math.max(effectiveUsage.used, budget) });
+    setStreamError(
+      `本月额度已用完（100%），下次重置时间为 ${nextUtcMonthResetLabel()}（UTC）；可分享星盘卡片领额度或升级套餐。`,
+    );
+  };
+
+  const requestAuthWithDrafts = (question = '', selectedIndices = [0]) => {
+    onRequireAuth({
+      draftProfiles: effectiveProfiles.map((p) => ({
+        name: p.name,
+        entityType: p.entityType ?? 'person',
+        birthDateTime: p.birthDateTime,
+        locationName: p.locationName,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        timezone: p.timezone,
+        gender: p.gender ?? 'unset',
+      })),
+      chart,
+      mode,
+      selectedIndices,
+      question,
+    });
+  };
+
   // Resume pending handoff after Google login
   useEffect(() => {
     if (!uid || !activeSession || !pendingHandoff || handoffConsumedRef.current) return;
@@ -231,7 +262,7 @@ export function WorkbenchPage({
       signal: controller.signal,
       onUpdateMessages: setMessages,
       onUpdateChart: setChart,
-      onQuotaExceeded: () => {},
+      onQuotaExceeded: notifyQuotaExceeded,
     })
       .catch((err) => {
         setStreamError(formatAppError(err, '生成回复失败'));
@@ -325,7 +356,7 @@ export function WorkbenchPage({
     setSelectedProfileIds((prev) => prev.filter((x) => x !== id));
   };
 
-  const handleSend = async (rawText?: string) => {
+  const handleSend = async (rawText?: string, editLastTurn = false) => {
     const text = (rawText ?? inputText).trim();
     if (!text || isStreaming) return;
     setStreamError(null);
@@ -340,27 +371,16 @@ export function WorkbenchPage({
         .map((p) => effectiveProfiles.findIndex((x) => x.id === p.id))
         .filter((i) => i >= 0);
       handoffConsumedRef.current = false;
-      onRequireAuth({
-        draftProfiles: effectiveProfiles.map((p) => ({
-          name: p.name,
-          entityType: p.entityType ?? 'person',
-          birthDateTime: p.birthDateTime,
-          locationName: p.locationName,
-          latitude: p.latitude,
-          longitude: p.longitude,
-          timezone: p.timezone,
-          gender: p.gender ?? 'unset',
-        })),
-        chart,
-        mode,
-        selectedIndices: selectedIndices.length > 0 ? selectedIndices : [0],
-        question: text,
-      });
+      requestAuthWithDrafts(text, selectedIndices.length > 0 ? selectedIndices : [0]);
       return;
     }
 
-    if (quotaExhausted) return;
-    setInputText('');
+    if (quotaExhausted) {
+      notifyQuotaExceeded();
+      return;
+    }
+    if (editLastTurn) setEditingMsgId(null);
+    else setInputText('');
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -382,10 +402,11 @@ export function WorkbenchPage({
         profiles: sessionProfiles.length > 0 ? sessionProfiles : activeProfiles,
         existingMessages: messages,
         userText: text,
+        editLastTurn,
         signal: controller.signal,
         onUpdateMessages: setMessages,
         onUpdateChart: setChart,
-        onQuotaExceeded: () => {},
+        onQuotaExceeded: notifyQuotaExceeded,
       });
     } catch (err) {
       setStreamError(formatAppError(err, '发送失败，请重试'));
@@ -404,18 +425,6 @@ export function WorkbenchPage({
     } catch {
       // ignore clipboard errors
     }
-  };
-
-  const handleRegenerate = () => {
-    if (isStreaming) return;
-    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-    if (!lastUser) return;
-    const text = lastUser.parts
-      .filter((p) => p.type === 'text')
-      .map((p) => p.text)
-      .join('\n')
-      .trim();
-    if (text) void handleSend(text);
   };
 
   const handleSubmitForm = (e: FormEvent) => {
@@ -445,79 +454,44 @@ export function WorkbenchPage({
       </div>
     );
 
-  const renderCollapsedRail = () => (
-    <div className="flex flex-col items-center justify-between h-full bg-[#070812]">
-      <div className="w-full flex flex-col items-center gap-2">
-        <div className="w-full h-[64px] px-2.5 flex items-center justify-center shrink-0">
+  const renderCollapsedRail = () => {
+    const railCls = 'w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer';
+    return (
+      <div className="flex flex-col items-center justify-between h-full bg-[#070812]">
+        <div className="w-full flex flex-col items-center gap-2">
+          <div className="w-full h-[64px] px-2.5 flex items-center justify-center shrink-0">
+            <button type="button" onClick={() => setSidebarOpen(true)} title="展开侧栏" aria-label="展开侧栏" className="flex items-center justify-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#101527] cursor-pointer">
+              <img src="/assets/logo-small.webp" alt="Vela" className="brand-logo" />
+            </button>
+          </div>
+          <button type="button" onClick={() => onSelectSession(null)} title="新咨询" aria-label="新咨询" className={railCls}><IconSquarePen size={20} /></button>
+          <button type="button" onClick={() => setHistorySearchOpen(true)} title="搜索历史对话" aria-label="搜索历史对话" className={railCls}><IconSearch size={20} /></button>
+          <button type="button" onClick={() => setSidebarOpen(true)} title="出生档案与合盘" aria-label="出生档案与合盘" className={railCls}><IconNotebook size={20} /></button>
           <button
             type="button"
-            onClick={() => setSidebarOpen(true)}
-            title="展开侧栏"
-            aria-label="展开侧栏"
-            className="flex items-center justify-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#101527] cursor-pointer"
+            disabled={needsMoreProfiles}
+            onClick={() => setPortraitOpen(true)}
+            title={needsMoreProfiles ? '个人星盘画像（请先添加档案）' : '个人星盘画像'}
+            aria-label="个人星盘画像"
+            className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f7d57f] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer"
           >
-            <img src="/assets/logo-small.webp" alt="Vela" className="brand-logo" />
+            <IconSparkles size={20} />
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={() => onSelectSession(null)}
-          title="新咨询"
-          aria-label="新咨询"
-          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
-        >
-          <IconSquarePen size={20} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setHistorySearchOpen(true)}
-          title="搜索历史对话"
-          aria-label="搜索历史对话"
-          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
-        >
-          <IconSearch size={20} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setSidebarOpen(true)}
-          title="出生档案与合盘"
-          aria-label="出生档案与合盘"
-          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
-        >
-          <IconNotebook size={20} />
-        </button>
-
-        <button
-          type="button"
-          disabled={needsMoreProfiles}
-          onClick={() => setPortraitOpen(true)}
-          title={needsMoreProfiles ? '个人星盘画像（请先添加档案）' : '个人星盘画像'}
-          aria-label="个人星盘画像"
-          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f7d57f] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer"
-        >
-          <IconSparkles size={20} />
-        </button>
+        <div className="pb-3 flex flex-col items-center">
+          <button
+            type="button"
+            onClick={() => { setSettingsTab('subscription'); setSettingsOpen(true); }}
+            title={`${displayName} · ${TIER_META[tier].label}`}
+            aria-label={`账号与订阅：${displayName}`}
+            className="w-10 h-10 rounded-full border-0 bg-transparent hover:bg-[#101527] flex items-center justify-center cursor-pointer"
+          >
+            {renderAvatar()}
+          </button>
+        </div>
       </div>
-
-      <div className="pb-3 flex flex-col items-center">
-        <button
-          type="button"
-          onClick={() => {
-            setSettingsTab('subscription');
-            setSettingsOpen(true);
-          }}
-          title={`${displayName} · ${TIER_META[tier].label}`}
-          aria-label={`账号与订阅：${displayName}`}
-          className="w-10 h-10 rounded-full border-0 bg-transparent hover:bg-[#101527] flex items-center justify-center cursor-pointer"
-        >
-          {renderAvatar()}
-        </button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full bg-[#101527] border-r border-[#1e2740]">
@@ -661,16 +635,28 @@ export function WorkbenchPage({
               下次重置：{nextUtcMonthResetLabel()}（UTC）
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setSettingsTab('subscription');
-              setSettingsOpen(true);
-            }}
-            className="min-h-[40px] px-5 rounded-[20px] border-0 bg-[#e0b64a] text-[#1a1405] text-[13px] font-bold cursor-pointer"
-          >
-            升级订阅继续对话
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {(effectiveUsage.shareCount ?? 0) < 3 &&
+              effectiveUsage.lastShareDate !== new Date().toISOString().slice(0, 10) && (
+                <button
+                  type="button"
+                  onClick={() => setShareModalOpen(true)}
+                  className="min-h-[40px] px-4 rounded-[20px] border border-[#e0b64a]/60 bg-transparent text-[#f7d57f] text-[13px] font-medium cursor-pointer hover:bg-[#1d1a0f]"
+                >
+                  分享领额度
+                </button>
+              )}
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsTab('subscription');
+                setSettingsOpen(true);
+              }}
+              className="min-h-[40px] px-5 rounded-[20px] border-0 bg-[#e0b64a] text-[#1a1405] text-[13px] font-bold cursor-pointer"
+            >
+              升级订阅继续对话
+            </button>
+          </div>
         </div>
       ) : (
         <form
@@ -809,21 +795,60 @@ export function WorkbenchPage({
             {/* Scrollable Conversation Area */}
             <div className="flex-1 overflow-y-auto px-4 py-4">
               <div className="mx-auto w-full max-w-[760px] flex flex-col gap-6">
-                {messages.map((msg, idx) => {
-                  const isLastAssistant =
-                    msg.role === 'assistant' && idx === messages.length - 1;
-                  const textContent = msg.parts
-                    .filter((p) => p.type === 'text')
-                    .map((p) => p.text)
-                    .join('\n');
+                {(() => {
+                  const lastUserIdx = messages.map((m) => m.role).lastIndexOf('user');
+                  return messages.map((msg, idx) => {
+                  const isLastAssistant = msg.role === 'assistant' && idx === messages.length - 1;
+                  const textContent = msg.parts.filter((p) => p.type === 'text').map((p) => p.text).join('\n');
                   const toolCalls = msg.parts.filter((p) => p.type === 'tool-call');
-                  const uiBlocks = msg.parts.filter(
-                    (p): p is AstroUiBlock => p.type === 'ui-block',
-                  );
+                  const uiBlocks = msg.parts.filter((p): p is AstroUiBlock => p.type === 'ui-block');
 
                   if (msg.role === 'user') {
+                    const isLastUser = idx === lastUserIdx;
+                    if (editingMsgId === msg.id) {
+                      return (
+                        <div key={msg.id} className="flex justify-end">
+                          <div className="w-full max-w-[600px] rounded-[16px] border border-[#3a4668] bg-[#161d33] p-3 flex flex-col gap-2">
+                            <textarea
+                              autoFocus
+                              rows={2}
+                              maxLength={2000}
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') setEditingMsgId(null);
+                                else if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                                  e.preventDefault();
+                                  void handleSend(editingText, true);
+                                }
+                              }}
+                              className="w-full resize-none rounded-[10px] border border-[#26304d] bg-[#0b1020] px-3 py-2 text-[15px] leading-[1.6] text-[#f8fafc] focus:outline-none focus:border-[#e0b64a]"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setEditingMsgId(null)} className="px-3 py-1.5 rounded-[8px] border border-[#3a4668] bg-transparent text-[12.5px] text-[#c3cde0] hover:text-[#f8fafc] cursor-pointer">
+                                取消
+                              </button>
+                              <button type="button" disabled={!editingText.trim() || isStreaming} onClick={() => void handleSend(editingText, true)} className="px-3.5 py-1.5 rounded-[8px] border-0 bg-[#e0b64a] text-[#1a1405] text-[12.5px] font-bold hover:bg-[#f7d57f] disabled:opacity-40 cursor-pointer">
+                                更新并发送
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
-                      <div key={msg.id} className="flex justify-end">
+                      <div key={msg.id} className="group flex items-center justify-end gap-1.5">
+                        {isLastUser && !isStreaming && !quotaExhausted && (
+                          <button
+                            type="button"
+                            title="编辑并重新发送"
+                            aria-label="编辑并重新发送"
+                            onClick={() => { setEditingMsgId(msg.id); setEditingText(textContent); }}
+                            className="no-print w-8 h-8 rounded-full border-0 bg-transparent text-[#9aa8c7] hover:text-[#f7d57f] hover:bg-[#161d33] flex items-center justify-center cursor-pointer opacity-70 lg:opacity-0 lg:group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0"
+                          >
+                            <IconPencil size={15} />
+                          </button>
+                        )}
                         <div className="max-w-[82%] px-4 py-3 rounded-[18px] bg-[#1d2540] text-[15.5px] leading-[1.7] text-[#f8fafc] whitespace-pre-wrap">
                           {textContent}
                         </div>
@@ -886,15 +911,6 @@ export function WorkbenchPage({
                           >
                             {copiedMsgId === msg.id ? '已复制' : '复制'}
                           </button>
-                          {isLastAssistant && !quotaExhausted && (
-                            <button
-                              type="button"
-                              onClick={handleRegenerate}
-                              className="px-2.5 py-1 rounded-[8px] border border-[#26304d] bg-transparent text-[11.5px] text-[#a3b0c5] hover:text-[#f8fafc] hover:border-[#3a4668] cursor-pointer"
-                            >
-                              重新生成
-                            </button>
-                          )}
                         </div>
                       )}
 
@@ -904,8 +920,9 @@ export function WorkbenchPage({
                             <button
                               key={sIdx}
                               type="button"
+                              disabled={quotaExhausted}
                               onClick={() => void handleSend(sug)}
-                              className="min-h-[36px] px-3.5 py-1.5 rounded-[18px] border border-[#26304d] bg-[#101527] hover:border-[#e0b64a] text-[13px] text-[#c3cde0] hover:text-[#f8fafc] cursor-pointer text-left"
+                              className="min-h-[36px] px-3.5 py-1.5 rounded-[18px] border border-[#26304d] bg-[#101527] hover:border-[#e0b64a] text-[13px] text-[#c3cde0] hover:text-[#f8fafc] cursor-pointer text-left disabled:opacity-45 disabled:cursor-not-allowed"
                             >
                               {sug}
                             </button>
@@ -914,38 +931,20 @@ export function WorkbenchPage({
                       )}
                     </div>
                   );
-                })}
+                });
+                })()}
                 <div ref={endRef} />
               </div>
             </div>
 
-            <div className="no-print shrink-0 px-4 pb-2 pt-2">
-              {renderComposer()}
-            </div>
+            <div className="no-print shrink-0 px-4 pb-2 pt-2">{renderComposer()}</div>
           </>
         )}
 
         <footer className="no-print shrink-0 px-4 py-2 text-center text-[11px] text-[#a3b0c5]">
           AI 生成内容仅供自我探索，不构成医疗、法律或财务建议 ·{' '}
-          <a
-            href="/privacy"
-            onClick={(e) => {
-              e.preventDefault();
-              navigate('/privacy');
-            }}
-          >
-            隐私政策
-          </a>{' '}
-          ·{' '}
-          <a
-            href="/terms"
-            onClick={(e) => {
-              e.preventDefault();
-              navigate('/terms');
-            }}
-          >
-            服务条款
-          </a>
+          <a href="/privacy" onClick={(e) => { e.preventDefault(); navigate('/privacy'); }}>隐私政策</a>{' '}·{' '}
+          <a href="/terms" onClick={(e) => { e.preventDefault(); navigate('/terms'); }}>服务条款</a>
         </footer>
       </main>
 
@@ -972,22 +971,7 @@ export function WorkbenchPage({
         onSignOut={onSignOut}
         onRequireLogin={() => {
           setSettingsOpen(false);
-          onRequireAuth({
-            draftProfiles: effectiveProfiles.map((p) => ({
-              name: p.name,
-              entityType: p.entityType ?? 'person',
-              birthDateTime: p.birthDateTime,
-              locationName: p.locationName,
-              latitude: p.latitude,
-              longitude: p.longitude,
-              timezone: p.timezone,
-              gender: p.gender ?? 'unset',
-            })),
-            chart,
-            mode,
-            selectedIndices: [0],
-            question: '',
-          });
+          requestAuthWithDrafts();
         }}
       />
 
@@ -996,28 +980,7 @@ export function WorkbenchPage({
         profile={primaryProfile}
         chart={chart}
         onClose={() => setPortraitOpen(false)}
-        onOpenShare={() => {
-          if (uid) {
-            setShareModalOpen(true);
-          } else {
-            onRequireAuth({
-              draftProfiles: effectiveProfiles.map((p) => ({
-                name: p.name,
-                entityType: p.entityType ?? 'person',
-                birthDateTime: p.birthDateTime,
-                locationName: p.locationName,
-                latitude: p.latitude,
-                longitude: p.longitude,
-                timezone: p.timezone,
-                gender: p.gender ?? 'unset',
-              })),
-              chart,
-              mode,
-              selectedIndices: [0],
-              question: '',
-            });
-          }
-        }}
+        onOpenShare={() => (uid ? setShareModalOpen(true) : requestAuthWithDrafts())}
       />
 
       {uid && (

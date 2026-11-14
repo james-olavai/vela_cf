@@ -133,6 +133,7 @@ const chatFlow = ai.defineFlow(
     inputSchema: z.object({
       sessionId: z.string().min(1).max(128),
       message: z.string().trim().min(1).max(2000),
+      editLastTurn: z.boolean().optional(),
     }),
     outputSchema: z.object({
       text: z.string(),
@@ -189,6 +190,18 @@ const chatFlow = ai.defineFlow(
       const preBonus = isNewPeriod ? 0 : Number(preData?.bonusMicroUsd ?? 0);
       if (preUsed >= computeEffectiveBudget(tier, preBonus)) {
         throw new HttpsError('resource-exhausted', 'QUOTA_EXCEEDED');
+      }
+
+      if (input.editLastTurn) {
+        const allSnap = await sessionRef.collection('messages').orderBy('createdAt', 'asc').get();
+        const lastUserIdx = allSnap.docs.map((d) => d.data()?.role).lastIndexOf('user');
+        if (lastUserIdx >= 0) {
+          const batch = db.batch();
+          for (const d of allSnap.docs.slice(lastUserIdx)) {
+            batch.delete(d.ref);
+          }
+          await batch.commit();
+        }
       }
 
       const historySnap = await sessionRef

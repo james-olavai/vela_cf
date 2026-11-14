@@ -465,6 +465,7 @@ export async function streamConsultationReply(params: {
   profiles: ProfileRecord[];
   existingMessages: MessageRecord[];
   userText: string;
+  editLastTurn?: boolean;
   signal: AbortSignal;
   onUpdateMessages: (msgs: MessageRecord[]) => void;
   onUpdateChart: (chart: ChartSnapshot) => void;
@@ -478,6 +479,7 @@ export async function streamConsultationReply(params: {
     profiles,
     existingMessages,
     userText,
+    editLastTurn,
     signal,
     onUpdateMessages,
     onUpdateChart,
@@ -489,6 +491,12 @@ export async function streamConsultationReply(params: {
     onQuotaExceeded();
     return;
   }
+
+  const lastUserIdx = editLastTurn
+    ? existingMessages.map((m) => m.role).lastIndexOf('user')
+    : -1;
+  const baseMessages =
+    editLastTurn && lastUserIdx >= 0 ? existingMessages.slice(0, lastUserIdx) : existingMessages;
 
   const userMsg: MessageRecord = {
     id: `m_${Date.now()}_u`,
@@ -504,7 +512,7 @@ export async function streamConsultationReply(params: {
     createdAt: new Date().toISOString(),
   };
 
-  let currentMsgs = [...existingMessages, userMsg, assistantMsg];
+  let currentMsgs = [...baseMessages, userMsg, assistantMsg];
   onUpdateMessages(currentMsgs);
 
   let fullText = '';
@@ -536,7 +544,7 @@ export async function streamConsultationReply(params: {
           mode: session.mode,
           profiles,
           message: userText,
-          history: existingMessages.map((m) => ({
+          history: baseMessages.map((m) => ({
             role: m.role,
             text: m.parts
               .filter((p): p is Extract<MessagePart, { type: 'text' }> => p.type === 'text')
@@ -583,12 +591,12 @@ export async function streamConsultationReply(params: {
     }
 
     const callable = httpsCallable<
-      { sessionId: string; message: string },
+      { sessionId: string; message: string; editLastTurn?: boolean },
       { text: string; suggestions?: string[]; uiBlocks?: AstroUiBlock[] },
       ChatStreamChunk
     >(functions, 'chat');
     const { stream, data } = await callable.stream(
-      { sessionId: session.id, message: userText },
+      { sessionId: session.id, message: userText, ...(editLastTurn ? { editLastTurn: true } : {}) },
       { signal },
     );
 
@@ -619,9 +627,15 @@ export async function streamConsultationReply(params: {
       updateAssistant(finalRes.suggestions ?? [], finalRes.uiBlocks ?? []);
     }
   } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') return;
-    if (err instanceof Error && err.message.includes('cancelled')) return;
-    if (err instanceof Error && err.message.includes('QUOTA_EXCEEDED')) {
+    if (!fullText && toolParts.length === 0) {
+      onUpdateMessages(existingMessages);
+    }
+    const code = (err as { code?: string })?.code ?? '';
+    const msg = err instanceof Error ? err.message : String(err ?? '');
+    if ((err instanceof DOMException && err.name === 'AbortError') || msg.includes('cancelled')) {
+      return;
+    }
+    if (code === 'functions/resource-exhausted' || msg.includes('QUOTA_EXCEEDED')) {
       onQuotaExceeded();
       return;
     }
