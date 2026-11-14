@@ -28,10 +28,10 @@ const db = getFirestore();
 const auth = getAuth();
 
 const REGION = 'asia-southeast1';
-const ENFORCE_APP_CHECK = process.env.FUNCTIONS_EMULATOR !== 'true';
+const ENFORCE_APP_CHECK = process.env.ENFORCE_APP_CHECK === 'true';
 
 const ai = genkit({
-  plugins: [vertexAI({ location: REGION })],
+  plugins: [vertexAI({ location: 'global' })],
 });
 
 const astrologyTools = createAstrologyTools(ai);
