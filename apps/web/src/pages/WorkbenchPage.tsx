@@ -22,12 +22,15 @@ import {
   IconGift,
   IconNotebook,
   IconSearch,
+  IconSparkles,
   IconSquarePen,
   IconStop,
 } from '../components/Icons';
+import { NatalPortraitModal } from '../components/NatalPortraitModal';
 import { ProfileSidebarPanel } from '../components/ProfileSidebarPanel';
 import { SettingsModal, type SettingsTab } from '../components/SettingsModal';
 import { ShareBonusModal } from '../components/ShareBonusModal';
+import { computePortraitSummary } from '../lib/portrait';
 import { navigate } from '../lib/router';
 import {
   fetchNatalChart,
@@ -109,6 +112,7 @@ export function WorkbenchPage({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('subscription');
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [portraitOpen, setPortraitOpen] = useState(false);
   const [usageOverride, setUsageOverride] = useState<UsageRecord | null>(null);
 
   useEffect(() => {
@@ -148,6 +152,7 @@ export function WorkbenchPage({
   useEffect(() => {
     if (effectiveProfiles.length === 0) {
       setSelectedProfileIds([]);
+      setChart(null);
       return;
     }
     const validIds = selectedProfileIds.filter((id) =>
@@ -253,6 +258,8 @@ export function WorkbenchPage({
   );
   const quotaNearLimit = !quotaExhausted && Boolean(uid) && usagePercent >= 80;
   const activeProfiles = effectiveProfiles.filter((p) => selectedProfileIds.includes(p.id));
+  const primaryProfile = activeProfiles[0] ?? effectiveProfiles[0] ?? null;
+  const portraitSummary = chart?.natal ? computePortraitSummary(chart.natal) : null;
   const mode: ConsultationMode = activeProfiles.length >= 2 ? 'synastry' : 'personal';
   const needsMoreProfiles = effectiveProfiles.length === 0;
 
@@ -482,6 +489,17 @@ export function WorkbenchPage({
         >
           <IconNotebook size={18} />
         </button>
+
+        <button
+          type="button"
+          disabled={needsMoreProfiles}
+          onClick={() => setPortraitOpen(true)}
+          title={needsMoreProfiles ? '个人星盘画像（请先添加档案）' : '个人星盘画像'}
+          aria-label="个人星盘画像"
+          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#101527] text-[#c3cde0] hover:text-[#f7d57f] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer"
+        >
+          <IconSparkles size={18} />
+        </button>
       </div>
 
       <div className="pb-3 flex flex-col items-center">
@@ -537,7 +555,7 @@ export function WorkbenchPage({
         </div>
       </div>
 
-      <div className="px-3 pb-2">
+      <div className="px-3 pb-2 flex flex-col gap-2">
         <button
           type="button"
           onClick={() => {
@@ -550,6 +568,30 @@ export function WorkbenchPage({
             <IconSquarePen size={16} />
           </span>
           <span>新咨询</span>
+        </button>
+
+        <button
+          type="button"
+          disabled={needsMoreProfiles}
+          onClick={() => {
+            setPortraitOpen(true);
+            setSidebarOpen(false);
+          }}
+          className="w-full px-3 py-2.5 rounded-[12px] border border-[#26304d] bg-[#0e1426] hover:border-[#e0b64a] disabled:opacity-45 disabled:hover:border-[#26304d] disabled:cursor-not-allowed text-left flex items-center gap-2.5 cursor-pointer transition-colors"
+        >
+          <span className="text-[#e0b64a] shrink-0 flex items-center">
+            <IconSparkles size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium text-[#f8fafc]">个人星盘画像</div>
+            <div className="text-[11px] text-[#9aa8c7] truncate">
+              {needsMoreProfiles
+                ? '添加出生档案后自动生成'
+                : portraitSummary
+                  ? `太阳${portraitSummary.sunSign} · 月亮${portraitSummary.moonSign}`
+                  : '正在自动生成画像…'}
+            </div>
+          </div>
         </button>
       </div>
 
@@ -949,12 +991,44 @@ export function WorkbenchPage({
         }}
       />
 
+      <NatalPortraitModal
+        open={portraitOpen}
+        profile={primaryProfile}
+        chart={chart}
+        onClose={() => setPortraitOpen(false)}
+        onOpenShare={() => {
+          if (uid) {
+            setShareModalOpen(true);
+          } else {
+            onRequireAuth({
+              draftProfiles: effectiveProfiles.map((p) => ({
+                name: p.name,
+                entityType: p.entityType ?? 'person',
+                birthDateTime: p.birthDateTime,
+                locationName: p.locationName,
+                latitude: p.latitude,
+                longitude: p.longitude,
+                timezone: p.timezone,
+                gender: p.gender ?? 'unset',
+              })),
+              chart,
+              mode,
+              selectedIndices: [0],
+              question: '',
+            });
+          }
+        }}
+        onAskAboutPortrait={(prompt) => void handleSend(prompt)}
+      />
+
       {uid && (
         <ShareBonusModal
           open={shareModalOpen}
           uid={uid}
           tier={tier}
           usage={effectiveUsage}
+          profile={primaryProfile}
+          chart={chart}
           onClose={() => setShareModalOpen(false)}
           onClaimed={(next) => setUsageOverride(next)}
           onOpenUpgrade={() => {
