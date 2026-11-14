@@ -14,6 +14,7 @@ import {
 import { updateAnalyticsConsent } from '../lib/firebase';
 import {
   createStripeCheckout,
+  createStripePortal,
   deleteUserAccount,
   exportUserDataJson,
   removeProfile,
@@ -49,7 +50,7 @@ export function SettingsModal({
   onRequireLogin,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<SettingsTab>(initialTab);
-  const [checkoutBusy, setCheckoutBusy] = useState<'go' | 'pro' | null>(null);
+  const [checkoutBusy, setCheckoutBusy] = useState<'go' | 'pro' | 'portal' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -95,6 +96,25 @@ export function SettingsModal({
       else setNotice('当前环境尚未接入 Stripe 生产密钥，升级流程将在配置完成后开放。');
     } catch (err) {
       setNotice(err instanceof Error ? err.message : '发起结账失败');
+    } finally {
+      setCheckoutBusy(null);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    if (!uid) {
+      onClose();
+      onRequireLogin();
+      return;
+    }
+    setNotice(null);
+    setCheckoutBusy('portal');
+    try {
+      const url = await createStripePortal();
+      if (url) window.location.assign(url);
+      else setNotice('当前环境尚未接入 Stripe 客户门户，降级或取消订阅将在配置完成后开放。');
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : '打开订阅管理失败');
     } finally {
       setCheckoutBusy(null);
     }
@@ -228,6 +248,7 @@ export function SettingsModal({
                 {(['go', 'pro'] as const).map((plan) => {
                   const meta = TIER_META[plan];
                   const isCurrent = tier === plan;
+                  const isDowngrade = tier === 'pro' && plan === 'go';
                   return (
                     <div
                       key={plan}
@@ -247,15 +268,44 @@ export function SettingsModal({
                       <button
                         type="button"
                         disabled={isCurrent || checkoutBusy !== null}
-                        onClick={() => void handleUpgrade(plan)}
-                        className="mt-auto min-h-[42px] rounded-[10px] bg-[#e0b64a] text-[#1a1405] text-[14px] font-bold border-0 cursor-pointer hover:bg-[#f7d57f] disabled:opacity-45"
+                        onClick={() => void (isDowngrade ? handleManageSubscription() : handleUpgrade(plan))}
+                        className={`mt-auto min-h-[42px] rounded-[10px] text-[14px] font-bold cursor-pointer disabled:opacity-45 ${
+                          isDowngrade
+                            ? 'bg-transparent border border-[#3a4668] text-[#c3cde0] hover:text-[#f8fafc]'
+                            : 'bg-[#e0b64a] text-[#1a1405] border-0 hover:bg-[#f7d57f]'
+                        }`}
                       >
-                        {isCurrent ? '当前方案' : checkoutBusy === plan ? '正在跳转…' : `升级到 ${meta.label}`}
+                        {isCurrent
+                          ? '当前方案'
+                          : checkoutBusy === plan || (isDowngrade && checkoutBusy === 'portal')
+                            ? '正在跳转…'
+                            : isDowngrade
+                              ? `降级到 ${meta.label}`
+                              : `升级到 ${meta.label}`}
                       </button>
                     </div>
                   );
                 })}
               </div>
+
+              {tier !== 'free' && (
+                <div className="p-4 rounded-[12px] border border-[#26304d] bg-[#070812] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <p className="m-0 text-[13.5px] font-medium text-[#f8fafc]">管理或取消订阅</p>
+                    <p className="m-0 text-[12px] text-[#a3b0c5]">
+                      降级或取消后将在当前计费周期结束时生效，期间仍可使用全部已购额度。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={checkoutBusy !== null}
+                    onClick={() => void handleManageSubscription()}
+                    className="min-h-[38px] px-4 rounded-[10px] border border-[#3a4668] bg-transparent text-[13px] text-[#c3cde0] hover:border-[#ff9d8a]/60 hover:text-[#ff9d8a] cursor-pointer shrink-0 disabled:opacity-45"
+                  >
+                    {checkoutBusy === 'portal' ? '正在打开…' : '取消订阅 / 管理账单'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

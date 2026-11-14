@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
+  computeUsagePercent,
   nextUtcMonthResetLabel,
   QUOTA_BUDGET_MICRO_USD,
   TIER_META,
@@ -224,6 +225,8 @@ export function WorkbenchPage({
   }, [messages, isStreaming]);
 
   const quotaExhausted = Boolean(uid) && usage.used >= QUOTA_BUDGET_MICRO_USD[tier];
+  const usagePercent = computeUsagePercent(usage.used, tier);
+  const quotaNearLimit = !quotaExhausted && Boolean(uid) && usagePercent >= 80;
   const activeProfiles = effectiveProfiles.filter((p) => selectedProfileIds.includes(p.id));
   const mode: ConsultationMode = activeProfiles.length >= 2 ? 'synastry' : 'personal';
   const needsMoreProfiles = effectiveProfiles.length === 0;
@@ -534,6 +537,24 @@ export function WorkbenchPage({
       {streamError && (
         <div className="px-3.5 py-2 rounded-[10px] border border-[#ff9d8a]/40 bg-[#1d1215] text-[13px] text-[#ff9d8a]">
           {streamError}
+        </div>
+      )}
+
+      {quotaNearLimit && (
+        <div className="px-3.5 py-2 rounded-[12px] border border-[#e0b64a]/40 bg-[#1d1a0f]/80 flex items-center justify-between gap-3 text-[12.5px]">
+          <span className="text-[#f7d57f]">
+            本月额度已使用 {usagePercent}%，即将用完（{nextUtcMonthResetLabel()} UTC 重置）
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setSettingsTab('subscription');
+              setSettingsOpen(true);
+            }}
+            className="px-2.5 py-1 rounded-[12px] border-0 bg-[#e0b64a] text-[#1a1405] text-[12px] font-bold cursor-pointer shrink-0 hover:bg-[#f7d57f]"
+          >
+            升级套餐
+          </button>
         </div>
       )}
 

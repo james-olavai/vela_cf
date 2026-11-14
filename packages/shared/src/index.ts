@@ -16,6 +16,12 @@ export const QUOTA_BUDGET_MICRO_USD: Record<Tier, number> = {
 
 export const QUOTA_LIMIT = QUOTA_BUDGET_MICRO_USD;
 
+export const MAX_OUTPUT_TOKENS_BY_TIER: Record<Tier, number> = {
+  free: 2048,
+  go: 4096,
+  pro: 8192,
+};
+
 export function computeTokenCostMicroUsd(inputTokens: number, outputTokens: number): number {
   const cost = Math.round((inputTokens * 1_650_000 + outputTokens * 8_250_000) / 1_000_000);
   return Math.max(1_000, cost);

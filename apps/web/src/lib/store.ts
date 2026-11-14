@@ -27,7 +27,8 @@ import {
   type UsageRecord,
   type UserRecord,
 } from '@vela-cf/shared';
-import { auth, db, handleFirestoreError, OperationType } from './firebase';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions, handleFirestoreError, OperationType } from './firebase';
 
 export interface ChartPlanet {
   key: string;
@@ -553,4 +554,17 @@ export async function createStripeCheckout(uid: string, tier: 'go' | 'pro'): Pro
       resolve(null);
     }, 6000);
   });
+}
+
+export async function createStripePortal(): Promise<string | null> {
+  try {
+    const fn = httpsCallable<{ returnUrl: string }, { url?: string }>(
+      functions,
+      'ext-firestore-stripe-payments-createPortalLink',
+    );
+    const res = await fn({ returnUrl: window.location.href });
+    return res.data?.url ?? null;
+  } catch {
+    return null;
+  }
 }

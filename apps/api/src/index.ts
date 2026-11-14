@@ -10,6 +10,7 @@ import {
   ChatRequestSchema,
   computeTokenCostMicroUsd,
   CreateSessionRequestSchema,
+  MAX_OUTPUT_TOKENS_BY_TIER,
   QUOTA_BUDGET_MICRO_USD,
   ResolveLocationRequestSchema,
   TIER_META,
@@ -165,6 +166,10 @@ const chatFlow = ai.defineFlow(
         prompt: `${historyContext}\n用户最新消息: ${input.message}`,
         tools,
         maxTurns: 3,
+        config: {
+          temperature: 0.6,
+          maxOutputTokens: MAX_OUTPUT_TOKENS_BY_TIER[tier],
+        },
       });
 
       for await (const chunk of stream) {
