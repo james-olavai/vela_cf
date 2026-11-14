@@ -35,8 +35,12 @@ export function ChartFactCard({
   defaultExpanded = false,
 }: ChartFactCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [activeTab, setActiveTab] = useState<'natal' | 'transits' | 'eastern'>('natal');
   const [showAll, setShowAll] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const hasTransits = Boolean(chart.transits && chart.transits.events.length > 0);
+  const hasEastern = Boolean(chart.bazi || chart.ziwei);
 
   const sun = chart.natal.planets.find((p) => p.key === 'Sun');
   const moon = chart.natal.planets.find((p) => p.key === 'Moon');
@@ -100,83 +104,163 @@ export function ChartFactCard({
 
       {expanded && (
         <div className="p-4 flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row items-center gap-5">
-            <div className="w-[210px] shrink-0">
-              <NatalWheelSvg chart={chart} />
+          {(hasTransits || hasEastern) && (
+            <div className="no-print flex flex-wrap gap-1.5 border-b border-[#1e2740] pb-2.5">
+              {(
+                [
+                  { id: 'natal', label: '西洋本命', show: true },
+                  { id: 'transits', label: '行运时间线', show: hasTransits },
+                  { id: 'eastern', label: '八字与紫微', show: hasEastern },
+                ] as const
+              )
+                .filter((t) => t.show)
+                .map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActiveTab(t.id)}
+                    className={`min-h-[30px] px-3 rounded-[15px] border text-[12px] font-medium cursor-pointer ${
+                      activeTab === t.id
+                        ? 'border-[#e0b64a] bg-[#1d1a0f] text-[#f7d57f]'
+                        : 'border-[#26304d] bg-transparent text-[#c3cde0]'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
             </div>
+          )}
 
-            <div className="flex-1 w-full min-w-0">
-              <div className="flex items-center justify-between text-[12px] text-[#a3b0c5] mb-2">
-                <span>{chart.natal.houseSystem} 宫位制</span>
-                <span className="font-mono-num text-[#f7d57f]">
-                  ASC {chart.natal.ascendant.formatted} · MC {chart.natal.midheaven.formatted}
-                </span>
+          {activeTab === 'natal' && (
+            <>
+              <div className="flex flex-col sm:flex-row items-center gap-5">
+                <div className="w-[210px] shrink-0">
+                  <NatalWheelSvg chart={chart} />
+                </div>
+
+                <div className="flex-1 w-full min-w-0">
+                  <div className="flex items-center justify-between text-[12px] text-[#a3b0c5] mb-2">
+                    <span>{chart.natal.houseSystem} 宫位制</span>
+                    <span className="font-mono-num text-[#f7d57f]">
+                      ASC {chart.natal.ascendant.formatted} · MC {chart.natal.midheaven.formatted}
+                    </span>
+                  </div>
+
+                  <table className="w-full border-collapse text-[13px]">
+                    <tbody>
+                      {visiblePlanets.map((p) => (
+                        <tr key={p.key} className="border-b border-[#1e2740]/70">
+                          <td className="py-1.5 text-[#f8fafc] font-medium">
+                            {p.nameZh}
+                            {p.retrograde && (
+                              <span className="ml-1 font-mono-num text-[11px] text-[#ff9d8a]">R</span>
+                            )}
+                          </td>
+                          <td className="py-1.5 font-mono-num text-[#f7d57f]">{p.formatted}</td>
+                          <td className="py-1.5 text-right text-[#a3b0c5]">第 {p.house} 宫</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {chart.natal.planets.length > 6 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAll((v) => !v)}
+                      className="no-print mt-2 bg-transparent border-0 p-0 text-[12px] text-[#e0b64a] hover:text-[#f7d57f] cursor-pointer"
+                    >
+                      {showAll ? '收起部分星体' : `查看全部 ${chart.natal.planets.length} 颗星体与相位`}
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <table className="w-full border-collapse text-[13px]">
-                <tbody>
-                  {visiblePlanets.map((p) => (
-                    <tr key={p.key} className="border-b border-[#1e2740]/70">
-                      <td className="py-1.5 text-[#f8fafc] font-medium">
-                        {p.nameZh}
-                        {p.retrograde && (
-                          <span className="ml-1 font-mono-num text-[11px] text-[#ff9d8a]">R</span>
-                        )}
-                      </td>
-                      <td className="py-1.5 font-mono-num text-[#f7d57f]">{p.formatted}</td>
-                      <td className="py-1.5 text-right text-[#a3b0c5]">第 {p.house} 宫</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {chart.natal.planets.length > 6 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAll((v) => !v)}
-                  className="no-print mt-2 bg-transparent border-0 p-0 text-[12px] text-[#e0b64a] hover:text-[#f7d57f] cursor-pointer"
-                >
-                  {showAll ? '收起部分星体' : `查看全部 ${chart.natal.planets.length} 颗星体与相位`}
-                </button>
+              {showAll && chart.natal.aspects.length > 0 && (
+                <div className="pt-3 border-t border-[#1e2740]">
+                  <p className="m-0 mb-2 text-[12px] font-medium text-[#a3b0c5]">主要相位</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {chart.natal.aspects.slice(0, 10).map((asp, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-1 rounded-[6px] border border-[#26304d] bg-[#161d33] font-mono-num text-[12px] text-[#c3cde0]"
+                      >
+                        {asp.pointA} {asp.aspect} {asp.pointB} ({asp.orb}°)
+                      </span>
+                    ))}
+                  </div>
+                </div>
               )}
-            </div>
-          </div>
+            </>
+          )}
 
-          {showAll && chart.natal.aspects.length > 0 && (
-            <div className="pt-3 border-t border-[#1e2740]">
-              <p className="m-0 mb-2 text-[12px] font-medium text-[#a3b0c5]">主要相位</p>
-              <div className="flex flex-wrap gap-1.5">
-                {chart.natal.aspects.slice(0, 10).map((asp, idx) => (
-                  <span
+          {activeTab === 'transits' && chart.transits && (
+            <div className="flex flex-col gap-2">
+              <p className="m-0 text-[12px] text-[#a3b0c5]">
+                未来 {chart.transits.windowMonths} 个月主要行运相位事件
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {chart.transits.events.slice(0, 10).map((ev, idx) => (
+                  <div
                     key={idx}
-                    className="px-2 py-1 rounded-[6px] border border-[#26304d] bg-[#161d33] font-mono-num text-[12px] text-[#c3cde0]"
+                    className="flex items-center justify-between gap-3 px-3 py-2 rounded-[8px] border border-[#26304d] bg-[#161d33] text-[12.5px]"
                   >
-                    {asp.pointA} {asp.aspect} {asp.pointB} ({asp.orb}°)
-                  </span>
+                    <span className="font-mono-num text-[#f7d57f] shrink-0">{ev.date}</span>
+                    <span className="text-[#f8fafc] truncate">
+                      {ev.transitPlanet} {ev.aspect} {ev.natalPoint}
+                    </span>
+                    <span className="font-mono-num text-[#a3b0c5] shrink-0">{ev.orb}°</span>
+                  </div>
                 ))}
               </div>
             </div>
           )}
 
-          {chart.bazi && (
-            <div className="pt-3 border-t border-[#1e2740]">
-              <p className="m-0 mb-2 text-[12px] font-medium text-[#a3b0c5]">
-                八字四柱 · 日主 {chart.bazi.dayMaster}
-              </p>
-              <div className="grid grid-cols-4 gap-2">
-                {chart.bazi.pillars.map((pil) => (
-                  <div
-                    key={pil.name}
-                    className="p-2 rounded-[8px] border border-[#26304d] bg-[#161d33] text-center"
-                  >
-                    <div className="text-[11px] text-[#a3b0c5]">{pil.name}</div>
-                    <div className="font-serif-sc text-[15px] font-bold text-[#f7d57f]">
-                      {pil.ganZhi}
-                    </div>
-                    <div className="text-[11px] text-[#c3cde0]">{pil.tenGod}</div>
+          {activeTab === 'eastern' && (
+            <div className="flex flex-col gap-4">
+              {chart.bazi && (
+                <div>
+                  <p className="m-0 mb-2 text-[12px] font-medium text-[#a3b0c5]">
+                    八字四柱 · 真太阳时 {chart.bazi.trueSolarTime} · 日主 {chart.bazi.dayMaster}
+                  </p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {chart.bazi.pillars.map((pil) => (
+                      <div
+                        key={pil.name}
+                        className="p-2 rounded-[8px] border border-[#26304d] bg-[#161d33] text-center"
+                      >
+                        <div className="text-[11px] text-[#a3b0c5]">{pil.name}</div>
+                        <div className="font-serif-sc text-[15px] font-bold text-[#f7d57f]">
+                          {pil.ganZhi}
+                        </div>
+                        <div className="text-[11px] text-[#c3cde0]">{pil.tenGod}</div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+
+              {chart.ziwei && (
+                <div className="pt-2 border-t border-[#1e2740]">
+                  <p className="m-0 mb-2 text-[12px] font-medium text-[#a3b0c5]">
+                    紫微斗数 · {chart.ziwei.fiveElementsClass} · 命主 {chart.ziwei.soulStar} · 身主 {chart.ziwei.bodyStar}
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {chart.ziwei.palaces.slice(0, 6).map((pal) => (
+                      <div
+                        key={pal.name}
+                        className="p-2 rounded-[8px] border border-[#26304d] bg-[#161d33] text-[12px]"
+                      >
+                        <div className="font-bold text-[#f8fafc]">
+                          {pal.name}（{pal.earthlyBranch}）
+                        </div>
+                        <div className="text-[#f7d57f] truncate">
+                          {pal.majorStars.map((s) => s.name).join('、') || '空宫'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

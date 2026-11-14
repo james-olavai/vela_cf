@@ -122,7 +122,15 @@ export function WorkbenchPage({
 
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const handoffConsumedRef = useRef(false);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+  }, [inputText]);
 
   // Keep selectedProfileIds valid when profiles or mode change
   useEffect(() => {
@@ -572,7 +580,8 @@ export function WorkbenchPage({
           className="rounded-[24px] border border-[#26304d] bg-[#101527] px-3.5 py-2.5 flex flex-col gap-2 focus-within:border-[#3a4668]"
         >
           <textarea
-            rows={2}
+            ref={textareaRef}
+            rows={1}
             maxLength={2000}
             disabled={needsMoreProfiles && effectiveProfiles.length === 0}
             placeholder={
@@ -585,12 +594,12 @@ export function WorkbenchPage({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 void handleSend();
               }
             }}
-            className="w-full resize-none bg-transparent border-0 text-[15px] text-[#f8fafc] placeholder-[#a3b0c5] focus:outline-none disabled:opacity-60"
+            className="w-full resize-none bg-transparent border-0 text-[15px] leading-[1.6] text-[#f8fafc] placeholder-[#a3b0c5] focus:outline-none disabled:opacity-60"
           />
 
           <div className="flex items-center justify-between gap-2">
@@ -618,6 +627,11 @@ export function WorkbenchPage({
                   {m.label}
                 </button>
               ))}
+              {inputText.length > 1500 && (
+                <span className="ml-1 font-mono-num text-[11px] text-[#a3b0c5]">
+                  {inputText.length}/2000
+                </span>
+              )}
             </div>
 
             {isStreaming ? (
@@ -667,6 +681,12 @@ export function WorkbenchPage({
 
       {/* Main Column */}
       <main className="flex-1 min-w-0 flex flex-col h-full relative">
+        {isStreaming && (
+          <div
+            aria-hidden="true"
+            className="no-print pointer-events-none absolute inset-x-0 top-0 h-[240px] vela-aurora-glow"
+          />
+        )}
         {/* Unified Borderless Top Header */}
         <header className="no-print shrink-0 h-[64px] px-2.5 lg:px-5 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
@@ -763,7 +783,11 @@ export function WorkbenchPage({
                       {isLastAssistant && isStreaming && !textContent ? (
                         <div className="flex items-center gap-2.5 py-2 text-[14px] text-[#c3cde0]">
                           <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#e0b64a] vela-thinking-dot" />
-                          <span>正在计算星盘坐标并推演解读…</span>
+                          <span>
+                            {toolCalls.length > 0
+                              ? `已排盘（${toolCalls.map((t) => t.label.replace(/^已排盘：/, '')).join(' · ')}），正在推演解读…`
+                              : '正在计算星盘坐标与调用排盘工具…'}
+                          </span>
                         </div>
                       ) : (
                         <div className="py-1">{renderFormattedText(textContent)}</div>
