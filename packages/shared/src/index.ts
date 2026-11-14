@@ -66,7 +66,11 @@ export const TIER_META: Record<
     monthlyBudgetMicroUsd: QUOTA_BUDGET_MICRO_USD.go,
     maxSynastryProfiles: 2,
     allowsEntityCharts: false,
-    highlights: ['每月约 55–70 次常规对话额度', '个人西洋占星全部盘面（本命 + 行运）', '双人合盘（2 个档案）'],
+    highlights: [
+      '每月约 55–70 次常规对话额度',
+      '西洋占星常见盘面（本命、行运、日月返照、次限/太阳弧、组合盘、迁移盘）',
+      '双人合盘（2 个档案）',
+    ],
   },
   pro: {
     label: 'Pro',
@@ -75,9 +79,9 @@ export const TIER_META: Record<
     maxSynastryProfiles: 4,
     allowsEntityCharts: true,
     highlights: [
-      '每月约 100–120 次多维合盘额度',
-      '个人西洋 + 八字 + 紫微交叉对比',
-      '最多 4 个档案多人合盘（含个人 / 公司 / 国家盘）',
+      '每月约 100–120 次多维推演额度',
+      '解锁全部 34 项中西占星与命理工具（含高阶盘型、古典时间主星、八字/紫微流年大限）',
+      '专属「推演深度」切换（速览 / 均衡 / 全维）+ 最多 4 档案合盘（含个人 / 公司 / 国家）',
     ],
   },
 };
@@ -100,11 +104,13 @@ export const ConsultationModeSchema = z.enum(['personal', 'synastry']);
 export type ConsultationMode = z.infer<typeof ConsultationModeSchema>;
 
 export const AstrologyToolNameSchema = z.enum([
-  'natalWheel',
-  'transitEvents',
-  'baziPillars',
-  'ziweiPalaces',
-  'synastryAspects',
+  'natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces', 'synastryAspects',
+  'companyTenthHouse', 'solarReturn', 'lunarReturn', 'secondaryProgression', 'solarArc',
+  'transitSnapshot', 'compositeChart', 'davisonChart', 'relocationChart', 'draconicChart',
+  'tertiaryProgression', 'minorProgression', 'arabicLots', 'planetaryReturn', 'harmonicChart',
+  'antisciaPoints', 'siderealChart', 'heliocentricChart', 'fixedStars', 'midpointTree',
+  'localSpace', 'baziDayun', 'baziLiunian', 'ziweiDaxian', 'ziweiLiunian',
+  'firdaria', 'profection', 'zodiacalReleasing', 'energyCalendar',
 ]);
 export type AstrologyToolName = z.infer<typeof AstrologyToolNameSchema>;
 
@@ -240,6 +246,8 @@ export interface UsageRecord {
   bonusMicroUsd?: number;
   shareCount?: number;
   lastShareDate?: string;
+  unlimited?: boolean;
+  overrideTier?: Tier;
 }
 
 export interface UserRecord {
@@ -255,10 +263,13 @@ export const CreateSessionRequestSchema = z.object({
   profileIds: z.array(z.string().min(1).max(128)).min(1).max(4),
 });
 
+export const AnalysisDepthSchema = z.enum(['quick', 'balanced', 'deep']);
+export type AnalysisDepth = z.infer<typeof AnalysisDepthSchema>;
 export const ChatRequestSchema = z.object({
   sessionId: z.string().min(1).max(128),
   message: z.string().trim().min(1).max(2000),
   editLastTurn: z.boolean().optional(),
+  depth: AnalysisDepthSchema.optional(),
 });
 
 export const ResolveLocationRequestSchema = z.object({

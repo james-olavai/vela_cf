@@ -19,6 +19,7 @@ import {
   ProfileInputSchema,
   SHARE_BONUS_MICRO_USD,
   utcMonthPeriodStart,
+  type AnalysisDepth,
   type AstrologyToolName,
   type AstroUiBlock,
   type ConsultationMode,
@@ -466,6 +467,7 @@ export async function streamConsultationReply(params: {
   existingMessages: MessageRecord[];
   userText: string;
   editLastTurn?: boolean;
+  depth?: AnalysisDepth;
   signal: AbortSignal;
   onUpdateMessages: (msgs: MessageRecord[]) => void;
   onUpdateChart: (chart: ChartSnapshot) => void;
@@ -480,6 +482,7 @@ export async function streamConsultationReply(params: {
     existingMessages,
     userText,
     editLastTurn,
+    depth,
     signal,
     onUpdateMessages,
     onUpdateChart,
@@ -487,7 +490,7 @@ export async function streamConsultationReply(params: {
   } = params;
   const primaryProfile = profiles[0];
 
-  if (usage.used >= computeEffectiveBudget(tier, usage.bonusMicroUsd ?? 0)) {
+  if (!usage.unlimited && usage.used >= computeEffectiveBudget(tier, usage.bonusMicroUsd ?? 0)) {
     onQuotaExceeded();
     return;
   }
@@ -591,12 +594,12 @@ export async function streamConsultationReply(params: {
     }
 
     const callable = httpsCallable<
-      { sessionId: string; message: string; editLastTurn?: boolean },
+      { sessionId: string; message: string; editLastTurn?: boolean; depth?: AnalysisDepth },
       { text: string; suggestions?: string[]; uiBlocks?: AstroUiBlock[] },
       ChatStreamChunk
     >(functions, 'chat');
     const { stream, data } = await callable.stream(
-      { sessionId: session.id, message: userText, ...(editLastTurn ? { editLastTurn: true } : {}) },
+      { sessionId: session.id, message: userText, ...(editLastTurn ? { editLastTurn: true } : {}), ...(depth ? { depth } : {}) },
       { signal },
     );
 

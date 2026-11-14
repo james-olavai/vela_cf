@@ -272,6 +272,7 @@ await db.runTransaction(async (tx) => {
 | 对外 Remote MCP | 有外部客户端（Claude / Cursor）要接入 | 新增第 6 个 `onRequest` 函数，用 `@genkit-ai/mcp` + 无状态 Streamable HTTP 包装 `packages/astrology` |
 | 邮箱登录 | 有相当比例用户没有 Google 账号 | 在 Firebase Auth 启用 Email Enumeration Protection 与邮箱链接/验证码登录 |
 | `apps/web` 行数预算上调至 `5600`（原 `5000`）+ `qrcode` | 1:1 完整迁移旧 Vela 能量画像（含日历联动即时天象轮、洞察卡、元素特质、年度能量窗口）与带二维码分享海报 | 负责人批准后同步更新 `boundaries.json` |
+| 全量 34 个排盘工具 + `loadSkillReference`（`maxAstrologyTools: 35`） | 先补齐原 `vela` 全部 34 项占星/命理算法，再配合推演深度、智能路由与 Reference 渐进式披露 | `boundaries.json` 同步上调 `packages/astrology`、`packages/shared` 与 `apps/api` 行数与工具上限 |
 
 ---
 

@@ -1,5 +1,6 @@
 import { getRemoteConfig } from 'firebase-admin/remote-config';
 import type { AstrologyToolName, ConsultationMode, Tier } from '@vela-cf/shared';
+import { ALL_34_TOOLS, WESTERN_COMMON_TOOLS } from './skills.js';
 
 export interface ServerPresetConfig {
   systemPrompt: string;
@@ -31,20 +32,16 @@ export const DEFAULT_PRESETS: Record<Tier, ServerPresetConfig> = {
       GUARDRAIL_TAIL,
     modelName: 'vertexai/gemini-4-hydrogen',
     temperature: 0.6,
-    allowedTools: ['natalWheel', 'transitEvents', 'synastryAspects'],
+    allowedTools: WESTERN_COMMON_TOOLS,
   },
   pro: {
     systemPrompt:
-      '你是 Vela 的中西合参高级占星与命理顾问（支持最多 4 个个人、公司或国家档案）。\n' +
-      '【技法选择（Skill）】你拥有西洋占星与东方命理全套工具（`natalWheel`、`transitEvents`、`baziPillars`、`ziweiPalaces`、`synastryAspects`），请根据用户问题与档案特征自主选择技法组合，按需调用：\n' +
-      '1. 西洋占星本命或行运问题 → 调用 `natalWheel` / `transitEvents`。\n' +
-      '2. 东方命理、八字大运或紫微宫位问题 → 调用 `baziPillars` / `ziweiPalaces`（仅当档案性别为 male 或 female 时调用 `ziweiPalaces`）。\n' +
-      '3. 综合推演或用户要求中西合参 → 交叉调用西洋与东方工具相互印证。\n' +
-      '4. 传入 2–4 个档案（含个人/公司/国家）询问合作、关系或趋势 → 调用 `synastryAspects`，必要时辅以单盘或八字/紫微工具交叉对比。' +
+      '你是 Vela 的中西合参高级占星与命理顾问（支持最多 4 个个人、公司或国家档案，覆盖全部 34 项中西占星与命理技法）。\n' +
+      '【技法选择（Skill）】请严格从当轮【智能路由与技法目录】开放的工具中按需调用；若处于全维深度模式，可先调用 `loadSkillReference` 查阅技法 Reference 再排盘。' +
       GUARDRAIL_TAIL,
     modelName: 'vertexai/gemini-4-hydrogen',
     temperature: 0.6,
-    allowedTools: ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces', 'synastryAspects'],
+    allowedTools: ALL_34_TOOLS,
   },
 };
 

@@ -33,6 +33,12 @@ declare module 'lunar-javascript' {
         getGanZhi(): string;
         getStartAge(): number;
         getStartYear(): number;
+        getEndYear(): number;
+        getLiuNian(count?: number): Array<{
+          getYear(): number;
+          getGanZhi(): string;
+          getAge(): number;
+        }>;
       }>;
     };
   }

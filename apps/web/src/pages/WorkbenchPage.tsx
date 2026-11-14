@@ -4,6 +4,7 @@ import {
   computeUsagePercent,
   nextUtcMonthResetLabel,
   TIER_META,
+  type AnalysisDepth,
   type AstroUiBlock,
   type ConsultationMode,
   type MessageRecord,
@@ -138,6 +139,7 @@ export function WorkbenchPage({
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [depth, setDepth] = useState<AnalysisDepth>('balanced');
 
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -281,13 +283,16 @@ export function WorkbenchPage({
   }, [messages, isStreaming]);
 
   const quotaExhausted =
+    !effectiveUsage.unlimited &&
     Boolean(uid) &&
     effectiveUsage.used >= computeEffectiveBudget(tier, effectiveUsage.bonusMicroUsd ?? 0);
-  const usagePercent = computeUsagePercent(
-    effectiveUsage.used,
-    tier,
-    effectiveUsage.bonusMicroUsd ?? 0,
-  );
+  const usagePercent = effectiveUsage.unlimited
+    ? 0
+    : computeUsagePercent(
+        effectiveUsage.used,
+        tier,
+        effectiveUsage.bonusMicroUsd ?? 0,
+      );
   const quotaNearLimit = !quotaExhausted && Boolean(uid) && usagePercent >= 80;
   const activeProfiles = effectiveProfiles.filter((p) => selectedProfileIds.includes(p.id));
   const primaryProfile = activeProfiles[0] ?? effectiveProfiles[0] ?? null;
@@ -414,6 +419,7 @@ export function WorkbenchPage({
         existingMessages: prevMessages,
         userText: text,
         editLastTurn,
+        depth: tier === 'pro' ? depth : undefined,
         signal: controller.signal,
         onUpdateMessages: setMessages,
         onUpdateChart: setChart,
@@ -700,6 +706,29 @@ export function WorkbenchPage({
             <span className="shrink-0 pb-2 font-mono-num text-[11px] text-[#a3b0c5]">
               {inputText.length}/2000
             </span>
+          )}
+
+          {tier === 'pro' && (
+            <div className="shrink-0 flex items-center rounded-full border border-[#26304d] bg-[#0b0e1a] p-0.5" title="推演深度：控制每轮披露的星盘工具与技法层级">
+              {([
+                { id: 'quick', label: '速览' },
+                { id: 'balanced', label: '均衡' },
+                { id: 'deep', label: '全维' },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setDepth(opt.id)}
+                  className={`px-2 py-1 rounded-full border-0 text-[11px] font-medium cursor-pointer transition-colors ${
+                    depth === opt.id
+                      ? 'bg-[#e0b64a]/20 text-[#f7d57f]'
+                      : 'bg-transparent text-[#8e9bb5] hover:text-[#f8fafc]'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           )}
 
           {isStreaming ? (

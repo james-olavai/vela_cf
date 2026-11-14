@@ -25,6 +25,7 @@ import { NatalWheelInputSchema, natalWheel, type NatalWheelResult } from '@vela-
 import { createAstrologyTools } from './tools.js';
 import { getServerPreset } from './presets.js';
 import { buildNatalFactSummary, filterHallucinatedUiBlocks, verifyKeySignClaims } from './guard.js';
+import { routeTurnCapabilities } from './skills.js';
 
 initializeApp();
 enableFirebaseTelemetry();
@@ -48,6 +49,7 @@ const TOOL_LABELS: Record<string, string> = {
   baziPillars: '已排盘：八字四柱',
   ziweiPalaces: '已排盘：紫微斗数',
   synastryAspects: '已排盘：合盘相位',
+  loadSkillReference: '已加载技法 Reference',
 };
 
 const FALLBACK_CITIES = [
@@ -69,12 +71,19 @@ const FALLBACK_CITIES = [
 async function resolveUserPeriodAndTier(uid: string, tokenRole?: unknown): Promise<{
   tier: Tier;
   periodStart: string;
+  unlimited: boolean;
 }> {
   const parsed = TierSchema.safeParse(tokenRole);
   let tier: Tier = parsed.success ? parsed.data : 'free';
   let periodStart = utcMonthPeriodStart();
 
-  if (tier !== 'free') {
+  const usageSnap = await db.collection('usage').doc(uid).get();
+  const usageData = usageSnap.data();
+  const override = TierSchema.safeParse(usageData?.overrideTier);
+  if (override.success) tier = override.data;
+  const unlimited = usageData?.unlimited === true;
+
+  if (tier !== 'free' && !override.success) {
     const subs = await db
       .collection('customers')
       .doc(uid)
@@ -90,7 +99,7 @@ async function resolveUserPeriodAndTier(uid: string, tokenRole?: unknown): Promi
           : new Date(doc.current_period_start.seconds * 1000).toISOString();
     }
   }
-  return { tier, periodStart };
+  return { tier, periodStart, unlimited };
 }
 
 type HttpsErrorCode = ConstructorParameters<typeof HttpsError>[0];
@@ -182,7 +191,7 @@ const chatFlow = ai.defineFlow(
         throw new HttpsError('not-found', 'PROFILE_NOT_FOUND');
       }
 
-      const { tier, periodStart } = await resolveUserPeriodAndTier(uid, context.auth?.token?.stripeRole);
+      const { tier, periodStart, unlimited } = await resolveUserPeriodAndTier(uid, context.auth?.token?.stripeRole);
       const usageRef = db.collection('usage').doc(uid);
 
       const preSnap = await usageRef.get();
@@ -190,7 +199,7 @@ const chatFlow = ai.defineFlow(
       const isNewPeriod = !preData || String(preData.periodStart) < periodStart;
       const preUsed = isNewPeriod ? 0 : Number(preData?.used ?? 0);
       const preBonus = isNewPeriod ? 0 : Number(preData?.bonusMicroUsd ?? 0);
-      if (preUsed >= computeEffectiveBudget(tier, preBonus)) {
+      if (!unlimited && preUsed >= computeEffectiveBudget(tier, preBonus)) {
         throw new HttpsError('resource-exhausted', 'QUOTA_EXCEEDED');
       }
 
@@ -230,7 +239,17 @@ const chatFlow = ai.defineFlow(
       const allowedToolNames: AstrologyToolName[] = Array.isArray(session.frozenTools)
         ? (session.frozenTools as AstrologyToolName[])
         : ['natalWheel'];
-      const tools = allowedToolNames.map((name) => astrologyTools[name]).filter(Boolean);
+      const routed = routeTurnCapabilities({
+        tier,
+        depth: input.depth,
+        message: input.message,
+        profileCount: profiles.length,
+        sessionAllowedTools: allowedToolNames,
+      });
+      const tools = [
+        ...routed.routedTools.map((name) => astrologyTools[name]).filter(Boolean),
+        ...(routed.enableSkillLoader ? [astrologyTools.loadSkillReference] : []),
+      ];
 
       let fullText = '';
       const toolParts: Array<{ type: 'tool-call'; toolName: string; label: string }> = [];
@@ -272,10 +291,11 @@ const chatFlow = ai.defineFlow(
           ':::vela-ui\n{"component":"aspect-highlight","title":"核心相位焦点","items":[{"pair":"太阳 □ 土星","orb":"1.2°","tone":"tension","note":"近期压力与定型课题","prompt":"展开解读太阳四分土星对当下选择的启示"}]}\n:::\n' +
           '在回复正文最后，请另起一行输出 `SUGGESTIONS:` 后跟 2 个简短追问（用 `|` 分隔），例如 `SUGGESTIONS:天顶在水瓶意味着什么？|土星六宫该如何减负？`。\n\n' +
           profileContext +
-          factFrameContext,
+          factFrameContext +
+          `\n${routed.skillIndexPrompt}`,
         prompt: `${historyContext ? `${historyContext}\n` : ''}用户最新消息: ${input.message}`,
         tools,
-        maxTurns: 3,
+        maxTurns: routed.maxTurns,
         config: {
           ...(isGemini4 ? {} : { temperature: 0.6 }),
           maxOutputTokens: MAX_OUTPUT_TOKENS_BY_TIER[tier],

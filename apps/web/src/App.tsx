@@ -206,7 +206,7 @@ export function App() {
         email={user?.email ?? 'Google 用户'}
         displayName={user?.displayName ?? user?.email ?? '未登录访客'}
         photoURL={user?.photoURL ?? null}
-        tier={tier}
+        tier={usage.overrideTier ?? tier}
         usage={usage}
         profiles={profiles}
         sessions={sessions}
