@@ -736,11 +736,6 @@ export function WorkbenchPage({
                 <span>星盘</span>
               </button>
             )}
-            {uid && (
-              <span className="px-2.5 py-1 rounded-[14px] text-[12px] text-[#a3b0c5] font-mono-num">
-                {usage.used}/{limit}
-              </span>
-            )}
           </div>
         </header>
 

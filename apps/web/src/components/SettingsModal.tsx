@@ -214,12 +214,15 @@ export function SettingsModal({
                     当前方案：{TIER_META[tier].label}
                   </span>
                   <span className="font-mono-num text-[#f7d57f]">
-                    {usage.used} / {limit} 次（{nextUtcMonthResetLabel()} 重置）
+                    已用 {pct}%（{usage.used} / {limit} 次）
                   </span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-[#070812] overflow-hidden">
-                  <div className="h-full bg-[#e0b64a]" style={{ width: `${pct}%` }} />
+                  <div className="h-full bg-[#e0b64a] transition-[width]" style={{ width: `${pct}%` }} />
                 </div>
+                <p className="m-0 text-[12px] text-[#a3b0c5]">
+                  按发送对话消息计次（新建会话不扣次），{nextUtcMonthResetLabel()}（UTC）重置。
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
