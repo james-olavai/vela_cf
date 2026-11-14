@@ -10,8 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@vela-cf/shared": "*",
+    "firebase": "^11.6.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

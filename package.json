@@ -11,6 +11,7 @@
     "check": "node scripts/check-boundaries.mjs",
     "dev": "npm --workspace=apps/web run dev",
     "dev:api": "npm --workspace=apps/api run dev",
+    "lint": "npm run check && npm run typecheck",
     "preview": "npm --workspace=apps/web run preview",
     "typecheck": "npm --workspaces --if-present run typecheck",
     "deploy:api": "npm --workspace=apps/api run deploy"
