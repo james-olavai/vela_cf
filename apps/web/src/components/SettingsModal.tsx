@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   nextUtcMonthResetLabel,
   QUOTA_LIMIT,
@@ -50,6 +50,13 @@ export function SettingsModal({
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [checkoutBusy, setCheckoutBusy] = useState<'go' | 'pro' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setTab(initialTab);
+      setNotice(null);
+    }
+  }, [open, initialTab]);
 
   // Profile form state
   const [editingId, setEditingId] = useState<string | undefined>(undefined);
@@ -167,7 +174,6 @@ export function SettingsModal({
           {(
             [
               { id: 'subscription', label: '订阅与额度' },
-              { id: 'profiles', label: '出生档案' },
               { id: 'account', label: '账号与合规' },
             ] as const
           ).map((item) => (

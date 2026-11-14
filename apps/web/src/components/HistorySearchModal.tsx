@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { SessionRecord } from '@vela-cf/shared';
+import { IconSearch } from './Icons';
 
 interface HistorySearchModalProps {
   open: boolean;
@@ -44,8 +45,8 @@ export function HistorySearchModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2.5 px-4 py-3 border-b border-[#1e2740]">
-          <span aria-hidden="true" className="text-[#a3b0c5] text-[15px]">
-            🔍
+          <span className="text-[#a3b0c5] flex items-center">
+            <IconSearch size={17} />
           </span>
           <input
             id="history-search-title"

@@ -13,6 +13,14 @@ import {
 } from '@vela-cf/shared';
 import { ChartFactCard } from '../components/ChartFactCard';
 import { HistorySearchModal } from '../components/HistorySearchModal';
+import {
+  IconArrowUp,
+  IconChevronsLeft,
+  IconPlus,
+  IconSearch,
+  IconSparkles,
+  IconStop,
+} from '../components/Icons';
 import { NatalWheelSvg } from '../components/NatalWheelSvg';
 import { ProfileSidebarPanel } from '../components/ProfileSidebarPanel';
 import { SettingsModal, type SettingsTab } from '../components/SettingsModal';
@@ -378,13 +386,13 @@ export function WorkbenchPage({
   const renderCollapsedRail = () => (
     <div className="flex flex-col items-center justify-between h-full bg-[#101527] border-r border-[#1e2740]">
       <div className="w-full flex flex-col items-center gap-2">
-        <div className="w-full h-[68px] px-4 flex items-center justify-start shrink-0">
+        <div className="w-full h-[64px] px-2.5 flex items-center justify-center shrink-0">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
             title="展开侧栏"
             aria-label="展开侧栏"
-            className="flex items-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#161d33] cursor-pointer"
+            className="flex items-center justify-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#161d33] cursor-pointer"
           >
             <img src="/assets/logo-small.webp" alt="Vela" className="brand-logo" />
           </button>
@@ -395,9 +403,9 @@ export function WorkbenchPage({
           onClick={() => onSelectSession(null)}
           title="新咨询"
           aria-label="新咨询"
-          className="w-10 h-10 rounded-full border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#e0b64a] text-[18px] flex items-center justify-center cursor-pointer"
+          className="w-11 h-11 rounded-full border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#e0b64a] flex items-center justify-center cursor-pointer"
         >
-          +
+          <IconPlus size={18} />
         </button>
 
         <button
@@ -405,9 +413,9 @@ export function WorkbenchPage({
           onClick={() => setHistorySearchOpen(true)}
           title="搜索历史对话"
           aria-label="搜索历史对话"
-          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#161d33] text-[#c3cde0] hover:text-[#f8fafc] text-[16px] flex items-center justify-center cursor-pointer"
+          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#161d33] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
         >
-          🔍
+          <IconSearch size={18} />
         </button>
 
         <button
@@ -415,9 +423,9 @@ export function WorkbenchPage({
           onClick={() => setSidebarOpen(true)}
           title="出生档案与合盘"
           aria-label="出生档案与合盘"
-          className="w-10 h-10 rounded-[12px] border-0 bg-transparent hover:bg-[#161d33] text-[#f7d57f] text-[16px] flex items-center justify-center cursor-pointer"
+          className="w-11 h-11 rounded-[12px] border-0 bg-transparent hover:bg-[#161d33] text-[#f7d57f] flex items-center justify-center cursor-pointer"
         >
-          ✦
+          <IconSparkles size={18} />
         </button>
       </div>
 
@@ -430,7 +438,7 @@ export function WorkbenchPage({
           }}
           title="订阅与额度"
           aria-label="订阅与额度"
-          className="px-2.5 min-h-[30px] rounded-[15px] border border-[#e0b64a]/40 bg-[#1d1a0f] text-[11px] font-medium text-[#f7d57f] cursor-pointer"
+          className="px-2.5 min-h-[28px] rounded-[14px] border border-[#e0b64a]/40 bg-[#1d1a0f] hover:border-[#e0b64a] text-[11px] font-medium text-[#f7d57f] cursor-pointer"
         >
           订阅
         </button>
@@ -443,7 +451,7 @@ export function WorkbenchPage({
           }}
           title={displayName}
           aria-label={`账号：${displayName}`}
-          className="p-1 rounded-full border-0 bg-transparent hover:bg-[#161d33] cursor-pointer"
+          className="w-11 h-11 rounded-full border-0 bg-transparent hover:bg-[#161d33] flex items-center justify-center cursor-pointer"
         >
           {renderAvatar()}
         </button>
@@ -453,7 +461,7 @@ export function WorkbenchPage({
 
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full bg-[#101527] border-r border-[#1e2740]">
-      <div className="h-[68px] px-4 flex items-center justify-between shrink-0">
+      <div className="h-[64px] px-2.5 flex items-center justify-between shrink-0">
         <button
           type="button"
           onClick={() => setSidebarOpen(false)}
@@ -471,18 +479,18 @@ export function WorkbenchPage({
             onClick={() => setHistorySearchOpen(true)}
             title="搜索历史对话"
             aria-label="搜索历史对话"
-            className="min-h-[36px] min-w-[36px] rounded-[10px] border-0 bg-transparent hover:bg-[#161d33] text-[#c3cde0] hover:text-[#f8fafc] text-[15px] cursor-pointer"
+            className="w-9 h-9 rounded-[10px] border-0 bg-transparent hover:bg-[#161d33] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
           >
-            🔍
+            <IconSearch size={18} />
           </button>
           <button
             type="button"
             onClick={() => setSidebarOpen(false)}
             title="折叠侧栏"
             aria-label="折叠侧栏"
-            className="min-h-[36px] min-w-[36px] rounded-[10px] border-0 bg-transparent hover:bg-[#161d33] text-[#c3cde0] hover:text-[#f8fafc] text-[16px] cursor-pointer"
+            className="w-9 h-9 rounded-[10px] border-0 bg-transparent hover:bg-[#161d33] text-[#c3cde0] hover:text-[#f8fafc] flex items-center justify-center cursor-pointer"
           >
-            «
+            <IconChevronsLeft size={18} />
           </button>
         </div>
       </div>
@@ -496,7 +504,9 @@ export function WorkbenchPage({
           }}
           className="w-full min-h-[40px] px-3 rounded-[20px] border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#f8fafc] text-[13.5px] font-medium flex items-center justify-center gap-2 cursor-pointer"
         >
-          <span className="text-[#e0b64a] text-[16px]">+</span>
+          <span className="text-[#e0b64a] flex items-center">
+            <IconPlus size={16} />
+          </span>
           <span>新咨询</span>
         </button>
       </div>
@@ -524,9 +534,10 @@ export function WorkbenchPage({
             setSettingsTab('subscription');
             setSettingsOpen(true);
           }}
-          className="px-3 min-h-[30px] rounded-[15px] border border-[#e0b64a]/40 bg-[#1d1a0f] hover:border-[#e0b64a] text-[12px] font-medium text-[#f7d57f] cursor-pointer"
+          className="px-3 min-h-[30px] rounded-[15px] border border-[#e0b64a]/40 bg-[#1d1a0f] hover:border-[#e0b64a] text-[12px] font-medium text-[#f7d57f] flex items-center gap-1.5 cursor-pointer"
         >
-          ✦ 订阅方案 · {TIER_META[tier].label}
+          <IconSparkles size={13} />
+          <span>订阅方案 · {TIER_META[tier].label}</span>
         </button>
 
         <button
@@ -632,18 +643,18 @@ export function WorkbenchPage({
                 type="button"
                 onClick={() => abortRef.current?.abort()}
                 aria-label="停止生成"
-                className="min-h-[36px] min-w-[36px] rounded-full border-0 bg-[#e0b64a] text-[#1a1405] font-bold cursor-pointer"
+                className="w-9 h-9 rounded-full border-0 bg-[#e0b64a] text-[#1a1405] flex items-center justify-center cursor-pointer"
               >
-                ■
+                <IconStop size={15} />
               </button>
             ) : (
               <button
                 type="submit"
                 disabled={!inputText.trim() || needsMoreProfiles}
                 aria-label="发送"
-                className="min-h-[36px] min-w-[36px] rounded-full border-0 bg-[#e0b64a] text-[#1a1405] font-bold cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                className="w-9 h-9 rounded-full border-0 bg-[#e0b64a] text-[#1a1405] flex items-center justify-center cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
               >
-                ↑
+                <IconArrowUp size={18} />
               </button>
             )}
           </div>
@@ -678,7 +689,7 @@ export function WorkbenchPage({
   return (
     <div className="h-[100dvh] w-full flex bg-[#070812] text-[#f8fafc] overflow-hidden">
       {/* Desktop Persistent Left Rail / Expanded Sidebar */}
-      <aside className={`no-print hidden lg:block h-full shrink-0 ${sidebarOpen ? 'w-[280px]' : 'w-[80px]'}`}>
+      <aside className={`no-print hidden lg:block h-full shrink-0 ${sidebarOpen ? 'w-[280px]' : 'w-[72px]'}`}>
         {sidebarOpen ? renderSidebarContent() : renderCollapsedRail()}
       </aside>
 
@@ -698,7 +709,7 @@ export function WorkbenchPage({
       {/* Main Column */}
       <main className="flex-1 min-w-0 flex flex-col h-full relative">
         {/* Unified Borderless Top Header */}
-        <header className="no-print shrink-0 h-[68px] px-4 flex items-center justify-between">
+        <header className="no-print shrink-0 h-[64px] px-2.5 lg:px-5 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
@@ -723,21 +734,17 @@ export function WorkbenchPage({
               <button
                 type="button"
                 onClick={() => setChartDrawerOpen((v) => !v)}
-                className="min-h-[36px] px-3 rounded-[18px] border border-[#26304d] bg-[#101527] hover:border-[#e0b64a] text-[12.5px] text-[#f7d57f] cursor-pointer"
+                className="min-h-[34px] px-3 rounded-[17px] border border-[#26304d] bg-[#101527] hover:border-[#e0b64a] text-[12.5px] text-[#f7d57f] flex items-center gap-1.5 cursor-pointer"
               >
-                ✦ 星盘
+                <IconSparkles size={14} />
+                <span>星盘</span>
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                setSettingsTab('subscription');
-                setSettingsOpen(true);
-              }}
-              className="min-h-[36px] px-3 rounded-[18px] border border-[#26304d] bg-[#101527] text-[12px] text-[#c3cde0] font-mono-num cursor-pointer"
-            >
-              {uid ? `${usage.used}/${limit} · ${TIER_META[tier].label}` : '免费体验'}
-            </button>
+            {uid && (
+              <span className="px-2.5 py-1 rounded-[14px] text-[12px] text-[#a3b0c5] font-mono-num">
+                {usage.used}/{limit}
+              </span>
+            )}
           </div>
         </header>
 
