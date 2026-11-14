@@ -170,6 +170,8 @@ export function App() {
       <WorkbenchPage
         uid={user?.uid ?? null}
         email={user?.email ?? 'Google 用户'}
+        displayName={user?.displayName ?? user?.email ?? '未登录访客'}
+        photoURL={user?.photoURL ?? null}
         tier={tier}
         usage={usage}
         profiles={profiles}
