@@ -4,7 +4,7 @@
 //   node scripts/check-boundaries.mjs --hook     Claude Code 钩子：只在违规时输出，退出码 2
 //   node scripts/check-boundaries.mjs --root DIR 检查另一个目录（自测用）
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const args = process.argv.slice(2);
@@ -14,13 +14,6 @@ const root = args.includes('--root')
   : join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
-// ponytail: 正则剥注释与尾逗号，够用于 wrangler.jsonc；出现解析不了的写法再换 jsonc-parser
-const readJsonc = (p) =>
-  JSON.parse(
-    readFileSync(p, 'utf8')
-      .replace(/("(?:\\.|[^"\\])*")|\/\/.*|\/\*[\s\S]*?\*\//g, '$1')
-      .replace(/,(\s*[}\]])/g, '$1'),
-  );
 
 const B = readJson(join(root, 'boundaries.json'));
 const errors = [];
@@ -48,6 +41,8 @@ const sourceFiles = (dir) =>
         .map((e) => join(e.parentPath, e.name))
     : [];
 
+const sec = B.firebase?.security ?? {};
+
 for (const [ws, rule] of Object.entries(B.workspaces)) {
   const dir = join(root, ws);
 
@@ -68,31 +63,69 @@ for (const [ws, rule] of Object.entries(B.workspaces)) {
   report.push(`${ws.padEnd(20)} ${String(lines).padStart(5)} / ${rule.maxSourceLines} 行`);
   if (lines > rule.maxSourceLines) errors.push(`${ws}：src 共 ${lines} 行，超出预算 ${rule.maxSourceLines}。先删再加。`);
 
-  // 4. API 路由数
-  if (rule.maxApiRoutes != null) {
-    // ponytail: 按 Hono 的 .get('/…') 写法粗略计数；改用别的注册方式时这里要跟着改
-    const routes = texts.reduce((n, t) => n + (t.match(/\.(get|post|put|patch|delete|all|on)\(\s*['"`]\//g) ?? []).length, 0);
-    report.push(`${''.padEnd(20)} ${String(routes).padStart(5)} / ${rule.maxApiRoutes} 个路由`);
-    if (routes > rule.maxApiRoutes) errors.push(`${ws}：注册了 ${routes} 个路由，超出上限 ${rule.maxApiRoutes}（接口清单见 docs/LLD.md §4.4）`);
+  // 4. Cloud Functions 数量上限与 LLM Tool 防注入隔离检查
+  if (rule.maxCallableFunctions != null) {
+    // ponytail: 按 onCall( / onCallGenkit( / onRequest( 调用计数
+    const fnCount = texts.reduce((n, t) => n + (t.match(/\b(onCall|onCallGenkit|onRequest)\s*\(/g) ?? []).length, 0);
+    report.push(`${''.padEnd(20)} ${String(fnCount).padStart(5)} / ${rule.maxCallableFunctions} 个函数`);
+    if (fnCount > rule.maxCallableFunctions) {
+      errors.push(`${ws}：注册了 ${fnCount} 个 Cloud Functions，超出上限 ${rule.maxCallableFunctions}（清单见 docs/LLD.md §4.4）`);
+    }
+
+    if (sec.maxAstrologyTools != null) {
+      const toolCount = texts.reduce((n, t) => n + (t.match(/\bdefineTool\s*\(/g) ?? []).length, 0);
+      report.push(`${''.padEnd(20)} ${String(toolCount).padStart(5)} / ${sec.maxAstrologyTools} 个 AI Tool`);
+      if (toolCount > sec.maxAstrologyTools) {
+        errors.push(`${ws}：注册了 ${toolCount} 个 defineTool，超出上限 ${sec.maxAstrologyTools}（只允许 4 个排盘纯函数）`);
+      }
+    }
+
+    if (sec.forbidSideEffectsInTools) {
+      for (let i = 0; i < files.length; i++) {
+        const text = texts[i];
+        if (/\bdefineTool\s*\(/.test(text)) {
+          const rel = relative(root, files[i]);
+          if (/from\s+['"]firebase-admin|from\s+['"]stripe|\bfetch\s*\(/.test(text)) {
+            errors.push(`${rel}：定义 AI Tool 的文件严禁引入 firebase-admin / stripe 或调用 fetch（LLM 防注入零副作用边界，见 docs/LLD.md §4.6）`);
+          }
+        }
+      }
+    }
   }
 
-  // 5. wrangler 配置
-  if (existsSync(join(dir, 'wrangler.toml')) || existsSync(join(dir, 'wrangler.json'))) {
-    errors.push(`${ws}：只允许 wrangler.jsonc`);
-  }
-  const wr = join(dir, 'wrangler.jsonc');
-  if (existsSync(wr)) {
-    const cfg = readJsonc(wr);
-    for (const scope of [cfg, ...Object.values(cfg.env ?? {})]) {
-      for (const key of Object.keys(scope)) {
-        if (!B.wrangler.allowedKeys.includes(key)) errors.push(`${ws}/wrangler.jsonc：未批准的配置项 ${key}（新绑定或新平台能力）`);
-      }
-      if ((scope.d1_databases ?? []).length > B.wrangler.maxD1Databases) errors.push(`${ws}/wrangler.jsonc：D1 数据库超过 ${B.wrangler.maxD1Databases} 个`);
+  // 5. 禁止遗留的 wrangler 配置
+  for (const legacy of ['wrangler.toml', 'wrangler.json', 'wrangler.jsonc']) {
+    if (existsSync(join(dir, legacy))) {
+      errors.push(`${ws}：已迁移至 Firebase，不允许存在 ${legacy}`);
     }
   }
 }
 
-// 6. 排期（只提醒，不判失败）
+// 6. firebase.json 与 firestore.rules 安全检查
+const fbPath = join(root, 'firebase.json');
+if (existsSync(fbPath) && B.firebase) {
+  const fb = readJson(fbPath);
+  for (const key of Object.keys(fb)) {
+    if (!B.firebase.allowedTopKeys.includes(key)) {
+      errors.push(`firebase.json：未批准的顶层配置项 ${key}（新平台能力需先审批）`);
+    }
+  }
+  if (fb.firestore?.location && fb.firestore.location !== B.firebase.region) {
+    errors.push(`firebase.json：Firestore 区域必须为 ${B.firebase.region}，当前为 ${fb.firestore.location}`);
+  }
+}
+
+const rulesPath = join(root, 'firestore.rules');
+if (!existsSync(rulesPath)) {
+  errors.push('缺少 firestore.rules 文件');
+} else if (sec.forbidOpenFirestoreWrites) {
+  const rulesText = readFileSync(rulesPath, 'utf8');
+  if (/allow\s+([^;]*\bwrite\b[^;]*):\s*if\s+true\s*;/.test(rulesText)) {
+    errors.push('firestore.rules：严禁出现无条件开放写权限（allow write: if true）');
+  }
+}
+
+// 7. 排期（只提醒，不判失败）
 const today = new Date().toISOString().slice(0, 10);
 const open = B.schedule.phases.filter((p) => !p.done);
 const overdue = open.filter((p) => p.deadline < today);

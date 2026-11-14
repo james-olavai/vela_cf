@@ -1,0 +1,79 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // 商品目录：客户端只读已上架商品，禁止客户端写入
+    match /products/{slug} {
+      allow read: if resource.data.isPublished == true;
+      allow write: if false;
+    }
+
+    // 城市缓存：仅服务端读写
+    match /locations_cache/{queryKey} {
+      allow read, write: if false;
+    }
+
+    // 配额：客户端本人只读，仅服务端事务写
+    match /usage/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
+    // 用户主文档与子集合
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'acceptedTermsAt', 'confirmedAdultAt', 'createdAt']);
+      allow delete: if false;
+
+      // 出生档案：本人可增删改查
+      match /profiles/{profileId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 64
+          && request.resource.data.birthDateTime is string
+          && request.resource.data.latitude is number
+          && request.resource.data.longitude is number
+          && request.resource.data.timezone is string
+          && request.resource.data.gender in ['male', 'female'];
+      }
+
+      // 会话：本人可读、可删；创建与更新由服务端控制以冻结配置
+      match /sessions/{sessionId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if false;
+
+        // 消息：本人只读，仅服务端写入
+        match /messages/{messageId} {
+          allow read: if isOwner(uid);
+          allow write: if false;
+        }
+      }
+    }
+
+    // Run Payments with Stripe 扩展集合
+    match /customers/{uid} {
+      allow read: if isOwner(uid);
+
+      match /checkout_sessions/{id} {
+        allow read, create: if isOwner(uid);
+      }
+      match /subscriptions/{id} {
+        allow read: if isOwner(uid);
+      }
+      match /payments/{id} {
+        allow read: if isOwner(uid);
+      }
+    }
+  }
+}

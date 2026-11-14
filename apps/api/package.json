@@ -3,29 +3,30 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": "22"
+  },
   "scripts": {
-    "dev": "wrangler dev --port 8787",
-    "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate"
+    "build": "tsc",
+    "dev": "npx firebase-tools emulators:start --only functions,firestore,auth",
+    "deploy": "npx firebase-tools deploy --only functions,firestore",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/google": "^4.0.120",
-    "@ai-sdk/openai-compatible": "^3.0.92",
-    "@better-auth/stripe": "^1.7.23",
+    "@genkit-ai/firebase": "^1.0.0",
+    "@genkit-ai/google-genai": "^1.0.0",
+    "@genkit-ai/vertexai": "^1.0.0",
     "@vela-cf/astrology": "*",
     "@vela-cf/shared": "*",
-    "ai": "^7.0.172",
-    "better-auth": "^1.7.23",
-    "drizzle-orm": "^0.45.4",
-    "hono": "^4.13.18",
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0",
+    "genkit": "^1.0.0",
     "stripe": "^23.1.0",
     "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261113.1",
-    "drizzle-kit": "^0.31.11",
-    "typescript": "^7.0.2",
-    "wrangler": "^4.161.0"
+    "@types/node": "^22.0.0",
+    "typescript": "^7.0.2"
   }
 }

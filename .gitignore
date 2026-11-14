@@ -1,7 +1,10 @@
 node_modules/
-.wrangler/
 dist/
-.dev.vars
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
 .env
+.env.local
 *.log
 .DS_Store
