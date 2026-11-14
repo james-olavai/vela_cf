@@ -740,7 +740,7 @@ export function WorkbenchPage({
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center px-4 pb-10">
             <h1 className="m-0 mb-6 font-serif-sc text-[28px] sm:text-[34px] font-bold text-[#f8fafc] text-center">
-              你好，想从哪颗星开始聊？
+              此刻最在意什么？
             </h1>
             {renderComposer()}
           </div>
