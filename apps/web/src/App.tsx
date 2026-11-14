@@ -65,6 +65,24 @@ export function App() {
       }
     };
 
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('e2e') === '1') {
+      const qs = new URLSearchParams(window.location.search);
+      const parsedTier = TierSchema.safeParse(qs.get('tier'));
+      const e2eTier: Tier = parsedTier.success ? parsedTier.data : 'pro';
+      const e2eUsed = Number(qs.get('used') ?? 0) || 0;
+      setUser({
+        uid: 'e2e_test_user',
+        email: 'e2e@vela.local',
+        displayName: 'E2E 测试用户',
+        photoURL: null,
+      } as unknown as User);
+      setTier(e2eTier);
+      setUsage({ periodStart: utcMonthPeriodStart(), used: e2eUsed });
+      unsubProfiles = subscribeProfiles('e2e_test_user', setProfiles);
+      setAuthReady(true);
+      return cleanupSubs;
+    }
+
     const unsubAuth = onIdTokenChanged(auth, async (nextUser) => {
       cleanupSubs();
 

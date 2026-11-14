@@ -113,10 +113,33 @@ export async function ensureUserRecord(
   }
 }
 
+const E2E_PROFILES_KEY = 'vela_e2e_profiles_v1';
+const E2E_PROFILES_EVENT = 'vela-e2e-profiles-updated';
+
+function readE2eProfiles(): ProfileRecord[] {
+  try {
+    const raw = localStorage.getItem(E2E_PROFILES_KEY);
+    return raw ? (JSON.parse(raw) as ProfileRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeE2eProfiles(list: ProfileRecord[]): void {
+  localStorage.setItem(E2E_PROFILES_KEY, JSON.stringify(list));
+  window.dispatchEvent(new Event(E2E_PROFILES_EVENT));
+}
+
 export function subscribeProfiles(
   uid: string,
   onData: (profiles: ProfileRecord[]) => void,
 ): () => void {
+  if (import.meta.env.DEV && uid === 'e2e_test_user') {
+    const emit = () => onData(readE2eProfiles());
+    emit();
+    window.addEventListener(E2E_PROFILES_EVENT, emit);
+    return () => window.removeEventListener(E2E_PROFILES_EVENT, emit);
+  }
   const path = `users/${uid}/profiles`;
   return onSnapshot(
     collection(db, 'users', uid, 'profiles'),
@@ -156,6 +179,9 @@ export function subscribeMessages(
   sessionId: string,
   onData: (messages: MessageRecord[]) => void,
 ): () => void {
+  if (import.meta.env.DEV && uid === 'e2e_test_user') {
+    return () => {};
+  }
   const path = `users/${uid}/sessions/${sessionId}/messages`;
   const q = query(
     collection(db, 'users', uid, 'sessions', sessionId, 'messages'),
@@ -219,6 +245,21 @@ export async function saveProfile(
     updatedAt: now,
   };
 
+  if (import.meta.env.DEV && uid === 'e2e_test_user') {
+    const list = readE2eProfiles();
+    const id = profileId ?? `e2e_p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
+    const nextRecord: ProfileRecord = {
+      id,
+      ...payload,
+      createdAt: profileId ? list.find((p) => p.id === profileId)?.createdAt ?? now : now,
+    };
+    const nextList = profileId
+      ? list.map((p) => (p.id === profileId ? nextRecord : p))
+      : [...list, nextRecord];
+    writeE2eProfiles(nextList);
+    return id;
+  }
+
   if (profileId) {
     const path = `users/${uid}/profiles/${profileId}`;
     try {
@@ -242,6 +283,10 @@ export async function saveProfile(
 }
 
 export async function removeProfile(uid: string, profileId: string): Promise<void> {
+  if (import.meta.env.DEV && uid === 'e2e_test_user') {
+    writeE2eProfiles(readE2eProfiles().filter((p) => p.id !== profileId));
+    return;
+  }
   const path = `users/${uid}/profiles/${profileId}`;
   try {
     await deleteDoc(doc(db, 'users', uid, 'profiles', profileId));
@@ -307,6 +352,23 @@ export async function createConsultationSession(
   mode: ConsultationMode,
   profiles: ProfileRecord[],
 ): Promise<SessionRecord> {
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('e2e') === '1') {
+    const now = new Date().toISOString();
+    const names = profiles.map((p) => p.name).join(' × ');
+    return {
+      id: `e2e_s_${Date.now().toString(36)}`,
+      mode,
+      profileIds: profiles.map((p) => p.id),
+      profileId: profiles[0].id,
+      profileName: names,
+      title: profiles.length >= 2 ? `合盘 · ${names}` : names,
+      frozenPrompt: 'e2e',
+      frozenModel: 'vertexai/gemini-4-hydrogen',
+      frozenTools: ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces', 'synastryAspects'],
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
   const fn = httpsCallable<
     { mode: ConsultationMode; profileIds: string[] },
     { sessionId: string; session: SessionRecord }
@@ -390,6 +452,62 @@ export async function streamConsultationReply(params: {
   };
 
   try {
+    if (import.meta.env.DEV && uid === 'e2e_test_user') {
+      const resp = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal,
+        body: JSON.stringify({
+          tier,
+          mode: session.mode,
+          profiles,
+          message: userText,
+          history: existingMessages.map((m) => ({
+            role: m.role,
+            text: m.parts
+              .filter((p): p is Extract<MessagePart, { type: 'text' }> => p.type === 'text')
+              .map((p) => p.text)
+              .join('\n'),
+          })),
+        }),
+      });
+      if (!resp.ok || !resp.body) throw new Error('E2E chat request failed');
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let currentEvent = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            currentEvent = line.slice(6).trim();
+          } else if (line.startsWith('data:')) {
+            const payload = JSON.parse(line.slice(5).trim()) as Record<string, unknown>;
+            if (currentEvent === 'tool' && payload.toolName) {
+              toolParts.push({
+                type: 'tool-call',
+                toolName: String(payload.toolName) as AstrologyToolName,
+                label: String(payload.label ?? payload.toolName),
+              });
+              updateAssistant();
+            } else if (currentEvent === 'chart') {
+              onUpdateChart(payload as unknown as ChartSnapshot);
+            } else if (currentEvent === 'delta' && payload.text) {
+              fullText += String(payload.text);
+              updateAssistant();
+            } else if (currentEvent === 'done') {
+              updateAssistant(Array.isArray(payload.suggestions) ? (payload.suggestions as string[]) : []);
+            }
+          }
+        }
+      }
+      return;
+    }
+
     const callable = httpsCallable<
       { sessionId: string; message: string },
       { text: string; suggestions?: string[] },
