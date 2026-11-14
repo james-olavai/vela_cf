@@ -90,7 +90,7 @@
     "对外 Remote MCP 服务",
     "Cloud SQL / Data Connect、Cloud Storage、Pub/Sub、Cloud Tasks、定时任务",
     "Langfuse、PostHog 等非 Google 原生分析/埋点 SDK",
-    "邮箱验证码或密码登录",
+    "第三方社交与开发者平台 SSO（GitHub / Discord / Microsoft / X (Twitter)）",
     "前端路由库、状态管理库、组件库",
     "第三方测试框架（统一用 node:test 与 Firebase Emulator）",
     "i18n"

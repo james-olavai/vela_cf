@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "yhvhchen-387212"
+  },
+  "targets": {},
+  "etags": {
+    "yhvhchen-387212": {
+      "extensionInstances": {
+        "delete-user-data": "94a5ae4a6432ce92fdbb4910c371ec601668e9ec1da8fac111f0a3765ef0b66b"
+      }
+    }
   }
 }

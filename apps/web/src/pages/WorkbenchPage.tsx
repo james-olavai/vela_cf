@@ -73,21 +73,23 @@ interface WorkbenchPageProps {
 }
 
 function renderFormattedText(text: string) {
-  const paragraphs = text.split(/\n{2,}/);
-  return paragraphs.map((para, pIdx) => {
-    const tokens = para.split(/(\*\*[^*]+\*\*)/g);
+  return text.split(/\n{2,}/).map(( rawPara, pIdx) => {
+    const para = rawPara.trim();
+    if (/^-{3,}$/.test(para)) return <hr key={pIdx} className="my-3 border-0 border-t border-[#26304d]" />;
+    const headingMatch = para.match(/^(#{1,4})\s+(.+)$/);
+    if (headingMatch) {
+      return <h3 key={pIdx} className="m-0 mt-4 mb-2 font-serif-sc text-[17px] font-bold text-[#f7d57f]">{headingMatch[2].replace(/\*\*/g, '')}</h3>;
+    }
+    const cleaned = para.replace(/^#{1,4}\s+/gm, '');
     return (
       <p key={pIdx} className="m-0 mb-3 last:mb-0 text-[15.5px] leading-[1.85] text-[#e8edf6] whitespace-pre-wrap">
-        {tokens.map((tok, tIdx) => {
-          if (tok.startsWith('**') && tok.endsWith('**')) {
-            return (
-              <strong key={tIdx} className="font-semibold text-[#f7d57f]">
-                {tok.slice(2, -2)}
-              </strong>
-            );
-          }
-          return <span key={tIdx}>{tok}</span>;
-        })}
+        {cleaned.split(/(\*\*[^*]+\*\*)/g).map((tok, tIdx) =>
+          tok.startsWith('**') && tok.endsWith('**') ? (
+            <strong key={tIdx} className="font-semibold text-[#f7d57f]">{tok.slice(2, -2)}</strong>
+          ) : (
+            <span key={tIdx}>{tok}</span>
+          ),
+        )}
       </p>
     );
   });
@@ -499,9 +501,9 @@ export function WorkbenchPage({
         <div className="pb-3 flex flex-col items-center">
           <button
             type="button"
-            onClick={() => { setSettingsTab('subscription'); setSettingsOpen(true); }}
-            title={`${displayName} · ${TIER_META[tier].label}`}
-            aria-label={`账号与订阅：${displayName}`}
+            onClick={() => (uid ? (setSettingsTab('subscription'), setSettingsOpen(true)) : requestAuthWithDrafts())}
+            title={uid ? `${displayName} · ${TIER_META[tier].label}` : '登录 / 注册账号'}
+            aria-label={uid ? `账号与订阅：${displayName}` : '登录 / 注册账号'}
             className="w-10 h-10 rounded-full border-0 bg-transparent hover:bg-[#101527] flex items-center justify-center cursor-pointer"
           >
             {renderAvatar()}
@@ -550,30 +552,20 @@ export function WorkbenchPage({
       <div className="px-3 pb-2 flex flex-col gap-2">
         <button
           type="button"
-          onClick={() => {
-            onSelectSession(null);
-            setSidebarOpen(false);
-          }}
+          onClick={() => { onSelectSession(null); setSidebarOpen(false); }}
           className="w-full min-h-[40px] px-3 rounded-[20px] border border-[#26304d] bg-[#161d33] hover:border-[#e0b64a] text-[#f8fafc] text-[13.5px] font-medium flex items-center justify-center gap-2 cursor-pointer"
         >
-          <span className="text-[#c3cde0] flex items-center">
-            <IconSquarePen size={18} />
-          </span>
+          <span className="text-[#c3cde0] flex items-center"><IconSquarePen size={18} /></span>
           <span>新咨询</span>
         </button>
 
         <button
           type="button"
           disabled={needsMoreProfiles}
-          onClick={() => {
-            setPortraitOpen(true);
-            setSidebarOpen(false);
-          }}
+          onClick={() => { setPortraitOpen(true); setSidebarOpen(false); }}
           className="w-full px-3 py-2.5 rounded-[12px] border border-[#26304d] bg-[#0e1426] hover:border-[#e0b64a] disabled:opacity-45 disabled:hover:border-[#26304d] disabled:cursor-not-allowed text-left flex items-center gap-2.5 cursor-pointer transition-colors"
         >
-          <span className="text-[#e0b64a] shrink-0 flex items-center">
-            <IconSparkles size={18} />
-          </span>
+          <span className="text-[#e0b64a] shrink-0 flex items-center"><IconSparkles size={18} /></span>
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-medium text-[#f8fafc]">个人星盘画像</div>
             <div className="text-[11px] text-[#9aa8c7] truncate">
@@ -602,16 +594,30 @@ export function WorkbenchPage({
         <button
           type="button"
           onClick={() => {
+            if (!uid) {
+              setSidebarOpen(false);
+              requestAuthWithDrafts();
+              return;
+            }
             setSettingsTab('subscription');
             setSettingsOpen(true);
           }}
           className="w-full flex items-center gap-2.5 min-w-0 p-1.5 rounded-[10px] border-0 bg-transparent hover:bg-[#161d33] text-left cursor-pointer"
         >
           {renderAvatar()}
-          <div className="min-w-0 flex flex-col">
-            <span className="text-[13px] font-medium text-[#f8fafc] truncate">{displayName}</span>
-            <span className="text-[11px] text-[#a3b0c5]">{TIER_META[tier].label}</span>
+          <div className="min-w-0 flex-1 flex flex-col">
+            <span className="text-[13px] font-medium text-[#f8fafc] truncate">
+              {uid ? displayName : '登录 / 注册账号'}
+            </span>
+            <span className="text-[11px] text-[#a3b0c5] truncate">
+              {uid ? TIER_META[tier].label : '同步已有档案与历史对话'}
+            </span>
           </div>
+          {!uid && (
+            <span className="px-2 py-0.5 rounded-[6px] bg-[#e0b64a] text-[#1a1405] text-[11px] font-bold shrink-0">
+              登录
+            </span>
+          )}
         </button>
       </div>
     </div>
@@ -808,10 +814,7 @@ export function WorkbenchPage({
               {(tier === 'free' || quotaNearLimit || quotaExhausted) &&
                 (effectiveUsage.shareCount ?? 0) < 3 &&
                 effectiveUsage.lastShareDate !== new Date().toISOString().slice(0, 10) && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#e0b64a]"
-                  />
+                  <span aria-hidden="true" className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#e0b64a]" />
                 )}
             </button>
           )}
@@ -986,10 +989,7 @@ export function WorkbenchPage({
         open={historySearchOpen}
         sessions={sessions}
         activeSessionId={activeSession?.id ?? null}
-        onSelectSession={(sid) => {
-          onSelectSession(sid);
-          setSidebarOpen(false);
-        }}
+        onSelectSession={(sid) => { onSelectSession(sid); setSidebarOpen(false); }}
         onClose={() => setHistorySearchOpen(false)}
       />
 
@@ -1003,10 +1003,7 @@ export function WorkbenchPage({
         profiles={effectiveProfiles}
         onClose={() => setSettingsOpen(false)}
         onSignOut={onSignOut}
-        onRequireLogin={() => {
-          setSettingsOpen(false);
-          requestAuthWithDrafts();
-        }}
+        onRequireLogin={() => { setSettingsOpen(false); requestAuthWithDrafts(); }}
       />
 
       <NatalPortraitModal
@@ -1027,10 +1024,7 @@ export function WorkbenchPage({
           chart={chart}
           onClose={() => setShareModalOpen(false)}
           onClaimed={(next) => setUsageOverride(next)}
-          onOpenUpgrade={() => {
-            setSettingsTab('subscription');
-            setSettingsOpen(true);
-          }}
+          onOpenUpgrade={() => { setSettingsTab('subscription'); setSettingsOpen(true); }}
         />
       )}
     </div>

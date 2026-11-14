@@ -29,6 +29,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run typecheck
+      - run: npm test
       - run: npm --workspace apps/web run build
       - run: npm --workspace apps/api run build
 

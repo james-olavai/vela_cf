@@ -11,7 +11,7 @@ import {
   type Tier,
   type UsageRecord,
 } from '@vela-cf/shared';
-import { updateAnalyticsConsent } from '../lib/firebase';
+import { auth, updateAnalyticsConsent } from '../lib/firebase';
 import {
   createStripeCheckout,
   createStripePortal,
@@ -500,7 +500,11 @@ export function SettingsModal({
                   <div className="p-4 rounded-[12px] border border-[#26304d] bg-[#161d33] flex items-center justify-between gap-4">
                     <div>
                       <p className="m-0 text-[14px] font-bold text-[#f8fafc]">{email}</p>
-                      <p className="m-0 text-[12px] text-[#a3b0c5]">Google 账号登录</p>
+                      <p className="m-0 text-[12px] text-[#a3b0c5]">
+                        {auth.currentUser?.providerData.some((p) => p.providerId === 'google.com')
+                          ? 'Google 账号登录'
+                          : '邮箱账号登录'}
+                      </p>
                     </div>
                     <button
                       type="button"

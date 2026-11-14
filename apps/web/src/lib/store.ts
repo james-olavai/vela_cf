@@ -545,6 +545,7 @@ export async function streamConsultationReply(params: {
         body: JSON.stringify({
           tier,
           mode: session.mode,
+          depth,
           profiles,
           message: userText,
           history: baseMessages.map((m) => ({
@@ -714,6 +715,24 @@ export async function createStripePortal(): Promise<string | null> {
 export function formatAppError(err: unknown, fallback: string): string {
   const code = (err as { code?: string })?.code ?? '';
   const msg = err instanceof Error ? err.message : String(err ?? '');
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+    return '邮箱或密码错误，若尚未注册请切换至「注册账号」';
+  }
+  if (code === 'auth/email-already-in-use') {
+    return '该邮箱已注册，请直接切换至「邮箱登录」';
+  }
+  if (code === 'auth/weak-password') {
+    return '密码强度不足，请设置至少 6 位字符';
+  }
+  if (code === 'auth/invalid-email') {
+    return '邮箱格式不正确，请检查后重试';
+  }
+  if (code === 'auth/operation-not-allowed') {
+    return '当前未在 Firebase 控制台开启邮箱登录，请前往 Authentication → Sign-in method 启用 Email/Password';
+  }
+  if (code === 'auth/too-many-requests') {
+    return '尝试次数过多，请稍后再试或重置密码';
+  }
   if (code === 'functions/unauthenticated' || msg.includes('AUTH_REQUIRED')) {
     return '登录状态已失效，请重新登录后重试';
   }

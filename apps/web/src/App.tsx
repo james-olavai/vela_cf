@@ -1,5 +1,16 @@
 import { useEffect, useState } from 'react';
-import { onIdTokenChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
+import {
+  createUserWithEmailAndPassword,
+  isSignInWithEmailLink,
+  onIdTokenChanged,
+  sendPasswordResetEmail,
+  sendSignInLinkToEmail,
+  signInWithEmailAndPassword,
+  signInWithEmailLink,
+  signInWithPopup,
+  signOut,
+  type User,
+} from 'firebase/auth';
 import {
   TierSchema,
   type ConsultationMode,
@@ -9,7 +20,7 @@ import {
   type UsageRecord,
   utcMonthPeriodStart,
 } from '@vela-cf/shared';
-import { AuthGateModal } from './components/AuthGateModal';
+import { AuthGateModal, type EmailAuthMode } from './components/AuthGateModal';
 import { auth, googleProvider, initAnalyticsConsent } from './lib/firebase';
 import { navigate, usePathname } from './lib/router';
 import {
@@ -24,6 +35,9 @@ import {
 } from './lib/store';
 import { LegalPage } from './pages/LegalPage';
 import { WorkbenchPage, type PendingHandoff } from './pages/WorkbenchPage';
+
+const MAGIC_EMAIL_KEY = 'vela_magic_link_email';
+const MAGIC_HANDOFF_KEY = 'vela_magic_link_handoff';
 
 export function App() {
   const pathname = usePathname();
@@ -40,10 +54,63 @@ export function App() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [pendingHandoff, setPendingHandoff] = useState<PendingHandoff | null>(null);
+
+  const finalizePostLogin = async (loggedUser: User, handoff: PendingHandoff | null) => {
+    const uid = loggedUser.uid;
+    await ensureUserRecord(uid, loggedUser.email ?? '', loggedUser.displayName ?? '');
+
+    if (handoff) {
+      const now = new Date().toISOString();
+      const savedProfiles: ProfileRecord[] = [];
+      for (const dp of handoff.draftProfiles) {
+        const savedId = await saveProfile(uid, null, dp);
+        savedProfiles.push({
+          ...dp,
+          id: savedId,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      if (handoff.chart && savedProfiles[0]) {
+        saveCachedChart(uid, savedProfiles[0].id, handoff.chart);
+      }
+      if (handoff.question && savedProfiles.length > 0) {
+        const chosen = handoff.selectedIndices
+          .map((idx) => savedProfiles[idx])
+          .filter(Boolean);
+        const session = await createConsultationSession(
+          handoff.mode,
+          chosen.length > 0 ? chosen : [savedProfiles[0]],
+        );
+        setSessions((prev) => (prev.some((s) => s.id === session.id) ? prev : [session, ...prev]));
+        navigate(`/consult/${session.id}`);
+      } else {
+        setPendingHandoff(null);
+      }
+    }
+    setAuthModalOpen(false);
+  };
 
   useEffect(() => {
     void initAnalyticsConsent();
+    if (typeof window !== 'undefined' && isSignInWithEmailLink(auth, window.location.href)) {
+      const savedEmail = window.localStorage.getItem(MAGIC_EMAIL_KEY);
+      if (savedEmail) {
+        void signInWithEmailLink(auth, savedEmail, window.location.href)
+          .then(async (cred) => {
+            window.localStorage.removeItem(MAGIC_EMAIL_KEY);
+            const rawHandoff = window.localStorage.getItem(MAGIC_HANDOFF_KEY);
+            window.localStorage.removeItem(MAGIC_HANDOFF_KEY);
+            const restored = rawHandoff ? (JSON.parse(rawHandoff) as PendingHandoff) : null;
+            if (restored) setPendingHandoff(restored);
+            window.history.replaceState({}, '', window.location.pathname);
+            await finalizePostLogin(cred.user, restored);
+          })
+          .catch(() => undefined);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -120,43 +187,55 @@ export function App() {
   const handleConfirmGoogleLogin = async () => {
     setAuthBusy(true);
     setAuthError(null);
+    setAuthNotice(null);
     try {
       const cred = await signInWithPopup(auth, googleProvider);
-      const uid = cred.user.uid;
-      await ensureUserRecord(uid, cred.user.email ?? '', cred.user.displayName ?? '');
-
-      if (pendingHandoff) {
-        const now = new Date().toISOString();
-        const savedProfiles: ProfileRecord[] = [];
-        for (const dp of pendingHandoff.draftProfiles) {
-          const savedId = await saveProfile(uid, null, dp);
-          savedProfiles.push({
-            ...dp,
-            id: savedId,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-        if (pendingHandoff.chart && savedProfiles[0]) {
-          saveCachedChart(uid, savedProfiles[0].id, pendingHandoff.chart);
-        }
-        if (pendingHandoff.question && savedProfiles.length > 0) {
-          const chosen = pendingHandoff.selectedIndices
-            .map((idx) => savedProfiles[idx])
-            .filter(Boolean);
-          const session = await createConsultationSession(
-            pendingHandoff.mode,
-            chosen.length > 0 ? chosen : [savedProfiles[0]],
-          );
-          setSessions((prev) => (prev.some((s) => s.id === session.id) ? prev : [session, ...prev]));
-          navigate(`/consult/${session.id}`);
-        } else {
-          setPendingHandoff(null);
-        }
-      }
-      setAuthModalOpen(false);
+      await finalizePostLogin(cred.user, pendingHandoff);
     } catch (err) {
       setAuthError(formatAppError(err, 'Google 登录失败，请重试'));
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleEmailAuth = async (mode: EmailAuthMode, email: string, password: string) => {
+    setAuthBusy(true);
+    setAuthError(null);
+    setAuthNotice(null);
+    try {
+      if (mode === 'magic') {
+        window.localStorage.setItem(MAGIC_EMAIL_KEY, email);
+        if (pendingHandoff) {
+          window.localStorage.setItem(MAGIC_HANDOFF_KEY, JSON.stringify(pendingHandoff));
+        }
+        await sendSignInLinkToEmail(auth, email, {
+          url: window.location.origin,
+          handleCodeInApp: true,
+        });
+        setAuthNotice(`免密登录链接已发送至 ${email}，请查收邮件点击链接完成登录。`);
+        return;
+      }
+      const cred =
+        mode === 'register'
+          ? await createUserWithEmailAndPassword(auth, email, password)
+          : await signInWithEmailAndPassword(auth, email, password);
+      await finalizePostLogin(cred.user, pendingHandoff);
+    } catch (err) {
+      setAuthError(formatAppError(err, '邮箱认证失败，请重试'));
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleResetPassword = async (email: string) => {
+    setAuthBusy(true);
+    setAuthError(null);
+    setAuthNotice(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setAuthNotice(`密码重置邮件已发送至 ${email}，请查收并重置密码。`);
+    } catch (err) {
+      setAuthError(formatAppError(err, '发送重置邮件失败，请检查邮箱地址'));
     } finally {
       setAuthBusy(false);
     }
@@ -216,6 +295,7 @@ export function App() {
         onRequireAuth={(handoff) => {
           setPendingHandoff(handoff);
           setAuthError(null);
+          setAuthNotice(null);
           setAuthModalOpen(true);
         }}
         onStartSession={handleStartSession}
@@ -227,8 +307,11 @@ export function App() {
         open={authModalOpen}
         busy={authBusy}
         error={authError}
+        notice={authNotice}
         pendingQuestion={pendingHandoff?.question}
         onConfirmLogin={() => void handleConfirmGoogleLogin()}
+        onEmailAuth={(mode, email, password) => void handleEmailAuth(mode, email, password)}
+        onResetPassword={(email) => void handleResetPassword(email)}
         onClose={() => {
           setAuthModalOpen(false);
           setPendingHandoff(null);

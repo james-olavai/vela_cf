@@ -157,10 +157,10 @@ export function routeTurnCapabilities(params: {
   const selected = new Set<AstrologyToolName>();
   if (wantsSynastry) pick(['synastryAspects', 'compositeChart', 'davisonChart'], selected);
   if (wantsCompany) pick(['companyTenthHouse', 'natalWheel'], selected);
-  if (wantsTransit) pick(['transitEvents', 'solarReturn', 'lunarReturn', 'secondaryProgression', 'solarArc', 'energyCalendar', 'transitSnapshot', 'planetaryReturn'], selected);
-  if (wantsEastern) pick(['baziPillars', 'baziDayun', 'baziLiunian', 'ziweiPalaces', 'ziweiDaxian', 'ziweiLiunian'], selected);
   if (wantsClassical) pick(['firdaria', 'profection', 'zodiacalReleasing', 'arabicLots'], selected);
-  if (wantsAdvanced) pick(['relocationChart', 'draconicChart', 'harmonicChart', 'antisciaPoints', 'siderealChart', 'heliocentricChart', 'fixedStars', 'midpointTree', 'localSpace', 'tertiaryProgression', 'minorProgression'], selected);
+  if (wantsAdvanced) pick(['draconicChart', 'relocationChart', 'harmonicChart', 'antisciaPoints', 'siderealChart', 'heliocentricChart', 'fixedStars', 'midpointTree', 'localSpace', 'tertiaryProgression', 'minorProgression'], selected);
+  if (wantsEastern) pick(['baziPillars', 'baziDayun', 'baziLiunian', 'ziweiPalaces', 'ziweiDaxian', 'ziweiLiunian'], selected);
+  if (wantsTransit) pick(['transitEvents', 'solarReturn', 'lunarReturn', 'secondaryProgression', 'solarArc', 'energyCalendar', 'transitSnapshot', 'planetaryReturn'], selected);
 
   if (selected.size === 0 || (tier === 'pro' && depth === 'deep' && profileCount === 1)) {
     pick(['natalWheel'], selected);

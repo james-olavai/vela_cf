@@ -6,6 +6,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
+    "test": "node --import 'data:text/javascript,import{register}from\"node:module\";register(\"data:text/javascript,export async function resolve(s,c,n){try{return await n(s,c)}catch(e){if(s.endsWith(\\\".js\\\"))return n(s.slice(0,-3)+\\\".ts\\\",c);throw e}}\");' --test src/astrology.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -13,6 +13,8 @@
     "dev:api": "npm --workspace=apps/api run dev",
     "lint": "npm run check && npm run typecheck",
     "preview": "npm --workspace=apps/web run preview",
+    "test": "node --import 'data:text/javascript,import{register}from\"node:module\";register(\"data:text/javascript,export async function resolve(s,c,n){try{return await n(s,c)}catch(e){if(s.endsWith(\\\".js\\\"))return n(s.slice(0,-3)+\\\".ts\\\",c);throw e}}\");' --test packages/astrology/src/astrology.test.ts",
+    "test:e2e": "node scripts/e2e-browser-deepseek.mjs",
     "typecheck": "npm --workspaces --if-present run typecheck",
     "deploy:api": "npm --workspace=apps/api run deploy"
   }

@@ -1,14 +1,37 @@
+import { existsSync, readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import {
-  baziPillars,
-  natalWheel,
-  synastryAspects,
-  transitEvents,
-  ziweiPalaces,
-} from '../../packages/astrology/src/index.ts';
+import * as astroAll from '../../packages/astrology/src/index.ts';
+import { ALL_34_TOOLS, routeTurnCapabilities, SKILL_CATALOG, type SkillKey } from '../api/src/skills.ts';
+
+const { baziPillars, natalWheel, synastryAspects, transitEvents, ziweiPalaces } = astroAll;
+
+function resolveDeepSeekConfig(): { apiKey: string; baseUrl: string; model: string } | null {
+  let apiKey = process.env.DEEPSEEK_API_KEY || '';
+  if (!apiKey) {
+    try {
+      const envPath = resolve(process.cwd(), '../../.env');
+      const altPath = resolve(process.cwd(), '.env');
+      const target = existsSync(envPath) ? envPath : existsSync(altPath) ? altPath : '';
+      if (target) {
+        const raw = readFileSync(target, 'utf8');
+        const m = raw.match(/^deepseek-api=(.+)$/m) || raw.match(/^DEEPSEEK_API_KEY=(.+)$/m);
+        if (m) apiKey = m[1].trim().replace(/^["']|["']$/g, '');
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!apiKey) return null;
+  return {
+    apiKey,
+    baseUrl: process.env.LLM_BASE_URL || 'https://api.deepseek.com/v1',
+    model: process.env.LLM_MODEL || 'deepseek-chat',
+  };
+}
 
 const FALLBACK_CITIES = [
   { displayName: '多伦多，安大略省，加拿大', latitude: 43.6532, longitude: -79.3832, timezone: 'America/Toronto', keys: ['toronto', '多伦多'] },
@@ -273,7 +296,8 @@ function velaApiPlugin(): Plugin {
           return;
         }
 
-        const tier = String(body.tier ?? 'free');
+        const tier = String(body.tier ?? 'free') as 'free' | 'go' | 'pro';
+        const depth = (body.depth as 'quick' | 'balanced' | 'deep' | undefined) ?? 'balanced';
         const mode = String(body.mode ?? 'personal');
         type ProfilePayload = {
           name: string;
@@ -337,9 +361,65 @@ function velaApiPlugin(): Plugin {
 
         sendSse(res, 'chart', { natal, transits, bazi, ziwei });
 
+        const routed = routeTurnCapabilities({
+          tier,
+          depth,
+          message,
+          profileCount: rawProfiles.length,
+          sessionAllowedTools: ALL_34_TOOLS,
+        });
+
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const executeExtraTool = (toolName: string, rawArgs: Record<string, unknown>) => {
+          if (toolName === 'loadSkillReference') {
+            const sk = String(rawArgs.skillKey || 'synthesis_master') as SkillKey;
+            const skill = SKILL_CATALOG[sk] ?? SKILL_CATALOG.synthesis_master;
+            return { label: `已加载技法规范：${skill.title}`, result: skill };
+          }
+          const base = {
+            birthDateTime: profile.birthDateTime,
+            latitude: profile.latitude,
+            longitude: profile.longitude,
+            timezone: profile.timezone,
+            gender: profile.gender === 'female' ? ('female' as const) : ('male' as const),
+          };
+          const fn = (astroAll as Record<string, unknown>)[toolName];
+          if (typeof fn !== 'function') return null;
+          try {
+            const merged = {
+              ...base,
+              targetYear: Number(todayIso.slice(0, 4)),
+              asOfDate: todayIso,
+              targetDate: todayIso,
+              atDateTime: `${todayIso}T12:00`,
+              atTimezone: 'UTC',
+              month: todayIso.slice(0, 7),
+              yearBoundary: 'lichun',
+              destLatitude: rawProfiles[1]?.latitude ?? 35.6762,
+              destLongitude: rawProfiles[1]?.longitude ?? 139.6503,
+              chartA: base,
+              chartB: rawProfiles[1]
+                ? {
+                    birthDateTime: rawProfiles[1].birthDateTime,
+                    latitude: rawProfiles[1].latitude,
+                    longitude: rawProfiles[1].longitude,
+                    timezone: rawProfiles[1].timezone,
+                  }
+                : base,
+              ...rawArgs,
+            };
+            const out = (fn as (arg: unknown) => unknown)(merged);
+            return { label: `已排盘：${toolName}`, result: out };
+          } catch {
+            return null;
+          }
+        };
+
         const apiKey = process.env.GEMINI_API_KEY;
+        const dsCfg = resolveDeepSeekConfig();
         const chartFacts = JSON.stringify({
           mode,
+          routedTools: routed.routedTools,
           profiles: rawProfiles.map((p) => ({
             name: p.name,
             entityType: p.entityType ?? 'person',
@@ -360,6 +440,172 @@ function velaApiPlugin(): Plugin {
         });
 
         let streamed = false;
+        if (dsCfg) {
+          try {
+            const toolDefs = [
+              ...routed.routedTools
+                .filter((t) => !['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces', 'synastryAspects'].includes(t))
+                .map((name) => ({
+                  type: 'function',
+                  function: {
+                    name,
+                    description: `调用占星/命理工具 ${name} 获取精确排盘数据`,
+                    parameters: { type: 'object', properties: {} },
+                  },
+                })),
+              ...(routed.enableSkillLoader
+                ? [
+                    {
+                      type: 'function',
+                      function: {
+                        name: 'loadSkillReference',
+                        description: '按需加载指定占星/命理技法的详细 Reference 框架',
+                        parameters: {
+                          type: 'object',
+                          properties: {
+                            skillKey: { type: 'string', enum: Object.keys(SKILL_CATALOG) },
+                          },
+                          required: ['skillKey'],
+                        },
+                      },
+                    },
+                  ]
+                : []),
+            ];
+
+            const sysPrompt = [
+              '你是 Vela 的占星与命理顾问。你的每一句解读都必须基于真实排盘事实，将引用的盘面事实用 **加粗** 标出，语言温和、清醒、有条理。',
+              routed.skillIndexPrompt,
+              '若本轮提供了附加工具（如 loadSkillReference、firdaria、draconicChart、companyTenthHouse、solarReturn 等），请先调用相关工具补充盘面维度后再给出综合解读。',
+              '你还可以在回复中嵌入一个 `:::vela-ui` JSON 块展示可视化评分卡（例如 `{"component":"synastry-meter","title":"能量维度评估","dimensions":[{"label":"核心驱力","score":85,"summary":"太阳与木星吉相"}]}`）。',
+              '在回复正文最后，另起一行输出 `SUGGESTIONS:` 后跟 2 个简短追问（用 `|` 分隔）。',
+              `基础排盘事实：\n${chartFacts}`,
+            ].join('\n');
+
+            const chatMsgs: Array<Record<string, unknown>> = [
+              { role: 'system', content: sysPrompt },
+              ...history.slice(-6).map((h) => ({ role: h.role === 'user' ? 'user' : 'assistant', content: h.text })),
+              { role: 'user', content: message },
+            ];
+
+            if (toolDefs.length > 0) {
+              for (let turn = 0; turn < 3; turn++) {
+                const turnResp = await fetch(`${dsCfg.baseUrl}/chat/completions`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${dsCfg.apiKey}`,
+                  },
+                  body: JSON.stringify({
+                    model: dsCfg.model,
+                    temperature: 0.3,
+                    max_tokens: 600,
+                    tools: toolDefs,
+                    tool_choice: 'auto',
+                    messages: chatMsgs,
+                  }),
+                });
+                if (!turnResp.ok) break;
+                const turnJson = (await turnResp.json()) as {
+                  choices?: Array<{
+                    message?: {
+                      role: string;
+                      content?: string | null;
+                      tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
+                    };
+                  }>;
+                };
+                const msgObj = turnJson.choices?.[0]?.message;
+                if (!msgObj?.tool_calls || msgObj.tool_calls.length === 0) {
+                  break;
+                }
+                chatMsgs.push(msgObj as Record<string, unknown>);
+                for (const tc of msgObj.tool_calls) {
+                  let parsedArgs: Record<string, unknown> = {};
+                  try {
+                    parsedArgs = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>;
+                  } catch {
+                    // ignore
+                  }
+                  const execRes = executeExtraTool(tc.function.name, parsedArgs);
+                  sendSse(res, 'tool', {
+                    toolName: tc.function.name,
+                    label: execRes?.label ?? `已调用：${tc.function.name}`,
+                  });
+                  chatMsgs.push({
+                    role: 'tool',
+                    tool_call_id: tc.id,
+                    content: JSON.stringify(execRes?.result ?? { ok: true }),
+                  });
+                }
+              }
+            }
+
+            const streamResp = await fetch(`${dsCfg.baseUrl}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${dsCfg.apiKey}`,
+              },
+              body: JSON.stringify({
+                model: dsCfg.model,
+                temperature: 0.4,
+                max_tokens: 1100,
+                tools: toolDefs.length > 0 ? toolDefs : undefined,
+                tool_choice: toolDefs.length > 0 ? 'none' : undefined,
+                stream: true,
+                messages: chatMsgs,
+              }),
+            });
+
+            if (streamResp.ok && streamResp.body) {
+              const reader = streamResp.body.getReader();
+              const decoder = new TextDecoder();
+              let buf = '';
+              let fullText = '';
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buf += decoder.decode(value, { stream: true });
+                const lines = buf.split('\n');
+                buf = lines.pop() ?? '';
+                for (const line of lines) {
+                  if (!line.startsWith('data:')) continue;
+                  const payload = line.slice(5).trim();
+                  if (!payload || payload === '[DONE]') continue;
+                  try {
+                    const parsed = JSON.parse(payload) as {
+                      choices?: Array<{ delta?: { content?: string } }>;
+                    };
+                    const delta = parsed.choices?.[0]?.delta?.content;
+                    if (delta) {
+                      streamed = true;
+                      fullText += delta;
+                      sendSse(res, 'delta', { text: delta });
+                    }
+                  } catch {
+                    // ignore partial line
+                  }
+                }
+              }
+              if (streamed) {
+                const match = fullText.match(/SUGGESTIONS:\s*(.+)$/s);
+                const suggestions = match
+                  ? match[1]
+                      .split('|')
+                      .map((s) => s.trim())
+                      .filter(Boolean)
+                      .slice(0, 3)
+                  : [];
+                sendSse(res, 'done', { suggestions });
+                res.end();
+                return;
+              }
+            }
+          } catch {
+            // fallback if network issue
+          }
+        }
         if (apiKey) {
           const systemText = [
             '你是 Vela 的占星与命理顾问。你的每一句解读都必须基于下方提供的真实排盘事实，将引用的盘面事实用 **加粗** 标出，语言温和、清醒、有条理，避免宿命论或医疗/法律/投资建议。',

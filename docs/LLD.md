@@ -16,7 +16,7 @@
 [用户浏览器]
    │
    ├─ 静态资源 ────────► Firebase Hosting（托管 apps/web 构建产物，SPA 回落）
-   ├─ 登录与鉴权 ──────► Firebase Auth（仅 Google OAuth，携带 stripeRole Custom Claim）
+   ├─ 登录与鉴权 ──────► Firebase Auth（Google OAuth + 邮箱密码/免密链接登录，携带 stripeRole Custom Claim）
    ├─ 站点分析 ────────► Firebase Analytics / GA4（含 Google Consent Mode v2，漏斗与转化统计）
    ├─ 实时/只读数据 ───► Cloud Firestore（客户端 SDK 按 Security Rules 直读本人档案/会话/消息/商品；写入去往 Checkout）
    └─ 流式对话与动作 ──► Cloud Functions 2nd gen (apps/api，region: asia-southeast1)
@@ -252,7 +252,7 @@ await db.runTransaction(async (tx) => {
 | 部分 | 处理 |
 | --- | --- |
 | UI 组件、样式、`@assistant-ui/react` 界面（非 admin 部分约 4200 行 TSX） | 保留；移除旧的 `R1*` 强耦合 props |
-| 登录与会话 | `firebase/auth`（`signInWithPopup` + `GoogleAuthProvider`），监听 `onIdTokenChanged` 获取 `stripeRole` |
+| 登录与会话 | `firebase/auth`（`signInWithPopup` Google OAuth + 邮箱密码/免密链接登录），监听 `onIdTokenChanged` 获取 `stripeRole` |
 | 档案、商品目录、会话列表、消息历史读取 | `firebase/firestore`（`onSnapshot` / `getDocs`），利用离线缓存与实时更新，省去手写 REST API 调用 |
 | 流式对话对接 | 使用 `@assistant-ui/react` 的 Custom / Local Runtime 包装 `httpsCallable(functions, 'chat').stream()` |
 | 订阅与账单管理 | 往 `customers/{uid}/checkout_sessions` 写文档触发 Stripe Checkout；调扩展 `createPortalLink` 打开 Customer Portal |
@@ -270,7 +270,7 @@ await db.runTransaction(async (tx) => {
 | Google Cloud Model Armor | 线上出现针对 System Prompt 的高频越狱/套词攻击 | 在 `chat` 入口挂载 Google Cloud Model Armor API（前 200 万 Token/月免费，超出 $0.10/M Tokens）做输入/输出双向扫描 |
 | 其余排盘技法 | 某个商品需要 | 从 `chart.py` / `astrology_methods.py` 移植到 `packages/astrology`，以对应黄金用例验收 |
 | 对外 Remote MCP | 有外部客户端（Claude / Cursor）要接入 | 新增第 6 个 `onRequest` 函数，用 `@genkit-ai/mcp` + 无状态 Streamable HTTP 包装 `packages/astrology` |
-| 邮箱登录 | 有相当比例用户没有 Google 账号 | 在 Firebase Auth 启用 Email Enumeration Protection 与邮箱链接/验证码登录 |
+| 第三方社交与开发者平台 SSO（GitHub / Discord / Microsoft / X (Twitter)） | Google + 邮箱登录外，出现明显的开发者/社群/企业单点登录需求 | 在对应第三方开发者后台申请 Client ID & Secret 填入 Firebase Auth，前端在 `AuthGateModal` 增加对应 `OAuthProvider` 按钮 |
 | `apps/web` 行数预算上调至 `5600`（原 `5000`）+ `qrcode` | 1:1 完整迁移旧 Vela 能量画像（含日历联动即时天象轮、洞察卡、元素特质、年度能量窗口）与带二维码分享海报 | 负责人批准后同步更新 `boundaries.json` |
 | 全量 34 个排盘工具 + `loadSkillReference`（`maxAstrologyTools: 35`） | 先补齐原 `vela` 全部 34 项占星/命理算法，再配合推演深度、智能路由与 Reference 渐进式披露 | `boundaries.json` 同步上调 `packages/astrology`、`packages/shared` 与 `apps/api` 行数与工具上限 |
 
