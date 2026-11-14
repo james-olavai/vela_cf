@@ -271,6 +271,7 @@ await db.runTransaction(async (tx) => {
 | 其余排盘技法 | 某个商品需要 | 从 `chart.py` / `astrology_methods.py` 移植到 `packages/astrology`，以对应黄金用例验收 |
 | 对外 Remote MCP | 有外部客户端（Claude / Cursor）要接入 | 新增第 6 个 `onRequest` 函数，用 `@genkit-ai/mcp` + 无状态 Streamable HTTP 包装 `packages/astrology` |
 | 邮箱登录 | 有相当比例用户没有 Google 账号 | 在 Firebase Auth 启用 Email Enumeration Protection 与邮箱链接/验证码登录 |
+| `apps/web` 行数预算上调至 `5600`（原 `5000`）+ `qrcode` | 1:1 完整迁移旧 Vela 能量画像（含日历联动即时天象轮、洞察卡、元素特质、年度能量窗口）与带二维码分享海报 | 负责人批准后同步更新 `boundaries.json` |
 
 ---
 

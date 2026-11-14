@@ -25,17 +25,19 @@
       ]
     },
     "apps/web": {
-      "maxSourceLines": 5000,
+      "maxSourceLines": 5600,
       "dependencies": [
         "@assistant-ui/react",
         "@assistant-ui/react-markdown",
         "@invertase/firestore-stripe-payments",
         "@tailwindcss/vite",
+        "@types/qrcode",
         "@types/react",
         "@types/react-dom",
         "@vela-cf/shared",
         "@vitejs/plugin-react",
         "firebase",
+        "qrcode",
         "react",
         "react-dom",
         "tailwindcss",

@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import type { ProfileRecord } from '@vela-cf/shared';
 import type { ChartPlanet, ChartSnapshot } from './store';
 
@@ -12,8 +13,10 @@ export interface PortraitSummary {
   sunSign: string;
   moonSign: string;
   ascSign: string;
+  epithet: string;
   archetype: string;
   insight: string;
+  elementTraits: string[];
   elements: { fire: number; earth: number; air: number; water: number };
   modalities: { cardinal: number; fixed: number; mutable: number };
   signEnergy: Array<{ sign: string; pct: number }>;
@@ -32,19 +35,26 @@ const AIR = new Set(['双子座', '天秤座', '水瓶座']);
 const CARDINAL = new Set(['白羊座', '巨蟹座', '天秤座', '摩羯座']);
 const FIXED = new Set(['金牛座', '狮子座', '天蝎座', '水瓶座']);
 
-const ARCHETYPES: Record<string, [string, string]> = {
-  白羊座: ['破晓先驱 · 赤焰行者', '直觉与行动力同步点燃，擅长在混沌中率先破局。'],
-  金牛座: ['大地筑梦 · 静水流深', '以笃定节奏沉淀价值，在真实质感中长出长期主义。'],
-  双子座: ['星辰信使 · 多维共鸣者', '思维灵动如风，善于把零散线索编织成清晰洞察。'],
-  巨蟹座: ['潮汐守望 · 温柔铠甲', '拥有极深的情感雷达，在守护与共情中凝聚内在力量。'],
-  狮子座: ['曜石恒星 · 炽光创造者', '天生带着舞台感与热忱，用真诚照亮身边人的坐标。'],
-  处女座: ['精密织星 · 秩序炼金师', '于细微处见真章，擅长把复杂现实打磨成优雅解法。'],
-  天秤座: ['风雅衡器 · 关系诗人', '敏锐捕捉美与分寸，在共振与平衡中建立深度连接。'],
-  天蝎座: ['深渊潜行 · 蜕变炼魂者', '目光穿透表象，越是关键转折越能展现破茧定力。'],
-  射手座: ['远方旅人 · 真理追光者', '心向辽阔边界，用探索与信念把当下活成旷野。'],
-  摩羯座: ['山巅行者 · 时间雕塑家', '冷静而坚韧，懂得把宏大愿景拆解成步步兑现的阶梯。'],
-  水瓶座: ['星际观测者 · 未来解码人', '不被常规框架束缚，总能以独立视角看见下一程风向。'],
-  双鱼座: ['梦境潮汐 · 灵性共鸣体', '想像力与直觉无界流动，在感知万象中沉淀温柔智慧。'],
+const ELEMENT_TRAITS: Record<string, string> = {
+  fire: '行动派 · 直觉爆发的开拓者',
+  earth: '实干家 · 慢热却稳定的建设者',
+  air: '思想者 · 心智灵活的社交引导者',
+  water: '感知者 · 共情细腻的情绪调频者',
+};
+
+const ARCHETYPES: Record<string, [string, string, string]> = {
+  白羊座: ['破晓先驱', '赤焰行者', '直觉与行动力同步点燃，擅长在混沌中率先破局。'],
+  金牛座: ['大地筑梦', '静水流深', '以笃定节奏沉淀价值，在真实质感中长出长期主义。'],
+  双子座: ['星辰信使', '多维共鸣者', '思维灵动如风，善于把零散线索编织成清晰洞察。'],
+  巨蟹座: ['潮汐守望', '温柔铠甲', '拥有极深的情感雷达，在守护与共情中凝聚内在力量。'],
+  狮子座: ['曜石恒星', '炽光创造者', '天生带着舞台感与热忱，用真诚照亮身边人的坐标。'],
+  处女座: ['精密织星', '秩序炼金师', '于细微处见真章，擅长把复杂现实打磨成优雅解法。'],
+  天秤座: ['风雅衡器', '关系诗人', '敏锐捕捉美与分寸，在共振与平衡中建立深度连接。'],
+  天蝎座: ['深渊潜行', '蜕变炼魂者', '目光穿透表象，越是关键转折越能展现破茧定力。'],
+  射手座: ['远方旅人', '真理追光者', '心向辽阔边界，用探索与信念把当下活成旷野。'],
+  摩羯座: ['山巅行者', '时间雕塑家', '冷静而坚韧，懂得把宏大愿景拆解成步步兑现的阶梯。'],
+  水瓶座: ['星际观测者', '未来解码人', '不被常规框架束缚，总能以独立视角看见下一程风向。'],
+  双鱼座: ['梦境潮汐', '灵性共鸣体', '想像力与直觉无界流动，在感知万象中沉淀温柔智慧。'],
 };
 
 export function sunriseImageUrl(sunZh: string, ascZh: string, gender?: string): string {
@@ -91,6 +101,11 @@ export function computePortraitSummary(natal: NonNullable<ChartSnapshot['natal']
   const totalP = Math.max(1, planets.length);
   const totalW = Object.values(signWeights).reduce((a, b) => a + b, 0) || 1;
   const pct = (n: number) => Math.round((n / totalP) * 100);
+  const elements = { fire: pct(el.fire), earth: pct(el.earth), air: pct(el.air), water: pct(el.water) };
+  const elementTraits = Object.entries(elements)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([k]) => ELEMENT_TRAITS[k]);
   const signEnergy = Object.entries(signWeights)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
@@ -113,8 +128,14 @@ export function computePortraitSummary(natal: NonNullable<ChartSnapshot['natal']
     return { day, score, phase, events };
   });
   const average = Math.round(days.reduce((s, d) => s + d.score, 0) / days.length);
-  const [archetype, insight] = ARCHETYPES[sunSign] ?? ['观星行者 · 本命星图', '每一颗星体落点都在讲述你独特的节奏与天赋坐标。'];
-  return { sunSign, moonSign, ascSign, archetype, insight, elements: { fire: pct(el.fire), earth: pct(el.earth), air: pct(el.air), water: pct(el.water) }, modalities: { cardinal: pct(mod.cardinal), fixed: pct(mod.fixed), mutable: pct(mod.mutable) }, signEnergy, dominantPlanets, calendar: { month: `${y}-${String(m).padStart(2, '0')}`, days, average } };
+  const [epithet, archetype, insight] = ARCHETYPES[sunSign] ?? ['观星行者', '本命星图', '每一颗星体落点都在讲述你独特的节奏与天赋坐标。'];
+
+  return {
+    sunSign, moonSign, ascSign, epithet, archetype, insight, elementTraits, elements,
+    modalities: { cardinal: pct(mod.cardinal), fixed: pct(mod.fixed), mutable: pct(mod.mutable) },
+    signEnergy, dominantPlanets,
+    calendar: { month: `${y}-${String(m).padStart(2, '0')}`, days, average },
+  };
 }
 
 export async function renderVelaSharePoster(
@@ -123,7 +144,7 @@ export async function renderVelaSharePoster(
   summary: PortraitSummary | null,
   shareUrl: string,
 ): Promise<void> {
-  const W = 900, H = 1320;
+  const W = 1080, H = 1660;
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
@@ -136,15 +157,15 @@ export async function renderVelaSharePoster(
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = 'rgba(224,182,74,0.45)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(28, 28, W - 56, H - 56);
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(36, 36, W - 72, H - 72);
 
   ctx.fillStyle = '#f7d57f';
-  ctx.font = 'bold 28px serif';
+  ctx.font = 'bold 34px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('VELA 观星台 · 星盘能量画像', W / 2, 82);
+  ctx.fillText('VELA 观星台 · 星盘能量画像', W / 2, 96);
 
-  let y = 115;
+  let y = 135;
   if (profile && summary) {
     const imgUrl = sunriseImageUrl(summary.sunSign, summary.ascSign, profile.gender);
     if (imgUrl) {
@@ -157,49 +178,49 @@ export async function renderVelaSharePoster(
         });
         ctx.save();
         ctx.beginPath();
-        ctx.roundRect((W - 360) / 2, y, 360, 440, 22);
+        ctx.roundRect((W - 440) / 2, y, 440, 540, 26);
         ctx.clip();
-        ctx.drawImage(img, (W - 360) / 2, y, 360, 440);
+        ctx.drawImage(img, (W - 440) / 2, y, 440, 540);
         ctx.restore();
-        ctx.strokeStyle = 'rgba(224,182,74,0.5)';
-        ctx.strokeRect((W - 360) / 2, y, 360, 440);
-        y += 480;
+        ctx.strokeStyle = 'rgba(224,182,74,0.55)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect((W - 440) / 2, y, 440, 540);
+        y += 590;
       } catch {
-        y += 20;
+        y += 24;
       }
     }
     ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 36px serif';
+    ctx.font = 'bold 44px serif';
     ctx.fillText(`${profile.name} 的能量画像`, W / 2, y);
     ctx.fillStyle = '#f7d57f';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.fillText(`「${summary.archetype}」`, W / 2, y + 40);
-    y += 88;
+    ctx.font = 'bold 30px sans-serif';
+    ctx.fillText(`「${summary.epithet}」 · ${summary.archetype}`, W / 2, y + 48);
+    y += 100;
 
     const trio = [
-      { l: '太阳', v: summary.sunSign },
-      { l: '月亮', v: summary.moonSign },
-      { l: '上升', v: summary.ascSign },
+      { l: '太阳 · 内在', v: summary.sunSign },
+      { l: '月亮 · 情感', v: summary.moonSign },
+      { l: '上升 · 形象', v: summary.ascSign },
     ];
     trio.forEach((t, i) => {
-      const cx = W / 2 + (i - 1) * 230;
+      const cx = W / 2 + (i - 1) * 280;
       ctx.beginPath();
-      ctx.arc(cx, y + 52, 50, 0, Math.PI * 2);
+      ctx.arc(cx, y + 60, 62, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(224,182,74,0.08)';
       ctx.fill();
       ctx.strokeStyle = 'rgba(224,182,74,0.45)';
       ctx.stroke();
       ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 22px serif';
-      ctx.fillText(t.v, cx, y + 58);
+      ctx.font = 'bold 28px serif';
+      ctx.fillText(t.v, cx, y + 68);
       ctx.fillStyle = '#9aa8c7';
-      ctx.font = '16px sans-serif';
-      ctx.fillText(t.l, cx, y + 122);
+      ctx.font = '20px sans-serif';
+      ctx.fillText(t.l, cx, y + 146);
     });
-    y += 155;
+    y += 185;
 
-    // 雷达 + 星座榜
-    const rCx = 240, rCy = y + 105, rRad = 68;
+    const rCx = 270, rCy = y + 125, rRad = 82;
     const keys = ['fire', 'earth', 'air', 'water'] as const;
     ctx.beginPath();
     keys.forEach((k, i) => {
@@ -216,30 +237,44 @@ export async function renderVelaSharePoster(
 
     ctx.textAlign = 'left';
     summary.signEnergy.forEach((s, i) => {
-      const ry = y + 55 + i * 54;
+      const ry = y + 68 + i * 64;
       ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillText(`${s.sign}  ${s.pct}%`, 430, ry);
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillText(`${s.sign}  ${s.pct}%`, 500, ry);
       ctx.fillStyle = '#1e2438';
-      ctx.fillRect(430, ry + 10, 360, 10);
+      ctx.fillRect(500, ry + 12, 460, 12);
       ctx.fillStyle = '#e8b84d';
-      ctx.fillRect(430, ry + 10, Math.round((360 * Math.min(100, s.pct * 2)) / 100), 10);
+      ctx.fillRect(500, ry + 12, Math.round((460 * Math.min(100, s.pct * 2)) / 100), 12);
     });
-    y += 235;
+    y += 268;
 
     ctx.fillStyle = '#cbd5e1';
-    ctx.font = '18px sans-serif';
-    ctx.fillText(`本月运势趋势 · 月均 ${summary.calendar.average} 分`, 80, y);
-    const bw = Math.floor((W - 160) / summary.calendar.days.length);
+    ctx.font = '22px sans-serif';
+    ctx.fillText(`本月运势趋势 · 月均 ${summary.calendar.average} 分`, 84, y);
+    const bw = Math.floor((W - 168) / summary.calendar.days.length);
     summary.calendar.days.forEach((d, i) => {
       ctx.fillStyle = scoreColor(d.score);
-      const bh = Math.round((d.score / 100) * 44);
-      ctx.fillRect(80 + i * bw, y + 60 - bh, Math.max(4, bw - 3), bh);
+      const bh = Math.round((d.score / 100) * 52);
+      ctx.fillRect(84 + i * bw, y + 72 - bh, Math.max(5, bw - 3), bh);
     });
   }
 
-  ctx.textAlign = 'center';
+  try {
+    const qrDataUrl = await QRCode.toDataURL(shareUrl, { width: 160, margin: 1, color: { dark: '#0b1020', light: '#f8fafc' } });
+    const qrImg = await new Promise<HTMLImageElement>((res, rej) => {
+      const el = new Image();
+      el.onload = () => res(el);
+      el.onerror = rej;
+      el.src = qrDataUrl;
+    });
+    ctx.drawImage(qrImg, W - 244, H - 230, 160, 160);
+  } catch { /* ignore qr fallback */ }
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#f7d57f';
+  ctx.font = 'bold 26px serif';
+  ctx.fillText('扫码生成你的专属星盘画像', 84, H - 155);
   ctx.fillStyle = '#9aa8c7';
-  ctx.font = '18px sans-serif';
-  ctx.fillText(`开启你的专属星盘推演 · ${shareUrl}`, W / 2, H - 56);
+  ctx.font = '20px sans-serif';
+  ctx.fillText(shareUrl, 84, H - 115);
 }
