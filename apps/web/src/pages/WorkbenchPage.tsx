@@ -19,11 +19,9 @@ import {
   IconChevronsLeft,
   IconNotebook,
   IconSearch,
-  IconSparkles,
   IconSquarePen,
   IconStop,
 } from '../components/Icons';
-import { NatalWheelSvg } from '../components/NatalWheelSvg';
 import { ProfileSidebarPanel } from '../components/ProfileSidebarPanel';
 import { SettingsModal, type SettingsTab } from '../components/SettingsModal';
 import { navigate } from '../lib/router';
@@ -104,7 +102,6 @@ export function WorkbenchPage({
 }: WorkbenchPageProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
-  const [chartDrawerOpen, setChartDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('subscription');
 
@@ -719,19 +716,6 @@ export function WorkbenchPage({
               </span>
             )}
           </div>
-
-          <div className="flex items-center gap-2">
-            {chart && (
-              <button
-                type="button"
-                onClick={() => setChartDrawerOpen((v) => !v)}
-                className="min-h-[34px] px-3 rounded-[17px] border border-[#26304d] bg-[#101527] hover:border-[#e0b64a] text-[12.5px] text-[#f7d57f] flex items-center gap-1.5 cursor-pointer"
-              >
-                <IconSparkles size={14} />
-                <span>星盘</span>
-              </button>
-            )}
-          </div>
         </header>
 
         {messages.length === 0 ? (
@@ -876,37 +860,6 @@ export function WorkbenchPage({
           </a>
         </footer>
       </main>
-
-      {/* Right Slide-Over Chart Drawer */}
-      {chartDrawerOpen && chart && (
-        <aside className="no-print fixed inset-y-0 right-0 z-40 w-[340px] max-w-[92vw] bg-[#101527] border-l border-[#1e2740] p-4 flex flex-col gap-4 overflow-y-auto">
-          <div className="flex items-center justify-between">
-            <h2 className="m-0 font-serif-sc text-[17px] font-bold text-[#f8fafc]">星盘事实</h2>
-            <button
-              type="button"
-              onClick={() => setChartDrawerOpen(false)}
-              aria-label="关闭星盘"
-              className="min-h-[34px] min-w-[34px] rounded-[8px] border border-[#26304d] bg-transparent text-[#c3cde0] cursor-pointer"
-            >
-              ✕
-            </button>
-          </div>
-          <NatalWheelSvg chart={chart} />
-          <div className="flex flex-col gap-1.5 text-[12.5px]">
-            <p className="m-0 font-mono-num text-[#f7d57f]">
-              上升 {chart.natal.ascendant.formatted} · 天顶 {chart.natal.midheaven.formatted}
-            </p>
-            {chart.natal.planets.map((p) => (
-              <div key={p.key} className="flex justify-between py-1 border-b border-[#1e2740]/60">
-                <span className="text-[#c3cde0]">{p.nameZh}</span>
-                <span className="font-mono-num text-[#f8fafc]">
-                  {p.formatted} · 第{p.house}宫{p.retrograde ? ' ℞' : ''}
-                </span>
-              </div>
-            ))}
-          </div>
-        </aside>
-      )}
 
       <HistorySearchModal
         open={historySearchOpen}
