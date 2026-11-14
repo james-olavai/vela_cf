@@ -1018,7 +1018,6 @@ export function WorkbenchPage({
             });
           }
         }}
-        onAskAboutPortrait={(prompt) => void handleSend(prompt)}
       />
 
       {uid && (
