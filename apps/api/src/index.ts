@@ -103,6 +103,7 @@ function toHttpsError(err: unknown): HttpsError {
   const maybe = err as { status?: string; code?: string; message?: string };
   const mappedCode = maybe?.status ? GENKIT_STATUS_TO_HTTPS[maybe.status] : undefined;
   if (mappedCode) {
+    console.error('[vela-api] upstream failure', { status: maybe.status, message: (maybe.message || '').slice(0, 400) });
     return new HttpsError(mappedCode, (maybe.message || maybe.status || 'REQUEST_FAILED').slice(0, 400));
   }
   if (typeof maybe?.code === 'string' && maybe.code.startsWith('auth/')) {

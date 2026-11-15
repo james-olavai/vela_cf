@@ -225,6 +225,7 @@ export async function generateReading(
     config,
     abortSignal: input.signal,
   });
+  void response.catch(() => undefined);
   let rawText = "";
   for await (const c of stream) {
     input.signal?.throwIfAborted();

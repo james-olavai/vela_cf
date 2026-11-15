@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@genkit-ai/firebase": "^1.0.0",
-    "@genkit-ai/google-genai": "^1.0.0",
+    "@genkit-ai/google-genai": "1.42.0",
     "@genkit-ai/vertexai": "^1.0.0",
     "@modelcontextprotocol/sdk": "1.32.2",
     "firebase-admin": "^13.0.0",

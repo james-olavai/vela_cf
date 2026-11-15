@@ -377,6 +377,8 @@ A/B 固定资料、问题、历史、参考时间、运行时、模型及工具�
 
 普通咨询按当轮开放技法直接注入相关指南，深度模式仍可通过工具加载。`diagnostics.loadedReferences` 记录正文、版本及 `auto/tool` 来源；工作台“本次依据”以可读方式展示。只含西占的路由不注入中西合参指南。旧浏览器草稿不自动覆盖，点击“载入新版默认配置”确认后使用新版本。
 
+**Hydrogen 生产传输**：`@genkit-ai/google-genai` 固定为 `1.42.0`，使用 Vertex global 的 `streamGenerateContent`。1.43+ 将 Hydrogen 默认路由至 `/interactions`，2026-11-15 使用旧会话配置与独立合成档案复现持续 429；同模型 `generateContent` 请求成功。升级前必须通过真实 SDK 的端点、流式工具调用及 thought signature 回传回归。上游错误记录状态与截断后的服务错误信息，不记录用户输入或凭据。
+
 **Hydrogen 参数限制**：依据 [Google 官方 Hydrogen 指南](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/guides/gemini-4-hydrogen)，服务端忽略自定义 `temperature/top_k/top_p`。保存温度字段供其他模型使用；Hydrogen 请求不发送该字段，界面禁用温度编辑并显示模型默认行为，诊断明确 requested 与 effective 的区别。不能将 Hydrogen 两次输出差异解释为温度优化效果。
 
 **A/B 资源与执行**：`ab-baseline.json` 保留提交 `1a6864c` 的旧 Go Bundle，仅作历史资源，并非后续各轮基线。`ab-cases.json` 包含六类咨询问题（迎合、直答、人话、宿命、他人动机、资源与代价）。当前运行器使用 `npm run prompt:ab -- --baseline <完整配置.json> --candidate <完整配置.json> --cases <案例目录.json> --tier go --repeats 1 --max-output-tokens 16384 --output <本地结果.json>`，会真实调用模型，需本机 `.env` 的 `llm_gateway_token` 或环境变量 `LLM_GATEWAY_TOKEN`；令牌仅留服务端，不进入结果。两臂交替顺序，同一模型、资料、工具及采样行为；不自动宣布优胜。
