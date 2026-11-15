@@ -62,7 +62,7 @@ interface WorkbenchPageProps {
   pendingHandoff: PendingHandoff | null;
   onClearPendingHandoff: () => void;
   onOpenAccountModal: (handoff?: PendingHandoff) => void;
-  onStartSession: (mode: ConsultationMode, profiles: ProfileRecord[]) => Promise<SessionRecord>;
+  onStartSession: (mode: ConsultationMode, profiles: ProfileRecord[], initialQuestion?: string) => Promise<SessionRecord>;
   onSelectSession: (sessionId: string | null) => void;
 }
 
@@ -406,7 +406,7 @@ export function WorkbenchPage({
     setIsStreaming(true);
 
     try {
-      const targetSession = activeSession ?? (await onStartSession(mode, activeProfiles));
+      const targetSession = activeSession ?? (await onStartSession(mode, activeProfiles, text));
       const sessionProfiles =
         activeSession && activeSession.profileIds?.length
           ? profiles.filter((p) => activeSession.profileIds.includes(p.id))

@@ -14,8 +14,10 @@ import {
 import {
   acquireSessionTurn,
   commitSessionTurn,
+  createFrozenSession,
   releaseSessionTurn,
 } from './session.js';
+import { summarizeQuestionTitle } from '@vela-cf/shared';
 import {
   deleteAccountWithRetry,
   exportAccountData,
@@ -707,6 +709,61 @@ test('Session history & atomic turn commit: loads latest 20 messages in order, p
   assert.equal(lastTwo[1].role, 'assistant');
   assert.equal((lastTwo[1].parts as Array<{ text: string }>)[0].text, '修改后的第12轮回答');
   assert.ok(String(lastTwo[1].createdAt) > String(lastTwo[0].createdAt), 'Assistant createdAt must be strictly after user createdAt');
+
+  // 5. Session title summarization on createFrozenSession and commitSessionTurn upgrade from default profile-name placeholder
+  assert.equal(summarizeQuestionTitle('请问一下，我今年的事业转折点在哪里？'), '我今年的事业转折点在哪里');
+  await db.collection('users').doc(uid).collection('profiles').doc('p_title').set({
+    name: '林辰',
+    entityType: 'person',
+    birthDateTime: '1995-05-20T14:30',
+    locationName: '上海',
+    latitude: 31.23,
+    longitude: 121.47,
+    timezone: 'Asia/Shanghai',
+  });
+
+  const createdWithQuestion = await createFrozenSession(db, {
+    uid,
+    tier: 'free',
+    rawData: {
+      mode: 'personal',
+      profileIds: ['p_title'],
+      initialQuestion: '帮我看看今年下半年感情运势怎么样？',
+    },
+  });
+  assert.equal(createdWithQuestion.session.title, '今年下半年感情运势怎么样');
+  assert.equal(createdWithQuestion.session.profileName, '林辰');
+
+  const legacySession = await createFrozenSession(db, {
+    uid,
+    tier: 'free',
+    rawData: { mode: 'personal', profileIds: ['p_title'] },
+  });
+  assert.equal(legacySession.session.title, '林辰', 'Without initialQuestion, placeholder starts as profileName');
+
+  const legTurn = await acquireSessionTurn(db, {
+    uid,
+    sessionId: legacySession.sessionId,
+    turnId: 'turn_upgrade_title',
+    now,
+  });
+  await commitSessionTurn(db, {
+    uid,
+    sessionId: legacySession.sessionId,
+    turnId: 'turn_upgrade_title',
+    replacedMessageIds: legTurn.replacedMessageIds,
+    userMessage: {
+      text: '请帮我分析一下明年跳槽适不适合？',
+      createdAt: '2026-11-15T03:00:00.000Z',
+    },
+    assistantMessage: {
+      parts: [{ type: 'text', text: '解析内容' }],
+      suggestions: [],
+      createdAt: '2026-11-15T03:00:01.000Z',
+    },
+  });
+  const upgradedDoc = await db.collection('users').doc(uid).collection('sessions').doc(legacySession.sessionId).get();
+  assert.equal(upgradedDoc.data()?.title, '明年跳槽适不适合');
 });
 
 test('Account deletion & subscription cancellation: blocks deletion on missing Stripe key or cancel failure, preserves retryable state, and deletes cleanly on retry', async () => {

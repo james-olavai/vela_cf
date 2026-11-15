@@ -193,6 +193,21 @@ async function runBrowserE2E() {
     assert.ok(mainText.length > 200, `Streamed response must be >200 chars, got ${mainText.length}`);
     assert.ok(!mainText.includes('DSML'), 'Streamed response must not leak raw DSML tags');
 
+    // Verify top header & HistorySearchModal show question summary instead of plain profile name
+    const headerTitle = await pPage.locator('main header span').first().innerText();
+    assert.ok(
+      headerTitle.includes('合盘契合度') && !headerTitle.startsWith('合盘 · 林辰'),
+      `Header session title must summarize question instead of profile name, got: ${headerTitle}`,
+    );
+
+    await pAside.locator('[data-testid="sidebar-nav-history"]').click();
+    const historyDialog = pPage.locator('[role="dialog"][aria-labelledby="history-search-title"]');
+    await historyDialog.waitFor({ state: 'visible', timeout: 5000 });
+    const historyText = await historyDialog.innerText();
+    assert.ok(historyText.includes('合盘契合度'), 'History modal title must show question summary');
+    assert.ok(historyText.includes('多人合盘 · 林辰 × Vela AI'), 'History modal subtitle must still show profile names');
+    await historyDialog.locator('button[aria-label="关闭搜索"]').click();
+
     await pPage.screenshot({ path: `${ARTIFACT_DIR}/e2e_4_pro_chat.png`, fullPage: false });
     await proCtx.close();
     console.log('[browser-e2e] ✓ All browser E2E checks passed!');

@@ -8,6 +8,7 @@ import { httpsCallable } from 'firebase/functions';
 import {
   computeEffectiveBudget,
   extractVelaUiBlocks,
+  summarizeQuestionTitle,
   type AnalysisDepth,
   type AstrologyToolName,
   type AstroUiBlock,
@@ -70,17 +71,19 @@ export function subscribeMessages(
 export async function createConsultationSession(
   mode: ConsultationMode,
   profiles: ProfileRecord[],
+  initialQuestion?: string,
 ): Promise<SessionRecord> {
   if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('e2e') === '1') {
     const now = new Date().toISOString();
     const names = profiles.map((p) => p.name).join(' × ');
+    const defaultTitle = mode === 'synastry' ? `合盘 · ${names}` : names;
     return {
       id: `e2e_s_${Date.now().toString(36)}`,
       mode,
       profileIds: profiles.map((p) => p.id),
       profileId: profiles[0].id,
       profileName: names,
-      title: profiles.length >= 2 ? `合盘 · ${names}` : names,
+      title: initialQuestion ? summarizeQuestionTitle(initialQuestion, defaultTitle) : defaultTitle,
       frozenPrompt: 'e2e',
       frozenModel: 'vertexai/gemini-4-hydrogen',
       frozenTools: ['natalWheel', 'transitEvents', 'baziPillars', 'ziweiPalaces', 'synastryAspects'],
@@ -89,12 +92,13 @@ export async function createConsultationSession(
     };
   }
   const fn = httpsCallable<
-    { mode: ConsultationMode; profileIds: string[] },
+    { mode: ConsultationMode; profileIds: string[]; initialQuestion?: string },
     { sessionId: string; session: SessionRecord }
   >(functions, 'createSession');
   const res = await fn({
     mode,
     profileIds: profiles.map((p) => p.id),
+    ...(initialQuestion ? { initialQuestion } : {}),
   });
   return res.data.session;
 }

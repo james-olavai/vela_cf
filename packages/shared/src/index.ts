@@ -265,7 +265,25 @@ export interface UserRecord {
 export const CreateSessionRequestSchema = z.object({
   mode: ConsultationModeSchema.default('personal'),
   profileIds: z.array(z.string().min(1).max(128)).min(1).max(4),
+  initialQuestion: z.string().trim().max(2000).optional(),
 });
+
+export function summarizeQuestionTitle(rawText: string, fallback = '星盘咨询'): string {
+  const normalized = rawText.replace(/\s+/g, ' ').trim();
+  if (!normalized) return fallback;
+  const stripped = normalized
+    .replace(
+      /^(?:请问(?:一下)?|我想(?:问问|请问|知道|了解)|请?帮我(?:看看|分析(?:一下)?)|麻烦(?:帮我)?(?:看看|分析(?:一下)?)|请?结合.{0,28}?(?:分析(?:一下)?|看看|解读(?:一下)?))[，,：:\s]*/g,
+      '',
+    )
+    .replace(/[？?。！!，,、；;：:\s]+$/, '');
+  const core = stripped || normalized.replace(/[？?。！!，,、；;：:\s]+$/, '');
+  if (!core) return fallback;
+  if (core.length <= 24) return core;
+  const firstClause = core.split(/[？?。！!；;]/)[0]?.trim() ?? '';
+  if (firstClause.length >= 6 && firstClause.length <= 24) return firstClause;
+  return `${core.slice(0, 24)}…`;
+}
 
 export const AnalysisDepthSchema = z.enum(['quick', 'balanced', 'deep']);
 export type AnalysisDepth = z.infer<typeof AnalysisDepthSchema>;

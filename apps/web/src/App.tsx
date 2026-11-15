@@ -83,6 +83,7 @@ export function App() {
         const session = await createConsultationSession(
           handoff.mode,
           chosen.length > 0 ? chosen : [savedProfiles[0]],
+          handoff.question,
         );
         setSessions((prev) => (prev.some((s) => s.id === session.id) ? prev : [session, ...prev]));
         navigate(`/consult/${session.id}`);
@@ -249,8 +250,9 @@ export function App() {
   const handleStartSession = async (
     mode: ConsultationMode,
     selectedProfiles: ProfileRecord[],
+    initialQuestion?: string,
   ): Promise<SessionRecord> => {
-    const session = await createConsultationSession(mode, selectedProfiles);
+    const session = await createConsultationSession(mode, selectedProfiles, initialQuestion);
     setSessions((prev) => (prev.some((s) => s.id === session.id) ? prev : [session, ...prev]));
     navigate(`/consult/${session.id}`);
     return session;

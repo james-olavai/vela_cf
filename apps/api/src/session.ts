@@ -2,6 +2,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
   CreateSessionRequestSchema,
+  summarizeQuestionTitle,
   TIER_META,
   type Tier,
 } from '@vela-cf/shared';
@@ -168,9 +169,18 @@ export async function commitSessionTurn(
       suggestions: assistantMessage.suggestions ?? [],
       createdAt: assistantCreatedAt,
     });
+    const currentTitle = String(sessionData.title ?? '').trim();
+    const profileName = String(sessionData.profileName ?? '').trim();
+    const isDefaultProfileTitle =
+      !currentTitle || currentTitle === profileName || currentTitle === `合盘 · ${profileName}`;
+    const nextTitle = isDefaultProfileTitle
+      ? summarizeQuestionTitle(userMessage.text, currentTitle || profileName || '星盘咨询')
+      : currentTitle;
+
     tx.set(
       sessionRef,
       {
+        ...(isDefaultProfileTitle ? { title: nextTitle } : {}),
         updatedAt: assistantCreatedAt,
         activeTurnId: null,
         activeTurnExpiresAt: 0,
@@ -253,12 +263,13 @@ export async function createFrozenSession(
   const nowIso = now.toISOString();
   const sessionRef = db.collection('users').doc(uid).collection('sessions').doc();
   const names = profiles.map((p) => String(p.name)).join(' × ');
+  const defaultTitle = input.mode === 'synastry' ? `合盘 · ${names}` : names;
   const sessionDoc = {
     mode: input.mode,
     profileIds: input.profileIds,
     profileId: input.profileIds[0],
     profileName: names,
-    title: input.mode === 'synastry' ? `合盘 · ${names}` : names,
+    title: input.initialQuestion ? summarizeQuestionTitle(input.initialQuestion, defaultTitle) : defaultTitle,
     frozenPrompt: preset.systemPrompt,
     frozenModel: preset.modelName,
     frozenTools: preset.allowedTools,
