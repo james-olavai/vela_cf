@@ -48,8 +48,8 @@ async function runBrowserE2E() {
     await bottomLeftLoginBtn.waitFor({ state: 'visible', timeout: 10000 });
     await bottomLeftLoginBtn.click();
 
-    // Verify AuthGateModal opened with Google + 3 Email modes
-    const modal = vPage.locator('[role="dialog"][aria-labelledby="auth-gate-title"]');
+    // Verify unified SettingsModal opened on Account tab with Google + 3 Email modes
+    const modal = vPage.locator('[role="dialog"][aria-labelledby="settings-title"]');
     await modal.waitFor({ state: 'visible', timeout: 5000 });
     const modalText = await modal.innerText();
     assert.ok(modalText.includes('使用 Google 账号继续并开始解读'), 'Google login button must be visible');

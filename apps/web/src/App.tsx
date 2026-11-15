@@ -20,7 +20,7 @@ import {
   type UsageRecord,
   utcMonthPeriodStart,
 } from '@vela-cf/shared';
-import { AuthGateModal, type EmailAuthMode } from './components/AuthGateModal';
+import { SettingsModal, type EmailAuthMode, type SettingsTab } from './components/SettingsModal';
 import { auth, googleProvider, initAnalyticsConsent } from './lib/firebase';
 import { navigate, usePathname } from './lib/router';
 import {
@@ -51,7 +51,8 @@ export function App() {
     used: 0,
   }));
 
-  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('account');
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
@@ -90,7 +91,7 @@ export function App() {
         setPendingHandoff(null);
       }
     }
-    setAuthModalOpen(false);
+    setSettingsOpen(false);
   };
 
   useEffect(() => {
@@ -278,44 +279,51 @@ export function App() {
     ? sessions.find((s) => s.id === activeSessionId) ?? null
     : null;
 
+  const effectiveTier = usage.overrideTier ?? tier;
+
   return (
     <>
       <WorkbenchPage
         uid={user?.uid ?? null}
-        email={user?.email ?? 'Google 用户'}
         displayName={user?.displayName ?? user?.email ?? '未登录访客'}
         photoURL={user?.photoURL ?? null}
-        tier={usage.overrideTier ?? tier}
+        tier={effectiveTier}
         usage={usage}
         profiles={profiles}
         sessions={sessions}
         activeSession={activeSession}
         pendingHandoff={pendingHandoff}
         onClearPendingHandoff={() => setPendingHandoff(null)}
-        onRequireAuth={(handoff) => {
-          setPendingHandoff(handoff);
+        onOpenAccountModal={(tab = 'account', handoff) => {
+          if (handoff) setPendingHandoff(handoff);
           setAuthError(null);
           setAuthNotice(null);
-          setAuthModalOpen(true);
+          setSettingsTab(tab);
+          setSettingsOpen(true);
         }}
         onStartSession={handleStartSession}
         onSelectSession={(sid) => navigate(sid ? `/consult/${sid}` : '/')}
-        onSignOut={() => void handleSignOut()}
       />
 
-      <AuthGateModal
-        open={authModalOpen}
-        busy={authBusy}
-        error={authError}
-        notice={authNotice}
+      <SettingsModal
+        open={settingsOpen}
+        initialTab={settingsTab}
+        uid={user?.uid ?? null}
+        email={user?.email ?? 'Google 用户'}
+        tier={effectiveTier}
+        usage={usage}
+        authBusy={authBusy}
+        authError={authError}
+        authNotice={authNotice}
         pendingQuestion={pendingHandoff?.question}
-        onConfirmLogin={() => void handleConfirmGoogleLogin()}
+        onConfirmGoogleLogin={() => void handleConfirmGoogleLogin()}
         onEmailAuth={(mode, email, password) => void handleEmailAuth(mode, email, password)}
         onResetPassword={(email) => void handleResetPassword(email)}
         onClose={() => {
-          setAuthModalOpen(false);
+          setSettingsOpen(false);
           setPendingHandoff(null);
         }}
+        onSignOut={() => void handleSignOut()}
       />
     </>
   );

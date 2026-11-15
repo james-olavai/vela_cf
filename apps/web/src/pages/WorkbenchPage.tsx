@@ -24,7 +24,7 @@ import {
   IconStop,
 } from '../components/Icons';
 import { NatalPortraitModal } from '../components/NatalPortraitModal';
-import { SettingsModal, type SettingsTab } from '../components/SettingsModal';
+import type { SettingsTab } from '../components/SettingsModal';
 import { ShareBonusModal } from '../components/ShareBonusModal';
 import { SoftAurora } from '../components/SoftAurora';
 import { WorkbenchSidebar } from '../components/WorkbenchSidebar';
@@ -51,7 +51,6 @@ export interface PendingHandoff {
 
 interface WorkbenchPageProps {
   uid: string | null;
-  email: string;
   displayName: string;
   photoURL: string | null;
   tier: Tier;
@@ -61,10 +60,9 @@ interface WorkbenchPageProps {
   activeSession: SessionRecord | null;
   pendingHandoff: PendingHandoff | null;
   onClearPendingHandoff: () => void;
-  onRequireAuth: (handoff: PendingHandoff) => void;
+  onOpenAccountModal: (tab?: SettingsTab, handoff?: PendingHandoff) => void;
   onStartSession: (mode: ConsultationMode, profiles: ProfileRecord[]) => Promise<SessionRecord>;
   onSelectSession: (sessionId: string | null) => void;
-  onSignOut: () => void;
 }
 
 function renderFormattedText(text: string) {
@@ -92,7 +90,6 @@ function renderFormattedText(text: string) {
 
 export function WorkbenchPage({
   uid,
-  email,
   displayName,
   photoURL,
   tier,
@@ -102,15 +99,12 @@ export function WorkbenchPage({
   activeSession,
   pendingHandoff,
   onClearPendingHandoff,
-  onRequireAuth,
+  onOpenAccountModal,
   onStartSession,
   onSelectSession,
-  onSignOut,
 }: WorkbenchPageProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('subscription');
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [portraitOpen, setPortraitOpen] = useState(false);
   const [usageOverride, setUsageOverride] = useState<UsageRecord | null>(null);
@@ -220,7 +214,7 @@ export function WorkbenchPage({
   const needsMoreProfiles = effectiveProfiles.length === 0;
 
   const requestAuthWithDrafts = (question = '', selectedIndices = [0]) => {
-    onRequireAuth({
+    onOpenAccountModal('account', {
       draftProfiles: effectiveProfiles.map((p) => ({
         name: p.name,
         entityType: p.entityType ?? 'person',
@@ -464,10 +458,7 @@ export function WorkbenchPage({
           </span>
           <button
             type="button"
-            onClick={() => {
-              setSettingsTab('subscription');
-              setSettingsOpen(true);
-            }}
+            onClick={() => onOpenAccountModal('subscription')}
             className="px-2.5 py-1 rounded-[12px] border-0 bg-[#e0b64a] text-[#1a1405] text-[12px] font-bold cursor-pointer shrink-0 hover:bg-[#f7d57f]"
           >
             升级套餐
@@ -498,10 +489,7 @@ export function WorkbenchPage({
               )}
             <button
               type="button"
-              onClick={() => {
-                setSettingsTab('subscription');
-                setSettingsOpen(true);
-              }}
+              onClick={() => onOpenAccountModal('subscription')}
               className="min-h-[40px] px-5 rounded-[20px] border-0 bg-[#e0b64a] text-[#1a1405] text-[13px] font-bold cursor-pointer"
             >
               升级订阅继续对话
@@ -604,7 +592,7 @@ export function WorkbenchPage({
         onOpenHistorySearch={() => setHistorySearchOpen(true)}
         onOpenPortrait={() => setPortraitOpen(true)}
         onOpenAccountOrAuth={() =>
-          uid ? (setSettingsTab('subscription'), setSettingsOpen(true)) : requestAuthWithDrafts()
+          uid ? onOpenAccountModal('account') : requestAuthWithDrafts()
         }
         onToggleProfile={handleToggleProfile}
         onSaveProfile={handleSaveSidebarProfile}
@@ -820,18 +808,6 @@ export function WorkbenchPage({
         onClose={() => setHistorySearchOpen(false)}
       />
 
-      <SettingsModal
-        open={settingsOpen}
-        initialTab={settingsTab}
-        uid={uid}
-        email={email}
-        tier={tier}
-        usage={effectiveUsage}
-        onClose={() => setSettingsOpen(false)}
-        onSignOut={onSignOut}
-        onRequireLogin={() => { setSettingsOpen(false); requestAuthWithDrafts(); }}
-      />
-
       <NatalPortraitModal
         open={portraitOpen}
         profile={primaryProfile}
@@ -850,7 +826,7 @@ export function WorkbenchPage({
           chart={chart}
           onClose={() => setShareModalOpen(false)}
           onClaimed={(next) => setUsageOverride(next)}
-          onOpenUpgrade={() => { setSettingsTab('subscription'); setSettingsOpen(true); }}
+          onOpenUpgrade={() => onOpenAccountModal('subscription')}
         />
       )}
     </div>
