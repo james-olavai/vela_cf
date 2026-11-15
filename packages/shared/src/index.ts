@@ -20,9 +20,9 @@ export const MAX_MONTHLY_SHARE_BONUSES = 3;
 export const MAX_MONTHLY_SHARE_BONUS_MICRO_USD = SHARE_BONUS_MICRO_USD * MAX_MONTHLY_SHARE_BONUSES;
 
 export const MAX_OUTPUT_TOKENS_BY_TIER: Record<Tier, number> = {
-  free: 4096,
-  go: 4096,
-  pro: 8192,
+  free: 16384,
+  go: 16384,
+  pro: 16384,
 };
 
 export function computeTokenCostMicroUsd(inputTokens: number, outputTokens: number): number {
