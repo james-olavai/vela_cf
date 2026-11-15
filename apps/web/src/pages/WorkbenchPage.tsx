@@ -488,7 +488,7 @@ export function WorkbenchPage({
       {quotaExhausted ? (
         <div className="p-4 rounded-[20px] border border-accent/50 bg-panel flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <button type="button" onClick={() => openProfileManager()} aria-label={`切换咨询对象，当前${consultationLabel}`} className="max-w-full text-left text-[13px] text-secondary [overflow-wrap:anywhere]">{consultationLabel} ⌄</button>
+            <p className="m-0 text-[13px] text-secondary [overflow-wrap:anywhere]">{consultationLabel}</p>
             <p className="m-0 text-[14px] font-bold text-primary">
               本月额度已用完（100%）
             </p>
@@ -543,12 +543,7 @@ export function WorkbenchPage({
             className="w-full min-w-0 resize-none bg-transparent border-0 px-1 py-2 text-[15px] leading-[24px] text-primary placeholder-muted focus:outline-none disabled:opacity-60"
           />
 
-          <div className="flex w-full min-w-0 items-center gap-2">
-            <button type="button" disabled={isStreaming} onClick={() => openProfileManager()}
-              aria-label={`切换咨询对象，当前${consultationLabel}`} title={consultationLabel}
-              className="flex-1 min-w-0 flex items-center gap-1 rounded-[12px] border border-border bg-transparent px-2 text-left text-[13px] text-secondary cursor-pointer hover:bg-panel-2 disabled:opacity-50">
-              <span className="truncate">{consultationLabel}</span><span aria-hidden="true">⌄</span>
-            </button>
+          <div className="flex w-full min-w-0 items-center justify-end gap-2">
             {tier === 'pro' && <>
               <select aria-label="推演深度" value={depth} onChange={(e) => setDepth(e.target.value as AnalysisDepth)} disabled={isStreaming}
                 className="sm:hidden min-w-0 max-w-[96px] shrink-0 rounded-[12px] border border-border bg-panel px-2 text-secondary">

@@ -370,6 +370,24 @@ function evaluateUsageFirestoreRule(params: {
   return false;
 }
 
+test('Unlimited overrides bypass exhausted budgets and survive settlement and period rollover', async () => {
+  const mockDb = new MockFirestoreEmulator();
+  const db = mockDb as unknown as Firestore;
+  const uid = 'unlimited_user';
+  const now = new Date('2026-11-15T10:00:00Z');
+  await db.collection('usage').doc(uid).set({ unlimited: true, overrideTier: 'pro', used: 999999999, periodStart: '2026-11-01T00:00:00Z' });
+  for (const date of [now, new Date('2026-12-01T10:00:00Z')]) {
+    const resolved = await resolveUserPeriodAndTier(db, uid, undefined, date);
+    assert.equal(resolved.unlimited, true);
+    assert.equal(resolved.tier, 'pro');
+    await reserveQuota(db, { uid, ...resolved, requestId: 'unlimited_turn', now: date });
+    await settleQuota(db, { uid, periodStart: resolved.periodStart, requestId: 'unlimited_turn', costMicroUsd: 30000, now: date });
+    const usage = (await db.collection('usage').doc(uid).get()).data();
+    assert.equal(usage?.unlimited, true);
+    assert.equal(usage?.overrideTier, 'pro');
+  }
+});
+
 test('Quota concurrency: 5 concurrent requests on free tier cannot exceed budget, failure releases reservation, and period rollover resets', async () => {
   const mockDb = new MockFirestoreEmulator();
   const db = mockDb as unknown as Firestore;

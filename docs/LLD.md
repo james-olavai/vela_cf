@@ -146,7 +146,9 @@ locations_cache/{queryKey}                -- 仅服务端读写（城市经纬�
 
 usage/{uid}                               -- 客户端本人只读，仅服务端事务写（可在 Console 手动调整）
   periodStart: string                     -- ISO 时间或 YYYY-MM（当前配额周期起点）
-  used: number                            -- 本周期已用次数
+  used: number                            -- 本周期已用成本（micro-USD）
+  unlimited?: boolean                     -- Console 管理；为 true 时跳过月度预算拦截，继续记录实际用量
+  overrideTier?: "free"|"go"|"pro"           -- Console 管理的套餐覆盖，跨周期保留
 
 users/{uid}                               -- 客户端本人可读；年龄确认/初始化受 Rules 约束写入
   email, displayName, acceptedTermsAt, confirmedAdultAt, createdAt

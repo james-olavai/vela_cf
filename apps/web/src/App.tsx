@@ -154,7 +154,7 @@ export function App() {
         photoURL: null,
       } as unknown as User);
       setTier(e2eTier);
-      setUsage({ periodStart: utcMonthPeriodStart(), used: e2eUsed });
+      setUsage({ periodStart: utcMonthPeriodStart(), used: e2eUsed, unlimited: qs.get('unlimited') === '1' });
       unsubProfiles = subscribeProfiles('e2e_test_user', setProfiles);
       setAuthReady(true);
       return cleanupSubs;

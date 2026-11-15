@@ -217,8 +217,18 @@ export async function renderVelaSharePoster(
       ctx.fillRect(500, ry + 12, Math.round((460 * Math.min(100, s.pct * 2)) / 100), 12);
     });
     y += 268;
-
-
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '22px sans-serif';
+    ctx.fillText('本命元素分布', 84, y);
+    const labels = ['火相', '土相', '风相', '水相'];
+    keys.forEach((key, i) => {
+      const x = 84 + i * 230;
+      ctx.fillStyle = '#9aa8c7';
+      ctx.font = '20px sans-serif';
+      ctx.fillText(`${labels[i]} ${summary.elements[key]}%`, x, y + 34);
+      ctx.fillStyle = '#1e2438'; ctx.fillRect(x, y + 50, 190, 12);
+      ctx.fillStyle = '#e8b84d'; ctx.fillRect(x, y + 50, 190 * summary.elements[key] / 100, 12);
+    });
   }
 
   try {

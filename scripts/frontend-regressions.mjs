@@ -19,7 +19,7 @@ const natal = (year) => {
  const sign = year === '2002' ? '金牛' : year === '1999' ? '双子' : '白羊';
  return { houseSystem: 'P', ascendant: { longitude: 0, house: 1, signZh: sign, formatted: sign }, midheaven: { longitude: 270, house: 10, signZh: sign, formatted: sign }, houses: Array.from({length:12},(_,i)=>({house:i+1,longitude:i*30,signZh:sign,formatted:sign})), planets: ['Sun','Moon','Saturn'].map((key,i)=>({key,nameZh:['太阳','月亮','土星'][i],longitude:i*30,retrograde:false,signZh:sign,formatted:sign,house:i+1})), aspects: [] };
 };
-async function setup(viewport = { width: 1366, height: 860 }, { seedProfiles = profiles, visitor = false } = {}) {
+async function setup(viewport = { width: 1366, height: 860 }, { seedProfiles = profiles, visitor = false, unlimited = false } = {}) {
  const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
  const page = await context.newPage();
  const chartRequests = [];
@@ -56,7 +56,7 @@ async function setup(viewport = { width: 1366, height: 860 }, { seedProfiles = p
   await new Promise(r => setTimeout(r, q === 'old' ? 200 : 10));
   await route.fulfill({ json: { data: { results: [{ displayName: q, latitude: 12, longitude: 34, timezone: 'Asia/Shanghai' }] } } });
  });
- await page.goto(base + (visitor ? '/' : '/?e2e=1&tier=pro'));
+ await page.goto(base + (visitor ? '/' : `/?e2e=1&tier=pro${unlimited ? '&unlimited=1&used=999999999' : ''}`));
  await page.getByRole('button', { name: viewport.width < 1024 ? '打开侧栏与档案' : '展开侧栏', exact: true }).waitFor();
  return { context, page, chartRequests };
 }
@@ -83,22 +83,31 @@ try {
  const portrait=page.getByRole('dialog',{name:'B 的星盘能量画像'}); await portrait.waitFor();
  await portrait.getByText('「大地筑梦」',{exact:true}).waitFor();
  const beforeTransit=chartRequests.length;
- assert.equal(await portrait.locator('details[open]').count(),0,'portrait details start collapsed');
- await portrait.getByText('星座与行星权重',{exact:true}).click();
- await portrait.getByText('1×',{exact:true}).waitFor();
- assert.equal(chartRequests.length,beforeTransit,'opening portrait and weights does not compute a transit');
- await portrait.getByText('指定日期天象盘',{exact:true}).click();
- await page.waitForFunction(()=>!!document.querySelector('#transit-date'));
+ assert.equal(await portrait.locator('details').count(),0,'portrait uses the original expanded card layout');
+ await portrait.getByText('✦ 能量最盛的星座',{exact:true}).waitFor();
+ await portrait.getByText('1× 权重',{exact:true}).waitFor();
+ const art=await portrait.locator('img').boundingBox();
+ assert(art.width>=186 && art.height>=300,'portrait restores full-size illustration');
+ assert.equal(chartRequests.length,beforeTransit,'opening portrait does not compute a transit');
+ await portrait.locator('#transit-date').fill('2026-11-15');
  await new Promise(r=>setTimeout(r,100));
- assert(chartRequests.length>beforeTransit,'opening transit details computes the selected date');
- await portrait.getByText('指定日期天象盘',{exact:true}).click();
- await portrait.getByText('星座与行星权重',{exact:true}).click();
+ assert(chartRequests.length>beforeTransit,'selecting a date computes its transit');
  await new Promise(r=>setTimeout(r,250));
  assert(await portrait.getByText('「大地筑梦」',{exact:true}).isVisible(),'late A chart cannot overwrite B');
  assert.equal(await portrait.getByText(/月均|新月蓄力|顺行高能窗口/).count(),0);
  await page.screenshot({path:join(artifactDir, 'portrait.png')});
+ await portrait.getByRole('button',{name:'一键生成能量分享海报（含插画与雷达）',exact:true}).click();
+ const share=page.getByRole('dialog',{name:'分享星盘卡片领额度'});
+ const save=share.getByRole('button',{name:'保存分享海报 (PNG)',exact:true});
+ await save.waitFor();
+ await page.waitForFunction(()=>!Array.from(document.querySelectorAll('button')).find(b=>b.textContent.includes('保存分享海报 (PNG)'))?.disabled);
+ assert.deepEqual(await share.locator('canvas').evaluate(c=>[c.width,c.height]),[1080,1660]);
+ await share.locator('canvas').screenshot({path:join(artifactDir,'share-poster.png')});
+ const download=page.waitForEvent('download'); await save.click();
+ assert((await download).suggestedFilename().endsWith('.png'));
  await page.keyboard.press('Escape');
- console.log('PASS portrait summary, collapsed details, key-based weights, and on-demand transit');
+ console.log('PASS original poster composition and PNG download');
+ console.log('PASS original portrait cards, full-size art, key-based weights, and on-demand transit');
  await page.locator('[data-testid="sidebar-nav-profiles"]').click();
  const item=page.locator('[data-testid="pm-item"]').filter({hasText:'B'});
  await item.getByRole('button',{name:'编辑',exact:true}).click();
@@ -180,16 +189,18 @@ try {
  await fp.getByRole('button',{name:'保存',exact:true}).click();
  await fp.waitForFunction(()=>document.activeElement?.id==='consult-question');
  await fp.getByRole('status').filter({hasText:'档案已保存，可以开始咨询'}).waitFor();
- assert(await fp.getByRole('button',{name:'切换咨询对象，当前个人 · 首次访客',exact:true}).isVisible());
+ assert.equal(await fp.locator('form').getByRole('button',{name:/切换咨询对象/}).count(),0);
  assert.equal(await fp.getByRole('dialog').count(),0,'visitor can add a profile without signing in');
  await fp.screenshot({path:join(artifactDir,'first-profile-mobile.png')});
  await first.context.close();
  console.log('PASS first visitor profile CTA saves, returns to conversation, and focuses question');
  const compact=await setup({width:320,height:812});
  const cp=compact.page;
- const subject=()=>cp.getByRole('button',{name:/^切换咨询对象/});
- await subject().waitFor();
- assert.equal(await subject().getAttribute('title'),'个人 · A');
+ const openProfiles=async()=>{
+  await cp.getByRole('button',{name:'打开侧栏与档案',exact:true}).click();
+  await cp.locator('dialog [data-testid="sidebar-nav-profiles"]').click();
+ };
+ assert.equal(await cp.getByRole('button',{name:/切换咨询对象/}).count(),0,'composer has no profile switch');
  const question=cp.getByLabel('咨询问题',{exact:true});
  const depthControl=cp.getByRole('combobox',{name:'推演深度',exact:true});
  await depthControl.selectOption('deep');
@@ -200,15 +211,18 @@ try {
  await question.fill('个人咨询'); await cp.getByRole('button',{name:'发送',exact:true}).click();
  await cp.getByRole('button',{name:'停止生成',exact:true}).waitFor({state:'hidden'});
  assert.equal(await cp.evaluate(()=>window.__requests.at(-1).depth),'deep');
- await subject().click();
+ await openProfiles();
  await cp.getByRole('note').filter({hasText:'原对话保留在历史记录中'}).waitFor();
  await cp.locator('[data-testid="pm-item"]').filter({hasText:'B'}).locator('[data-testid="pm-set-primary"]').click();
  await cp.getByRole('button',{name:'返回对话',exact:false}).click();
- assert.equal(await subject().getAttribute('title'),'个人 · B','switching primary does not accidentally enable synastry');
- await subject().click();
+ await question.fill('切换后测试'); await cp.getByRole('button',{name:'发送',exact:true}).click();
+ await cp.getByRole('button',{name:'停止生成',exact:true}).waitFor({state:'hidden'});
+ assert.equal(await cp.evaluate(()=>window.__requests.at(-1).mode),'personal','switching primary keeps personal mode');
+ assert.deepEqual(await cp.evaluate(()=>window.__requests.at(-1).profiles.map(p=>p.id)),['p1']);
+ await openProfiles();
  await cp.locator('[data-testid="pm-item"]').filter({hasText:'A'}).locator('[data-testid="pm-synastry-check"]').click();
  await cp.getByRole('button',{name:'返回对话',exact:false}).click();
- assert.equal(await subject().getAttribute('title'),'合盘 · B × A');
+
  await question.fill('两人合盘'); await cp.getByRole('button',{name:'发送',exact:true}).click();
  await cp.getByRole('button',{name:'停止生成',exact:true}).waitFor({state:'hidden'});
  assert.equal(await cp.evaluate(()=>window.__requests.at(-1).mode),'synastry');
@@ -216,16 +230,18 @@ try {
  await cp.getByRole('button',{name:'打开侧栏与档案',exact:true}).click();
  await cp.locator('dialog [data-testid="sidebar-nav-history"]').click();
  await cp.getByRole('dialog',{name:'搜索历史咨询'}).getByRole('button').filter({hasText:'个人咨询'}).click();
- assert.equal(await subject().getAttribute('title'),'个人 · A','history restores bound object instead of current draft selection');
+ await openProfiles();
+ await cp.getByRole('note').filter({hasText:'本咨询对象固定为 个人 · A'}).waitFor();
  await cp.evaluate(()=>{const ps=JSON.parse(localStorage.getItem('vela_e2e_profiles_v1'));ps[0].name='新名字';localStorage.setItem('vela_e2e_profiles_v1',JSON.stringify(ps));window.dispatchEvent(new Event('vela-e2e-profiles-updated'));});
- assert.equal(await subject().getAttribute('title'),'个人 · A','history label preserves the original session binding');
+ assert(await cp.getByRole('note').filter({hasText:'本咨询对象固定为 个人 · A'}).isVisible(),'history keeps original binding');
+ await cp.getByRole('button',{name:'返回对话',exact:false}).click();
  await cp.screenshot({path:join(artifactDir,'composer-320.png')});
  await cp.getByRole('button',{name:'打开侧栏与档案',exact:true}).click();
  await cp.locator('dialog [data-testid="sidebar-nav-portrait"]').click();
  await cp.getByRole('dialog').getByRole('heading',{name:'「破晓先驱」',exact:true}).waitFor();
  const mobileTitle=await cp.getByRole('dialog').getByRole('heading',{name:'「破晓先驱」',exact:true}).boundingBox();
  assert(mobileTitle.height<=36,'short portrait title should fit on one line at 320px');
- assert(await cp.getByRole('dialog').getByText('太阳',{exact:true}).isVisible());
+ assert(await cp.getByRole('dialog').getByText('☀️ 太阳 · 内在核心',{exact:true}).count()>0);
  assert(await cp.evaluate(()=>{const el=document.querySelector('dialog[open] .overflow-y-auto');return el.scrollWidth<=el.clientWidth;}));
  await cp.screenshot({path:join(artifactDir,'portrait-320.png')});
  await compact.context.close();
@@ -288,6 +304,34 @@ try {
  await mdp.screenshot({path:join(artifactDir,'markdown-320.png')});
  await markdown.context.close();
  console.log('PASS Markdown syntax, incomplete streaming fence, unsafe HTML/links/images, copying, and 320px overflow');
+ const quota=await setup({width:1366,height:860},{unlimited:true});
+ const qp=quota.page;
+ await qp.getByLabel('咨询问题',{exact:true}).fill('无限额度测试');
+ await qp.getByRole('button',{name:'发送',exact:true}).click();
+ await qp.getByRole('button',{name:'停止生成',exact:true}).waitFor({state:'hidden'});
+ assert.equal(await qp.evaluate(()=>window.__requests.length),1,'unlimited account can send beyond tier budget');
+ assert.equal(await qp.getByText(/本月额度已用完/).count(),0);
+ assert.equal(await qp.locator('link[rel="icon"]').getAttribute('href'),'/assets/logo-small.webp');
+ assert.equal((await qp.request.get(base+'/assets/logo-small.webp')).status(),200);
+ let serverError='Model rate limit exceeded';
+ await qp.route('**/*cloudfunctions.net/chat',route=>route.fulfill({status:200,contentType:'text/event-stream',body:`data: ${JSON.stringify({error:{status:'RESOURCE_EXHAUSTED',message:serverError}})}\n\n`}));
+ const invoke=()=>qp.evaluate(async({profiles})=>{
+  const {streamConsultationReply}=await import('/src/lib/sessionStore.ts');
+  const {formatAppError}=await import('/src/lib/accountStore.ts');
+  let exceeded=false;
+  try {
+   await streamConsultationReply({uid:'quota_regression',tier:'pro',usage:{used:999999999,unlimited:true,periodStart:'2026-11-01T00:00:00Z'},session:{id:'quota_test',mode:'personal'},profiles,existingMessages:[],userText:'test',signal:new AbortController().signal,onUpdateMessages:()=>{},onUpdateChart:()=>{},onQuotaExceeded:()=>{exceeded=true;}});
+   return {exceeded};
+  } catch(err) { return {exceeded,message:formatAppError(err,'failed')}; }
+ },{profiles});
+ const provider=await invoke();
+ assert.equal(provider.exceeded,false,'provider throttling must not exhaust user quota');
+ assert(provider.message.includes('模型服务暂时繁忙'));
+ serverError='QUOTA_EXCEEDED';
+ assert.equal((await invoke()).exceeded,true,'explicit application quota error is still recognized');
+ await new Promise(r=>setTimeout(r,50));
+ await quota.context.close();
+ console.log('PASS unlimited sending beyond budget, provider/app quota separation, handled stream errors, and favicon');
  assert.deepEqual(errors,[]);
  console.log('PASS no uncaught browser exceptions');
 } finally { await browser.close(); }

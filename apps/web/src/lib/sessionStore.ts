@@ -267,6 +267,8 @@ export async function streamConsultationReply(params: {
       { signal },
     );
 
+    // Both SDK promises reject on a stream failure; observe data before consuming chunks.
+    void data.catch(() => undefined);
     for await (const chunk of stream) {
       signal.throwIfAborted();
       if (chunk.type === 'tool' && chunk.toolName) {
@@ -295,14 +297,13 @@ export async function streamConsultationReply(params: {
     updateAssistant(finalRes?.suggestions ?? [], finalRes?.uiBlocks ?? []);
   } catch (err) {
     clearTimeout(updateTimer);
-    const code = (err as { code?: string })?.code ?? '';
     const msg = err instanceof Error ? err.message : String(err ?? '');
     if (signal.aborted || (err instanceof DOMException && err.name === 'AbortError') || msg.includes('cancelled')) {
       if (fullText || toolParts.length) updateAssistant();
       else onUpdateMessages([...baseMessages, userMsg]);
       return;
     }
-    if (code === 'functions/resource-exhausted' || msg.includes('QUOTA_EXCEEDED')) {
+    if (msg === 'QUOTA_EXCEEDED') {
       onQuotaExceeded();
       return;
     }

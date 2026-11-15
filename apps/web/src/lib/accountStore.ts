@@ -131,8 +131,9 @@ export function formatAppError(err: unknown, fallback: string): string {
   if (code === 'functions/permission-denied') {
     return `权限或套餐受限：${msg}`;
   }
-  if (code === 'functions/resource-exhausted' || msg.includes('QUOTA_EXCEEDED')) {
-    return '本月额度或服务请求已达上限，请稍后再试或升级套餐';
+  if (msg === 'QUOTA_EXCEEDED') return '本月额度已用完，可分享领额度或升级套餐';
+  if (code === 'functions/resource-exhausted') {
+    return '模型服务暂时繁忙或请求受限，请稍后重试；本次错误不代表你的月度额度已用完';
   }
   if (code === 'functions/not-found') {
     return `未找到目标记录或模型：${msg}`;
