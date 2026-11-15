@@ -36,11 +36,6 @@ a:hover {
   color: var(--accent-bright);
 }
 
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 .font-brand {
   font-family: 'Cinzel', Georgia, serif;
 }
@@ -123,7 +118,11 @@ button, input:not([type="checkbox"]):not([type="radio"]), select { min-height: 4
 button { min-width: 44px; }
 input:not([type="checkbox"]):not([type="radio"]), textarea, select { font-size: max(1rem, 1em); }
 label { font-size: 0.875rem; color: var(--text-secondary); }
-:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 2px; }
+:focus-visible:not(#consult-question) { outline: 2px solid var(--accent) !important; outline-offset: 2px; }
+#consult-composer:has(#consult-question:focus-visible) { border-color: #7f8dac; }
+@media (forced-colors: active) {
+  #consult-composer:has(#consult-question:focus-visible) { outline: 2px solid Highlight; outline-offset: 2px; }
+}
 
 @theme inline {
   --color-base: var(--bg);

@@ -23,7 +23,7 @@ const ELEM_META = [
 ];
 
 export function NatalPortraitModal({ open, profile, chart, onClose, onOpenShare }: NatalPortraitModalProps) {
-  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedDate, setSelectedDate] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: profile?.timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
   const summary = useMemo(() => chart?.natal ? computePortraitSummary(chart.natal) : null, [chart?.natal]);
   if (!profile) return null;
   const imgUrl = summary ? sunriseImageUrl(summary.sunSign, summary.ascSign, profile.gender) : '';
@@ -151,8 +151,8 @@ export function NatalPortraitModal({ open, profile, chart, onClose, onOpenShare 
 
               <section className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 sm:p-4 flex flex-col gap-3">
                 <h3 className="m-0 text-[14px] text-[#f8fafc]">✦ 指定日期天象盘 · {month}</h3>
-                <div className="flex flex-col md:flex-row items-center justify-center gap-6">
-                  <div className="w-full max-w-[320px] min-w-0 flex flex-col gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 items-center gap-5">
+                  <div className="w-full min-w-0 flex flex-col gap-3">
                     <label htmlFor="transit-date" className="text-[13px] text-[#c3cde0]">日期（出生地时区，当地 12:00）</label>
                     <input id="transit-date" type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full min-w-0 rounded-[10px] border border-border-strong bg-base px-2 text-primary" />
                     <div className="grid grid-cols-7 gap-1">

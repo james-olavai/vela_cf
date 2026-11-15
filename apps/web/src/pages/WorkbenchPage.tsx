@@ -517,7 +517,7 @@ export function WorkbenchPage({
           </div>
         </div>
       ) : (
-        <form
+        <form id="consult-composer"
           onSubmit={handleSubmitForm}
           className="rounded-[22px] border border-border bg-panel p-3 flex flex-col gap-2 focus-within:border-border-strong"
         >
