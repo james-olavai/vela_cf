@@ -1,0 +1,1883 @@
+{
+  "schemaVersion": 1,
+  "revision": "current-engine-abc-v1",
+  "referenceTime": "2026-07-15T12:00:00Z",
+  "description": "Current TypeScript engine outputs for reproducible prompt comparison; not an independently verified astronomical golden set.",
+  "entries": [
+    {
+      "id": "natal-a",
+      "toolName": "natalWheel",
+      "input": {
+        "birthDateTime": "1990-06-15T14:30",
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "timezone": "Asia/Shanghai"
+      },
+      "output": {
+        "houseSystem": "Placidus",
+        "utcDateTime": "1990-06-15T05:30Z",
+        "ascendant": {
+          "longitude": 189.7123,
+          "house": 1,
+          "signZh": "天秤",
+          "signEn": "Libra",
+          "degreeInSign": 9.7123,
+          "formatted": "天秤 09°43′"
+        },
+        "midheaven": {
+          "longitude": 101.1724,
+          "house": 10,
+          "signZh": "巨蟹",
+          "signEn": "Cancer",
+          "degreeInSign": 11.1724,
+          "formatted": "巨蟹 11°10′"
+        },
+        "houses": [
+          {
+            "house": 1,
+            "longitude": 189.7123,
+            "signZh": "天秤",
+            "signEn": "Libra",
+            "degreeInSign": 9.7123,
+            "formatted": "天秤 09°43′"
+          },
+          {
+            "house": 2,
+            "longitude": 235.7656,
+            "signZh": "天蝎",
+            "signEn": "Scorpio",
+            "degreeInSign": 25.7656,
+            "formatted": "天蝎 25°46′"
+          },
+          {
+            "house": 3,
+            "longitude": 259.9816,
+            "signZh": "射手",
+            "signEn": "Sagittarius",
+            "degreeInSign": 19.9816,
+            "formatted": "射手 19°59′"
+          },
+          {
+            "house": 4,
+            "longitude": 281.1724,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 11.1724,
+            "formatted": "摩羯 11°10′"
+          },
+          {
+            "house": 5,
+            "longitude": 314.4615,
+            "signZh": "水瓶",
+            "signEn": "Aquarius",
+            "degreeInSign": 14.4615,
+            "formatted": "水瓶 14°28′"
+          },
+          {
+            "house": 6,
+            "longitude": 344.3636,
+            "signZh": "双鱼",
+            "signEn": "Pisces",
+            "degreeInSign": 14.3636,
+            "formatted": "双鱼 14°22′"
+          },
+          {
+            "house": 7,
+            "longitude": 9.7123,
+            "signZh": "白羊",
+            "signEn": "Aries",
+            "degreeInSign": 9.7123,
+            "formatted": "白羊 09°43′"
+          },
+          {
+            "house": 8,
+            "longitude": 55.7656,
+            "signZh": "金牛",
+            "signEn": "Taurus",
+            "degreeInSign": 25.7656,
+            "formatted": "金牛 25°46′"
+          },
+          {
+            "house": 9,
+            "longitude": 79.9816,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 19.9816,
+            "formatted": "双子 19°59′"
+          },
+          {
+            "house": 10,
+            "longitude": 101.1724,
+            "signZh": "巨蟹",
+            "signEn": "Cancer",
+            "degreeInSign": 11.1724,
+            "formatted": "巨蟹 11°10′"
+          },
+          {
+            "house": 11,
+            "longitude": 134.4615,
+            "signZh": "狮子",
+            "signEn": "Leo",
+            "degreeInSign": 14.4615,
+            "formatted": "狮子 14°28′"
+          },
+          {
+            "house": 12,
+            "longitude": 164.3636,
+            "signZh": "处女",
+            "signEn": "Virgo",
+            "degreeInSign": 14.3636,
+            "formatted": "处女 14°22′"
+          }
+        ],
+        "planets": [
+          {
+            "key": "Sun",
+            "nameZh": "太阳",
+            "longitude": 83.8745,
+            "speed": 0.9551,
+            "retrograde": false,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 23.8745,
+            "formatted": "双子 23°52′",
+            "house": 9
+          },
+          {
+            "key": "Moon",
+            "nameZh": "月亮",
+            "longitude": 341.7184,
+            "speed": 13.253,
+            "retrograde": false,
+            "signZh": "双鱼",
+            "signEn": "Pisces",
+            "degreeInSign": 11.7184,
+            "formatted": "双鱼 11°43′",
+            "house": 5
+          },
+          {
+            "key": "Mercury",
+            "nameZh": "水星",
+            "longitude": 65.2369,
+            "speed": 1.7038,
+            "retrograde": false,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 5.2369,
+            "formatted": "双子 05°14′",
+            "house": 8
+          },
+          {
+            "key": "Venus",
+            "nameZh": "金星",
+            "longitude": 48.4658,
+            "speed": 1.1756,
+            "retrograde": false,
+            "signZh": "金牛",
+            "signEn": "Taurus",
+            "degreeInSign": 18.4658,
+            "formatted": "金牛 18°28′",
+            "house": 7
+          },
+          {
+            "key": "Mars",
+            "nameZh": "火星",
+            "longitude": 10.8415,
+            "speed": 0.7189,
+            "retrograde": false,
+            "signZh": "白羊",
+            "signEn": "Aries",
+            "degreeInSign": 10.8415,
+            "formatted": "白羊 10°50′",
+            "house": 7
+          },
+          {
+            "key": "Jupiter",
+            "nameZh": "木星",
+            "longitude": 105.8692,
+            "speed": 0.2164,
+            "retrograde": false,
+            "signZh": "巨蟹",
+            "signEn": "Cancer",
+            "degreeInSign": 15.8692,
+            "formatted": "巨蟹 15°52′",
+            "house": 10
+          },
+          {
+            "key": "Saturn",
+            "nameZh": "土星",
+            "longitude": 294.0475,
+            "speed": -0.0579,
+            "retrograde": true,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 24.0475,
+            "formatted": "摩羯 24°03′",
+            "house": 4
+          },
+          {
+            "key": "Uranus",
+            "nameZh": "天王星",
+            "longitude": 278.1997,
+            "speed": -0.0389,
+            "retrograde": true,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 8.1997,
+            "formatted": "摩羯 08°12′",
+            "house": 3
+          },
+          {
+            "key": "Neptune",
+            "nameZh": "海王星",
+            "longitude": 283.7148,
+            "speed": -0.025,
+            "retrograde": true,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 13.7148,
+            "formatted": "摩羯 13°43′",
+            "house": 4
+          },
+          {
+            "key": "Pluto",
+            "nameZh": "冥王星",
+            "longitude": 225.532,
+            "speed": -0.0203,
+            "retrograde": true,
+            "signZh": "天蝎",
+            "signEn": "Scorpio",
+            "degreeInSign": 15.532,
+            "formatted": "天蝎 15°32′",
+            "house": 1
+          },
+          {
+            "key": "NorthNode",
+            "nameZh": "北交点",
+            "longitude": 309.7086,
+            "speed": -0.053,
+            "retrograde": true,
+            "signZh": "水瓶",
+            "signEn": "Aquarius",
+            "degreeInSign": 9.7086,
+            "formatted": "水瓶 09°43′",
+            "house": 4
+          },
+          {
+            "key": "Chiron",
+            "nameZh": "凯龙星",
+            "longitude": 107.3391,
+            "speed": 0.1012,
+            "retrograde": false,
+            "signZh": "巨蟹",
+            "signEn": "Cancer",
+            "degreeInSign": 17.3391,
+            "formatted": "巨蟹 17°20′",
+            "house": 10
+          }
+        ],
+        "aspects": [
+          {
+            "pointA": "北交点",
+            "pointB": "上升",
+            "aspect": "三分相",
+            "orb": 0
+          },
+          {
+            "pointA": "火星",
+            "pointB": "天顶",
+            "aspect": "四分相",
+            "orb": 0.33
+          },
+          {
+            "pointA": "木星",
+            "pointB": "冥王星",
+            "aspect": "三分相",
+            "orb": 0.34
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "天顶",
+            "aspect": "三分相",
+            "orb": 0.55
+          },
+          {
+            "pointA": "金星",
+            "pointB": "凯龙星",
+            "aspect": "六分相",
+            "orb": 1.13
+          },
+          {
+            "pointA": "火星",
+            "pointB": "北交点",
+            "aspect": "六分相",
+            "orb": 1.13
+          },
+          {
+            "pointA": "火星",
+            "pointB": "上升",
+            "aspect": "对分相",
+            "orb": 1.13
+          },
+          {
+            "pointA": "木星",
+            "pointB": "凯龙星",
+            "aspect": "合相",
+            "orb": 1.47
+          },
+          {
+            "pointA": "天王星",
+            "pointB": "上升",
+            "aspect": "四分相",
+            "orb": 1.51
+          },
+          {
+            "pointA": "冥王星",
+            "pointB": "凯龙星",
+            "aspect": "三分相",
+            "orb": 1.81
+          },
+          {
+            "pointA": "海王星",
+            "pointB": "冥王星",
+            "aspect": "六分相",
+            "orb": 1.82
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "海王星",
+            "aspect": "六分相",
+            "orb": 2
+          },
+          {
+            "pointA": "木星",
+            "pointB": "海王星",
+            "aspect": "对分相",
+            "orb": 2.15
+          },
+          {
+            "pointA": "海王星",
+            "pointB": "天顶",
+            "aspect": "对分相",
+            "orb": 2.54
+          },
+          {
+            "pointA": "金星",
+            "pointB": "木星",
+            "aspect": "六分相",
+            "orb": 2.6
+          },
+          {
+            "pointA": "火星",
+            "pointB": "天王星",
+            "aspect": "四分相",
+            "orb": 2.64
+          },
+          {
+            "pointA": "火星",
+            "pointB": "海王星",
+            "aspect": "四分相",
+            "orb": 2.87
+          },
+          {
+            "pointA": "金星",
+            "pointB": "冥王星",
+            "aspect": "对分相",
+            "orb": 2.93
+          },
+          {
+            "pointA": "天王星",
+            "pointB": "天顶",
+            "aspect": "对分相",
+            "orb": 2.97
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "天王星",
+            "aspect": "六分相",
+            "orb": 3.52
+          },
+          {
+            "pointA": "海王星",
+            "pointB": "凯龙星",
+            "aspect": "对分相",
+            "orb": 3.62
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "冥王星",
+            "aspect": "三分相",
+            "orb": 3.81
+          },
+          {
+            "pointA": "海王星",
+            "pointB": "上升",
+            "aspect": "四分相",
+            "orb": 4
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "木星",
+            "aspect": "三分相",
+            "orb": 4.15
+          }
+        ]
+      }
+    },
+    {
+      "id": "natal-b",
+      "toolName": "natalWheel",
+      "input": {
+        "birthDateTime": "1985-11-02T03:15",
+        "latitude": 40.7128,
+        "longitude": -74.006,
+        "timezone": "America/New_York"
+      },
+      "output": {
+        "houseSystem": "Placidus",
+        "utcDateTime": "1985-11-02T08:15Z",
+        "ascendant": {
+          "longitude": 181.0294,
+          "house": 1,
+          "signZh": "天秤",
+          "signEn": "Libra",
+          "degreeInSign": 1.0294,
+          "formatted": "天秤 01°02′"
+        },
+        "midheaven": {
+          "longitude": 91.1898,
+          "house": 10,
+          "signZh": "巨蟹",
+          "signEn": "Cancer",
+          "degreeInSign": 1.1898,
+          "formatted": "巨蟹 01°11′"
+        },
+        "houses": [
+          {
+            "house": 1,
+            "longitude": 181.0294,
+            "signZh": "天秤",
+            "signEn": "Libra",
+            "degreeInSign": 1.0294,
+            "formatted": "天秤 01°02′"
+          },
+          {
+            "house": 2,
+            "longitude": 223.1335,
+            "signZh": "天蝎",
+            "signEn": "Scorpio",
+            "degreeInSign": 13.1335,
+            "formatted": "天蝎 13°08′"
+          },
+          {
+            "house": 3,
+            "longitude": 249.704,
+            "signZh": "射手",
+            "signEn": "Sagittarius",
+            "degreeInSign": 9.704,
+            "formatted": "射手 09°42′"
+          },
+          {
+            "house": 4,
+            "longitude": 271.1898,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 1.1898,
+            "formatted": "摩羯 01°11′"
+          },
+          {
+            "house": 5,
+            "longitude": 304.7268,
+            "signZh": "水瓶",
+            "signEn": "Aquarius",
+            "degreeInSign": 4.7268,
+            "formatted": "水瓶 04°44′"
+          },
+          {
+            "house": 6,
+            "longitude": 335.0734,
+            "signZh": "双鱼",
+            "signEn": "Pisces",
+            "degreeInSign": 5.0734,
+            "formatted": "双鱼 05°04′"
+          },
+          {
+            "house": 7,
+            "longitude": 1.0294,
+            "signZh": "白羊",
+            "signEn": "Aries",
+            "degreeInSign": 1.0294,
+            "formatted": "白羊 01°02′"
+          },
+          {
+            "house": 8,
+            "longitude": 43.1335,
+            "signZh": "金牛",
+            "signEn": "Taurus",
+            "degreeInSign": 13.1335,
+            "formatted": "金牛 13°08′"
+          },
+          {
+            "house": 9,
+            "longitude": 69.704,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 9.704,
+            "formatted": "双子 09°42′"
+          },
+          {
+            "house": 10,
+            "longitude": 91.1898,
+            "signZh": "巨蟹",
+            "signEn": "Cancer",
+            "degreeInSign": 1.1898,
+            "formatted": "巨蟹 01°11′"
+          },
+          {
+            "house": 11,
+            "longitude": 124.7268,
+            "signZh": "狮子",
+            "signEn": "Leo",
+            "degreeInSign": 4.7268,
+            "formatted": "狮子 04°44′"
+          },
+          {
+            "house": 12,
+            "longitude": 155.0734,
+            "signZh": "处女",
+            "signEn": "Virgo",
+            "degreeInSign": 5.0734,
+            "formatted": "处女 05°04′"
+          }
+        ],
+        "planets": [
+          {
+            "key": "Sun",
+            "nameZh": "太阳",
+            "longitude": 219.8638,
+            "speed": 1.0012,
+            "retrograde": false,
+            "signZh": "天蝎",
+            "signEn": "Scorpio",
+            "degreeInSign": 9.8638,
+            "formatted": "天蝎 09°52′",
+            "house": 1
+          },
+          {
+            "key": "Moon",
+            "nameZh": "月亮",
+            "longitude": 89.8395,
+            "speed": 12.0329,
+            "retrograde": false,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 29.8395,
+            "formatted": "双子 29°50′",
+            "house": 9
+          },
+          {
+            "key": "Mercury",
+            "nameZh": "水星",
+            "longitude": 242.0768,
+            "speed": 1.2325,
+            "retrograde": false,
+            "signZh": "射手",
+            "signEn": "Sagittarius",
+            "degreeInSign": 2.0768,
+            "formatted": "射手 02°05′",
+            "house": 2
+          },
+          {
+            "key": "Venus",
+            "nameZh": "金星",
+            "longitude": 200.9056,
+            "speed": 1.2483,
+            "retrograde": false,
+            "signZh": "天秤",
+            "signEn": "Libra",
+            "degreeInSign": 20.9056,
+            "formatted": "天秤 20°54′",
+            "house": 1
+          },
+          {
+            "key": "Mars",
+            "nameZh": "火星",
+            "longitude": 183.5888,
+            "speed": 0.6263,
+            "retrograde": false,
+            "signZh": "天秤",
+            "signEn": "Libra",
+            "degreeInSign": 3.5888,
+            "formatted": "天秤 03°35′",
+            "house": 1
+          },
+          {
+            "key": "Jupiter",
+            "nameZh": "木星",
+            "longitude": 308.6043,
+            "speed": 0.0944,
+            "retrograde": false,
+            "signZh": "水瓶",
+            "signEn": "Aquarius",
+            "degreeInSign": 8.6043,
+            "formatted": "水瓶 08°36′",
+            "house": 5
+          },
+          {
+            "key": "Saturn",
+            "nameZh": "土星",
+            "longitude": 238.2479,
+            "speed": 0.1148,
+            "retrograde": false,
+            "signZh": "天蝎",
+            "signEn": "Scorpio",
+            "degreeInSign": 28.2479,
+            "formatted": "天蝎 28°15′",
+            "house": 2
+          },
+          {
+            "key": "Uranus",
+            "nameZh": "天王星",
+            "longitude": 256.0242,
+            "speed": 0.0522,
+            "retrograde": false,
+            "signZh": "射手",
+            "signEn": "Sagittarius",
+            "degreeInSign": 16.0242,
+            "formatted": "射手 16°01′",
+            "house": 3
+          },
+          {
+            "key": "Neptune",
+            "nameZh": "海王星",
+            "longitude": 271.5408,
+            "speed": 0.0262,
+            "retrograde": false,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 1.5408,
+            "formatted": "摩羯 01°32′",
+            "house": 4
+          },
+          {
+            "key": "Pluto",
+            "nameZh": "冥王星",
+            "longitude": 215.0643,
+            "speed": 0.0404,
+            "retrograde": false,
+            "signZh": "天蝎",
+            "signEn": "Scorpio",
+            "degreeInSign": 5.0643,
+            "formatted": "天蝎 05°04′",
+            "house": 1
+          },
+          {
+            "key": "NorthNode",
+            "nameZh": "北交点",
+            "longitude": 38.9826,
+            "speed": -0.053,
+            "retrograde": true,
+            "signZh": "金牛",
+            "signEn": "Taurus",
+            "degreeInSign": 8.9826,
+            "formatted": "金牛 08°59′",
+            "house": 7
+          },
+          {
+            "key": "Chiron",
+            "nameZh": "凯龙星",
+            "longitude": 74.6847,
+            "speed": -0.044,
+            "retrograde": true,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 14.6847,
+            "formatted": "双子 14°41′",
+            "house": 9
+          }
+        ],
+        "aspects": [
+          {
+            "pointA": "海王星",
+            "pointB": "天顶",
+            "aspect": "对分相",
+            "orb": 0.35
+          },
+          {
+            "pointA": "木星",
+            "pointB": "北交点",
+            "aspect": "四分相",
+            "orb": 0.38
+          },
+          {
+            "pointA": "海王星",
+            "pointB": "上升",
+            "aspect": "四分相",
+            "orb": 0.51
+          },
+          {
+            "pointA": "太阳",
+            "pointB": "北交点",
+            "aspect": "对分相",
+            "orb": 0.88
+          },
+          {
+            "pointA": "水星",
+            "pointB": "上升",
+            "aspect": "六分相",
+            "orb": 1.05
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "上升",
+            "aspect": "四分相",
+            "orb": 1.19
+          },
+          {
+            "pointA": "太阳",
+            "pointB": "木星",
+            "aspect": "四分相",
+            "orb": 1.26
+          },
+          {
+            "pointA": "天王星",
+            "pointB": "凯龙星",
+            "aspect": "对分相",
+            "orb": 1.34
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "天顶",
+            "aspect": "合相",
+            "orb": 1.35
+          },
+          {
+            "pointA": "水星",
+            "pointB": "火星",
+            "aspect": "六分相",
+            "orb": 1.51
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "海王星",
+            "aspect": "对分相",
+            "orb": 1.7
+          },
+          {
+            "pointA": "火星",
+            "pointB": "海王星",
+            "aspect": "四分相",
+            "orb": 2.05
+          },
+          {
+            "pointA": "火星",
+            "pointB": "天顶",
+            "aspect": "四分相",
+            "orb": 2.4
+          },
+          {
+            "pointA": "火星",
+            "pointB": "上升",
+            "aspect": "合相",
+            "orb": 2.56
+          },
+          {
+            "pointA": "土星",
+            "pointB": "上升",
+            "aspect": "六分相",
+            "orb": 2.78
+          },
+          {
+            "pointA": "海王星",
+            "pointB": "冥王星",
+            "aspect": "六分相",
+            "orb": 3.52
+          },
+          {
+            "pointA": "木星",
+            "pointB": "冥王星",
+            "aspect": "四分相",
+            "orb": 3.54
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "火星",
+            "aspect": "四分相",
+            "orb": 3.75
+          },
+          {
+            "pointA": "水星",
+            "pointB": "土星",
+            "aspect": "合相",
+            "orb": 3.83
+          },
+          {
+            "pointA": "冥王星",
+            "pointB": "天顶",
+            "aspect": "三分相",
+            "orb": 3.87
+          },
+          {
+            "pointA": "冥王星",
+            "pointB": "北交点",
+            "aspect": "对分相",
+            "orb": 3.92
+          },
+          {
+            "pointA": "太阳",
+            "pointB": "冥王星",
+            "aspect": "合相",
+            "orb": 4.8
+          },
+          {
+            "pointA": "金星",
+            "pointB": "天王星",
+            "aspect": "六分相",
+            "orb": 4.88
+          },
+          {
+            "pointA": "火星",
+            "pointB": "木星",
+            "aspect": "三分相",
+            "orb": 5.02
+          }
+        ]
+      }
+    },
+    {
+      "id": "natal-c",
+      "toolName": "natalWheel",
+      "input": {
+        "birthDateTime": "1978-03-21T23:45",
+        "latitude": -33.8688,
+        "longitude": 151.2093,
+        "timezone": "Australia/Sydney"
+      },
+      "output": {
+        "houseSystem": "Placidus",
+        "utcDateTime": "1978-03-21T13:45Z",
+        "ascendant": {
+          "longitude": 281.6603,
+          "house": 1,
+          "signZh": "摩羯",
+          "signEn": "Capricorn",
+          "degreeInSign": 11.6603,
+          "formatted": "摩羯 11°40′"
+        },
+        "midheaven": {
+          "longitude": 175.839,
+          "house": 10,
+          "signZh": "处女",
+          "signEn": "Virgo",
+          "degreeInSign": 25.839,
+          "formatted": "处女 25°50′"
+        },
+        "houses": [
+          {
+            "house": 1,
+            "longitude": 281.6603,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 11.6603,
+            "formatted": "摩羯 11°40′"
+          },
+          {
+            "house": 2,
+            "longitude": 284.102,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 14.102,
+            "formatted": "摩羯 14°06′"
+          },
+          {
+            "house": 3,
+            "longitude": 320.4017,
+            "signZh": "水瓶",
+            "signEn": "Aquarius",
+            "degreeInSign": 20.4017,
+            "formatted": "水瓶 20°24′"
+          },
+          {
+            "house": 4,
+            "longitude": 355.839,
+            "signZh": "双鱼",
+            "signEn": "Pisces",
+            "degreeInSign": 25.839,
+            "formatted": "双鱼 25°50′"
+          },
+          {
+            "house": 5,
+            "longitude": 31.0082,
+            "signZh": "金牛",
+            "signEn": "Taurus",
+            "degreeInSign": 1.0082,
+            "formatted": "金牛 01°00′"
+          },
+          {
+            "house": 6,
+            "longitude": 68.2528,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 8.2528,
+            "formatted": "双子 08°15′"
+          },
+          {
+            "house": 7,
+            "longitude": 101.6603,
+            "signZh": "巨蟹",
+            "signEn": "Cancer",
+            "degreeInSign": 11.6603,
+            "formatted": "巨蟹 11°40′"
+          },
+          {
+            "house": 8,
+            "longitude": 104.102,
+            "signZh": "巨蟹",
+            "signEn": "Cancer",
+            "degreeInSign": 14.102,
+            "formatted": "巨蟹 14°06′"
+          },
+          {
+            "house": 9,
+            "longitude": 140.4017,
+            "signZh": "狮子",
+            "signEn": "Leo",
+            "degreeInSign": 20.4017,
+            "formatted": "狮子 20°24′"
+          },
+          {
+            "house": 10,
+            "longitude": 175.839,
+            "signZh": "处女",
+            "signEn": "Virgo",
+            "degreeInSign": 25.839,
+            "formatted": "处女 25°50′"
+          },
+          {
+            "house": 11,
+            "longitude": 211.0082,
+            "signZh": "天蝎",
+            "signEn": "Scorpio",
+            "degreeInSign": 1.0082,
+            "formatted": "天蝎 01°00′"
+          },
+          {
+            "house": 12,
+            "longitude": 248.2528,
+            "signZh": "射手",
+            "signEn": "Sagittarius",
+            "degreeInSign": 8.2528,
+            "formatted": "射手 08°15′"
+          }
+        ],
+        "planets": [
+          {
+            "key": "Sun",
+            "nameZh": "太阳",
+            "longitude": 0.5966,
+            "speed": 0.9929,
+            "retrograde": false,
+            "signZh": "白羊",
+            "signEn": "Aries",
+            "degreeInSign": 0.5966,
+            "formatted": "白羊 00°36′",
+            "house": 4
+          },
+          {
+            "key": "Moon",
+            "nameZh": "月亮",
+            "longitude": 143.7101,
+            "speed": 12.4339,
+            "retrograde": false,
+            "signZh": "狮子",
+            "signEn": "Leo",
+            "degreeInSign": 23.7101,
+            "formatted": "狮子 23°43′",
+            "house": 9
+          },
+          {
+            "key": "Mercury",
+            "nameZh": "水星",
+            "longitude": 18.6701,
+            "speed": 1.3014,
+            "retrograde": false,
+            "signZh": "白羊",
+            "signEn": "Aries",
+            "degreeInSign": 18.6701,
+            "formatted": "白羊 18°40′",
+            "house": 4
+          },
+          {
+            "key": "Venus",
+            "nameZh": "金星",
+            "longitude": 14.7863,
+            "speed": 1.2401,
+            "retrograde": false,
+            "signZh": "白羊",
+            "signEn": "Aries",
+            "degreeInSign": 14.7863,
+            "formatted": "白羊 14°47′",
+            "house": 4
+          },
+          {
+            "key": "Mars",
+            "nameZh": "火星",
+            "longitude": 114.3499,
+            "speed": 0.2034,
+            "retrograde": false,
+            "signZh": "巨蟹",
+            "signEn": "Cancer",
+            "degreeInSign": 24.3499,
+            "formatted": "巨蟹 24°21′",
+            "house": 8
+          },
+          {
+            "key": "Jupiter",
+            "nameZh": "木星",
+            "longitude": 87.4235,
+            "speed": 0.0916,
+            "retrograde": false,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 27.4235,
+            "formatted": "双子 27°25′",
+            "house": 6
+          },
+          {
+            "key": "Saturn",
+            "nameZh": "土星",
+            "longitude": 144.6545,
+            "speed": -0.0571,
+            "retrograde": true,
+            "signZh": "狮子",
+            "signEn": "Leo",
+            "degreeInSign": 24.6545,
+            "formatted": "狮子 24°39′",
+            "house": 9
+          },
+          {
+            "key": "Uranus",
+            "nameZh": "天王星",
+            "longitude": 226.0821,
+            "speed": -0.0251,
+            "retrograde": true,
+            "signZh": "天蝎",
+            "signEn": "Scorpio",
+            "degreeInSign": 16.0821,
+            "formatted": "天蝎 16°05′",
+            "house": 11
+          },
+          {
+            "key": "Neptune",
+            "nameZh": "海王星",
+            "longitude": 258.3249,
+            "speed": -0.0005,
+            "retrograde": true,
+            "signZh": "射手",
+            "signEn": "Sagittarius",
+            "degreeInSign": 18.3249,
+            "formatted": "射手 18°19′",
+            "house": 12
+          },
+          {
+            "key": "Pluto",
+            "nameZh": "冥王星",
+            "longitude": 196.0271,
+            "speed": -0.0268,
+            "retrograde": true,
+            "signZh": "天秤",
+            "signEn": "Libra",
+            "degreeInSign": 16.0271,
+            "formatted": "天秤 16°02′",
+            "house": 10
+          },
+          {
+            "key": "NorthNode",
+            "nameZh": "北交点",
+            "longitude": 186.3408,
+            "speed": -0.053,
+            "retrograde": true,
+            "signZh": "天秤",
+            "signEn": "Libra",
+            "degreeInSign": 6.3408,
+            "formatted": "天秤 06°20′",
+            "house": 10
+          },
+          {
+            "key": "Chiron",
+            "nameZh": "凯龙星",
+            "longitude": 33.8377,
+            "speed": 0.0543,
+            "retrograde": false,
+            "signZh": "金牛",
+            "signEn": "Taurus",
+            "degreeInSign": 3.8377,
+            "formatted": "金牛 03°50′",
+            "house": 5
+          }
+        ],
+        "aspects": [
+          {
+            "pointA": "水星",
+            "pointB": "海王星",
+            "aspect": "三分相",
+            "orb": 0.35
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "土星",
+            "aspect": "合相",
+            "orb": 0.94
+          },
+          {
+            "pointA": "金星",
+            "pointB": "冥王星",
+            "aspect": "对分相",
+            "orb": 1.24
+          },
+          {
+            "pointA": "火星",
+            "pointB": "天顶",
+            "aspect": "六分相",
+            "orb": 1.49
+          },
+          {
+            "pointA": "木星",
+            "pointB": "天顶",
+            "aspect": "四分相",
+            "orb": 1.58
+          },
+          {
+            "pointA": "海王星",
+            "pointB": "冥王星",
+            "aspect": "六分相",
+            "orb": 2.3
+          },
+          {
+            "pointA": "水星",
+            "pointB": "冥王星",
+            "aspect": "对分相",
+            "orb": 2.64
+          },
+          {
+            "pointA": "木星",
+            "pointB": "土星",
+            "aspect": "六分相",
+            "orb": 2.77
+          },
+          {
+            "pointA": "金星",
+            "pointB": "上升",
+            "aspect": "四分相",
+            "orb": 3.13
+          },
+          {
+            "pointA": "太阳",
+            "pointB": "木星",
+            "aspect": "四分相",
+            "orb": 3.17
+          },
+          {
+            "pointA": "金星",
+            "pointB": "海王星",
+            "aspect": "三分相",
+            "orb": 3.54
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "木星",
+            "aspect": "六分相",
+            "orb": 3.71
+          },
+          {
+            "pointA": "水星",
+            "pointB": "金星",
+            "aspect": "合相",
+            "orb": 3.88
+          },
+          {
+            "pointA": "冥王星",
+            "pointB": "上升",
+            "aspect": "四分相",
+            "orb": 4.37
+          },
+          {
+            "pointA": "天王星",
+            "pointB": "上升",
+            "aspect": "六分相",
+            "orb": 4.42
+          },
+          {
+            "pointA": "太阳",
+            "pointB": "天顶",
+            "aspect": "对分相",
+            "orb": 4.76
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "水星",
+            "aspect": "三分相",
+            "orb": 5.04
+          },
+          {
+            "pointA": "北交点",
+            "pointB": "上升",
+            "aspect": "四分相",
+            "orb": 5.32
+          },
+          {
+            "pointA": "月亮",
+            "pointB": "海王星",
+            "aspect": "三分相",
+            "orb": 5.39
+          },
+          {
+            "pointA": "水星",
+            "pointB": "火星",
+            "aspect": "四分相",
+            "orb": 5.68
+          },
+          {
+            "pointA": "太阳",
+            "pointB": "北交点",
+            "aspect": "对分相",
+            "orb": 5.74
+          },
+          {
+            "pointA": "水星",
+            "pointB": "土星",
+            "aspect": "三分相",
+            "orb": 5.98
+          },
+          {
+            "pointA": "太阳",
+            "pointB": "火星",
+            "aspect": "三分相",
+            "orb": 6.25
+          },
+          {
+            "pointA": "土星",
+            "pointB": "海王星",
+            "aspect": "三分相",
+            "orb": 6.33
+          }
+        ]
+      }
+    },
+    {
+      "id": "transit-a",
+      "toolName": "transitEvents",
+      "input": {
+        "birthDateTime": "1990-06-15T14:30",
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "timezone": "Asia/Shanghai",
+        "startDate": "2026-07-15",
+        "windowMonths": 6
+      },
+      "output": {
+        "windowMonths": 6,
+        "startDate": "2026-07-15",
+        "events": [
+          {
+            "date": "2026-07-15",
+            "transitPlanet": "火星",
+            "aspect": "四分相",
+            "natalPoint": "月亮",
+            "orb": 0.04,
+            "transitSign": "双子 11°45′"
+          },
+          {
+            "date": "2026-07-15",
+            "transitPlanet": "冥王星",
+            "aspect": "三分相",
+            "natalPoint": "水星",
+            "orb": 1.03,
+            "transitSign": "水瓶 04°12′"
+          },
+          {
+            "date": "2026-08-02",
+            "transitPlanet": "火星",
+            "aspect": "合相",
+            "natalPoint": "太阳",
+            "orb": 0.21,
+            "transitSign": "双子 24°05′"
+          },
+          {
+            "date": "2026-08-08",
+            "transitPlanet": "天王星",
+            "aspect": "合相",
+            "natalPoint": "水星",
+            "orb": 0.02,
+            "transitSign": "双子 05°15′"
+          },
+          {
+            "date": "2026-08-18",
+            "transitPlanet": "木星",
+            "aspect": "三分相",
+            "natalPoint": "火星",
+            "orb": 0.04,
+            "transitSign": "狮子 10°48′"
+          },
+          {
+            "date": "2026-08-26",
+            "transitPlanet": "火星",
+            "aspect": "四分相",
+            "natalPoint": "上升",
+            "orb": 0.17,
+            "transitSign": "巨蟹 09°53′"
+          },
+          {
+            "date": "2026-08-28",
+            "transitPlanet": "火星",
+            "aspect": "四分相",
+            "natalPoint": "火星",
+            "orb": 0.33,
+            "transitSign": "巨蟹 11°10′"
+          },
+          {
+            "date": "2026-08-28",
+            "transitPlanet": "火星",
+            "aspect": "合相",
+            "natalPoint": "天顶",
+            "orb": 0.01,
+            "transitSign": "巨蟹 11°10′"
+          },
+          {
+            "date": "2026-08-28",
+            "transitPlanet": "火星",
+            "aspect": "三分相",
+            "natalPoint": "月亮",
+            "orb": 0.55,
+            "transitSign": "巨蟹 11°10′"
+          },
+          {
+            "date": "2026-08-30",
+            "transitPlanet": "火星",
+            "aspect": "三分相",
+            "natalPoint": "月亮",
+            "orb": 0.72,
+            "transitSign": "巨蟹 12°27′"
+          },
+          {
+            "date": "2026-08-30",
+            "transitPlanet": "火星",
+            "aspect": "合相",
+            "natalPoint": "天顶",
+            "orb": 1.27,
+            "transitSign": "巨蟹 12°27′"
+          },
+          {
+            "date": "2026-09-25",
+            "transitPlanet": "木星",
+            "aspect": "四分相",
+            "natalPoint": "金星",
+            "orb": 0.11,
+            "transitSign": "狮子 18°35′"
+          },
+          {
+            "date": "2026-10-07",
+            "transitPlanet": "土星",
+            "aspect": "四分相",
+            "natalPoint": "天顶",
+            "orb": 0.08,
+            "transitSign": "白羊 11°06′"
+          },
+          {
+            "date": "2026-10-11",
+            "transitPlanet": "天王星",
+            "aspect": "合相",
+            "natalPoint": "水星",
+            "orb": 0.08,
+            "transitSign": "双子 05°19′"
+          },
+          {
+            "date": "2026-10-11",
+            "transitPlanet": "土星",
+            "aspect": "合相",
+            "natalPoint": "火星",
+            "orb": 0.06,
+            "transitSign": "白羊 10°47′"
+          },
+          {
+            "date": "2026-10-11",
+            "transitPlanet": "土星",
+            "aspect": "对分相",
+            "natalPoint": "上升",
+            "orb": 1.07,
+            "transitSign": "白羊 10°47′"
+          },
+          {
+            "date": "2026-10-13",
+            "transitPlanet": "土星",
+            "aspect": "合相",
+            "natalPoint": "火星",
+            "orb": 0.21,
+            "transitSign": "白羊 10°38′"
+          },
+          {
+            "date": "2026-10-13",
+            "transitPlanet": "土星",
+            "aspect": "四分相",
+            "natalPoint": "天顶",
+            "orb": 0.54,
+            "transitSign": "白羊 10°38′"
+          },
+          {
+            "date": "2026-10-15",
+            "transitPlanet": "天王星",
+            "aspect": "合相",
+            "natalPoint": "水星",
+            "orb": 0.02,
+            "transitSign": "双子 05°13′"
+          },
+          {
+            "date": "2026-10-17",
+            "transitPlanet": "火星",
+            "aspect": "三分相",
+            "natalPoint": "火星",
+            "orb": 0.17,
+            "transitSign": "狮子 11°01′"
+          }
+        ]
+      }
+    },
+    {
+      "id": "synastry-ab",
+      "toolName": "synastryAspects",
+      "input": {
+        "charts": [
+          {
+            "birthDateTime": "1990-06-15T14:30",
+            "latitude": 39.9042,
+            "longitude": 116.4074,
+            "timezone": "Asia/Shanghai",
+            "label": "测试 A · 北京",
+            "entityType": "person"
+          },
+          {
+            "birthDateTime": "1985-11-02T03:15",
+            "latitude": 40.7128,
+            "longitude": -74.006,
+            "timezone": "America/New_York",
+            "label": "测试 B · 纽约",
+            "entityType": "person"
+          }
+        ]
+      },
+      "output": {
+        "chartCount": 2,
+        "charts": [
+          {
+            "label": "测试 A · 北京",
+            "entityType": "person",
+            "sun": "双子 23.9°",
+            "moon": "双鱼 11.7°",
+            "ascendant": "天秤 9.7°",
+            "mc": "巨蟹 11.2°"
+          },
+          {
+            "label": "测试 B · 纽约",
+            "entityType": "person",
+            "sun": "天蝎 9.9°",
+            "moon": "双子 29.8°",
+            "ascendant": "天秤 1.0°",
+            "mc": "巨蟹 1.2°"
+          }
+        ],
+        "pairs": [
+          {
+            "chartA": "测试 A · 北京",
+            "chartB": "测试 B · 纽约",
+            "aspects": [
+              {
+                "pointA": "测试 A · 北京·北交点",
+                "pointB": "测试 B · 纽约·太阳",
+                "aspect": "四分相",
+                "orb": 0.16
+              },
+              {
+                "pointA": "测试 A · 北京·北交点",
+                "pointB": "测试 B · 纽约·北交点",
+                "aspect": "四分相",
+                "orb": 0.73
+              },
+              {
+                "pointA": "测试 A · 北京·天王星",
+                "pointB": "测试 B · 纽约·北交点",
+                "aspect": "三分相",
+                "orb": 0.78
+              },
+              {
+                "pointA": "测试 A · 北京·北交点",
+                "pointB": "测试 B · 纽约·木星",
+                "aspect": "合相",
+                "orb": 1.1
+              },
+              {
+                "pointA": "测试 A · 北京·上升",
+                "pointB": "测试 B · 纽约·木星",
+                "aspect": "三分相",
+                "orb": 1.11
+              },
+              {
+                "pointA": "测试 A · 北京·天顶",
+                "pointB": "测试 B · 纽约·太阳",
+                "aspect": "三分相",
+                "orb": 1.31
+              },
+              {
+                "pointA": "测试 A · 北京·水星",
+                "pointB": "测试 B · 纽约·火星",
+                "aspect": "三分相",
+                "orb": 1.65
+              },
+              {
+                "pointA": "测试 A · 北京·天王星",
+                "pointB": "测试 B · 纽约·太阳",
+                "aspect": "六分相",
+                "orb": 1.66
+              },
+              {
+                "pointA": "测试 A · 北京·月亮",
+                "pointB": "测试 B · 纽约·太阳",
+                "aspect": "三分相",
+                "orb": 1.85
+              },
+              {
+                "pointA": "测试 A · 北京·天顶",
+                "pointB": "测试 B · 纽约·北交点",
+                "aspect": "六分相",
+                "orb": 2.19
+              },
+              {
+                "pointA": "测试 A · 北京·火星",
+                "pointB": "测试 B · 纽约·木星",
+                "aspect": "六分相",
+                "orb": 2.24
+              },
+              {
+                "pointA": "测试 A · 北京·月亮",
+                "pointB": "测试 B · 纽约·北交点",
+                "aspect": "六分相",
+                "orb": 2.74
+              },
+              {
+                "pointA": "测试 A · 北京·太阳",
+                "pointB": "测试 B · 纽约·金星",
+                "aspect": "三分相",
+                "orb": 2.97
+              },
+              {
+                "pointA": "测试 A · 北京·月亮",
+                "pointB": "测试 B · 纽约·凯龙星",
+                "aspect": "四分相",
+                "orb": 2.97
+              },
+              {
+                "pointA": "测试 A · 北京·土星",
+                "pointB": "测试 B · 纽约·金星",
+                "aspect": "四分相",
+                "orb": 3.14
+              },
+              {
+                "pointA": "测试 A · 北京·天王星",
+                "pointB": "测试 B · 纽约·冥王星",
+                "aspect": "六分相",
+                "orb": 3.14
+              },
+              {
+                "pointA": "测试 A · 北京·水星",
+                "pointB": "测试 B · 纽约·水星",
+                "aspect": "对分相",
+                "orb": 3.16
+              },
+              {
+                "pointA": "测试 A · 北京·水星",
+                "pointB": "测试 B · 纽约·木星",
+                "aspect": "三分相",
+                "orb": 3.37
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "relocation-a-london",
+      "toolName": "relocationChart",
+      "input": {
+        "birthDateTime": "1990-06-15T14:30",
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "timezone": "Asia/Shanghai",
+        "destLatitude": 51.5074,
+        "destLongitude": -0.1278
+      },
+      "output": {
+        "chartType": "relocation",
+        "utcDateTime": "1990-06-15T05:29Z",
+        "ascendant": {
+          "longitude": 105.7001,
+          "house": 1,
+          "signZh": "巨蟹",
+          "signEn": "Cancer",
+          "degreeInSign": 15.7001,
+          "formatted": "巨蟹 15°42′"
+        },
+        "midheaven": {
+          "longitude": 344.3802,
+          "house": 10,
+          "signZh": "双鱼",
+          "signEn": "Pisces",
+          "degreeInSign": 14.3802,
+          "formatted": "双鱼 14°23′"
+        },
+        "houses": [
+          {
+            "house": 1,
+            "longitude": 105.7001,
+            "signZh": "巨蟹",
+            "signEn": "Cancer",
+            "degreeInSign": 15.7001,
+            "formatted": "巨蟹 15°42′"
+          },
+          {
+            "house": 2,
+            "longitude": 84.2483,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 24.2483,
+            "formatted": "双子 24°15′"
+          },
+          {
+            "house": 3,
+            "longitude": 124.6688,
+            "signZh": "狮子",
+            "signEn": "Leo",
+            "degreeInSign": 4.6688,
+            "formatted": "狮子 04°40′"
+          },
+          {
+            "house": 4,
+            "longitude": 164.3802,
+            "signZh": "处女",
+            "signEn": "Virgo",
+            "degreeInSign": 14.3802,
+            "formatted": "处女 14°23′"
+          },
+          {
+            "house": 5,
+            "longitude": 200.5992,
+            "signZh": "天秤",
+            "signEn": "Libra",
+            "degreeInSign": 20.5992,
+            "formatted": "天秤 20°36′"
+          },
+          {
+            "house": 6,
+            "longitude": 247.2447,
+            "signZh": "射手",
+            "signEn": "Sagittarius",
+            "degreeInSign": 7.2447,
+            "formatted": "射手 07°15′"
+          },
+          {
+            "house": 7,
+            "longitude": 285.7001,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 15.7001,
+            "formatted": "摩羯 15°42′"
+          },
+          {
+            "house": 8,
+            "longitude": 264.2483,
+            "signZh": "射手",
+            "signEn": "Sagittarius",
+            "degreeInSign": 24.2483,
+            "formatted": "射手 24°15′"
+          },
+          {
+            "house": 9,
+            "longitude": 304.6688,
+            "signZh": "水瓶",
+            "signEn": "Aquarius",
+            "degreeInSign": 4.6688,
+            "formatted": "水瓶 04°40′"
+          },
+          {
+            "house": 10,
+            "longitude": 344.3802,
+            "signZh": "双鱼",
+            "signEn": "Pisces",
+            "degreeInSign": 14.3802,
+            "formatted": "双鱼 14°23′"
+          },
+          {
+            "house": 11,
+            "longitude": 20.5992,
+            "signZh": "白羊",
+            "signEn": "Aries",
+            "degreeInSign": 20.5992,
+            "formatted": "白羊 20°36′"
+          },
+          {
+            "house": 12,
+            "longitude": 67.2447,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 7.2447,
+            "formatted": "双子 07°15′"
+          }
+        ],
+        "planets": [
+          {
+            "key": "Sun",
+            "nameZh": "太阳",
+            "longitude": 83.8745,
+            "speed": 0.9551,
+            "retrograde": false,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 23.8745,
+            "formatted": "双子 23°52′",
+            "house": 1
+          },
+          {
+            "key": "Moon",
+            "nameZh": "月亮",
+            "longitude": 341.7184,
+            "speed": 13.253,
+            "retrograde": false,
+            "signZh": "双鱼",
+            "signEn": "Pisces",
+            "degreeInSign": 11.7184,
+            "formatted": "双鱼 11°43′",
+            "house": 1
+          },
+          {
+            "key": "Mercury",
+            "nameZh": "水星",
+            "longitude": 65.2369,
+            "speed": 1.7038,
+            "retrograde": false,
+            "signZh": "双子",
+            "signEn": "Gemini",
+            "degreeInSign": 5.2369,
+            "formatted": "双子 05°14′",
+            "house": 1
+          },
+          {
+            "key": "Venus",
+            "nameZh": "金星",
+            "longitude": 48.4658,
+            "speed": 1.1756,
+            "retrograde": false,
+            "signZh": "金牛",
+            "signEn": "Taurus",
+            "degreeInSign": 18.4658,
+            "formatted": "金牛 18°28′",
+            "house": 1
+          },
+          {
+            "key": "Mars",
+            "nameZh": "火星",
+            "longitude": 10.8415,
+            "speed": 0.7189,
+            "retrograde": false,
+            "signZh": "白羊",
+            "signEn": "Aries",
+            "degreeInSign": 10.8415,
+            "formatted": "白羊 10°50′",
+            "house": 1
+          },
+          {
+            "key": "Jupiter",
+            "nameZh": "木星",
+            "longitude": 105.8692,
+            "speed": 0.2164,
+            "retrograde": false,
+            "signZh": "巨蟹",
+            "signEn": "Cancer",
+            "degreeInSign": 15.8692,
+            "formatted": "巨蟹 15°52′",
+            "house": 1
+          },
+          {
+            "key": "Saturn",
+            "nameZh": "土星",
+            "longitude": 294.0475,
+            "speed": -0.0579,
+            "retrograde": true,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 24.0475,
+            "formatted": "摩羯 24°03′",
+            "house": 1
+          },
+          {
+            "key": "Uranus",
+            "nameZh": "天王星",
+            "longitude": 278.1997,
+            "speed": -0.0389,
+            "retrograde": true,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 8.1997,
+            "formatted": "摩羯 08°12′",
+            "house": 1
+          },
+          {
+            "key": "Neptune",
+            "nameZh": "海王星",
+            "longitude": 283.7148,
+            "speed": -0.025,
+            "retrograde": true,
+            "signZh": "摩羯",
+            "signEn": "Capricorn",
+            "degreeInSign": 13.7148,
+            "formatted": "摩羯 13°43′",
+            "house": 1
+          },
+          {
+            "key": "Pluto",
+            "nameZh": "冥王星",
+            "longitude": 225.532,
+            "speed": -0.0203,
+            "retrograde": true,
+            "signZh": "天蝎",
+            "signEn": "Scorpio",
+            "degreeInSign": 15.532,
+            "formatted": "天蝎 15°32′",
+            "house": 1
+          },
+          {
+            "key": "NorthNode",
+            "nameZh": "北交点",
+            "longitude": 309.7086,
+            "speed": -0.053,
+            "retrograde": true,
+            "signZh": "水瓶",
+            "signEn": "Aquarius",
+            "degreeInSign": 9.7086,
+            "formatted": "水瓶 09°43′",
+            "house": 1
+          },
+          {
+            "key": "Chiron",
+            "nameZh": "凯龙星",
+            "longitude": 107.3391,
+            "speed": 0.1012,
+            "retrograde": false,
+            "signZh": "巨蟹",
+            "signEn": "Cancer",
+            "degreeInSign": 17.3391,
+            "formatted": "巨蟹 17°20′",
+            "house": 1
+          }
+        ]
+      }
+    }
+  ]
+}

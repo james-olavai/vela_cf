@@ -73,7 +73,16 @@ for (const [ws, rule] of Object.entries(B.workspaces)) {
     }
 
     if (sec.maxAstrologyTools != null) {
-      const toolCount = texts.reduce((n, t) => n + (t.match(/\bdefineTool\s*\(/g) ?? []).length, 0);
+      // Table-backed factory registers each spec, plus the progressive Reference tool.
+      // Count concrete table entries rather than factory invocations.
+      const toolCount = texts.reduce((n, t, i) => {
+        if (files[i].endsWith('/tools.ts')) {
+          const table = t.match(/const specs:[\s\S]*?=\s*\[([\s\S]*?)\n\s*\];/);
+          if (!table) { errors.push('tools.ts：无法识别工具目录，检查器需要同步更新'); return n; }
+          return n + (table[1].match(/\[\s*['"][a-zA-Z][a-zA-Z0-9]*['"]\s*,/g) ?? []).length + (t.includes('tools.loadSkillReference =') ? 1 : 0);
+        }
+        return n + (t.match(/\b(?:defineTool|dynamicTool)\s*\(/g) ?? []).length;
+      }, 0);
       report.push(`${''.padEnd(20)} ${String(toolCount).padStart(5)} / ${sec.maxAstrologyTools} 个 AI Tool`);
       if (toolCount > sec.maxAstrologyTools) {
         errors.push(`${ws}：注册了 ${toolCount} 个 defineTool，超出上限 ${sec.maxAstrologyTools}（只允许 4 个排盘纯函数）`);
@@ -83,7 +92,7 @@ for (const [ws, rule] of Object.entries(B.workspaces)) {
     if (sec.forbidSideEffectsInTools) {
       for (let i = 0; i < files.length; i++) {
         const text = texts[i];
-        if (/\bdefineTool\s*\(/.test(text)) {
+        if (/\b(?:defineTool|dynamicTool)\b/.test(text)) {
           const rel = relative(root, files[i]);
           if (/from\s+['"]firebase-admin|from\s+['"]stripe|\bfetch\s*\(/.test(text)) {
             errors.push(`${rel}：定义 AI Tool 的文件严禁引入 firebase-admin / stripe 或调用 fetch（LLM 防注入零副作用边界，见 docs/LLD.md §4.6）`);

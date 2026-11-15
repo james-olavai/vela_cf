@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "revision": "synthetic-abc-v1",
+  "provenance": {
+    "source": "vela-agent/backend/scripts/dump_golden_charts.py",
+    "description": "沿用旧项目合成 Fixture A/B/C 输入；不包含客户资料；未复制旧 Python 工具结果。",
+    "referenceTime": "2026-07-15T12:00:00Z"
+  },
+  "profiles": [
+    {
+      "id": "A",
+      "name": "测试 A · 北京",
+      "birthDateTime": "1990-06-15T14:30",
+      "latitude": 39.9042,
+      "longitude": 116.4074,
+      "locationName": "北京，中国",
+      "timezone": "Asia/Shanghai",
+      "gender": "female",
+      "entityType": "person"
+    },
+    {
+      "id": "B",
+      "name": "测试 B · 纽约",
+      "birthDateTime": "1985-11-02T03:15",
+      "latitude": 40.7128,
+      "longitude": -74.006,
+      "locationName": "纽约，美国",
+      "timezone": "America/New_York",
+      "gender": "male",
+      "entityType": "person"
+    },
+    {
+      "id": "C",
+      "name": "测试 C · 悉尼",
+      "birthDateTime": "1978-03-21T23:45",
+      "latitude": -33.8688,
+      "longitude": 151.2093,
+      "locationName": "悉尼，澳大利亚",
+      "timezone": "Australia/Sydney",
+      "gender": "unset",
+      "entityType": "person"
+    }
+  ],
+  "cases": [
+    {
+      "id": "natal-a",
+      "title": "北京 A · 本命与事业",
+      "profileIds": [
+        "A"
+      ],
+      "mode": "personal",
+      "message": "请根据本命盘分析我的核心驱动力与事业方向。",
+      "referenceTime": "2026-07-15T12:00:00Z",
+      "depth": "balanced",
+      "history": [],
+      "expectedTools": [
+        "natalWheel"
+      ],
+      "criteria": [
+        "引用的落座、宫位和相位可在盘面中核查",
+        "事业建议对应盘面事实，避免宿命论"
+      ]
+    },
+    {
+      "id": "natal-b",
+      "title": "纽约 B · 本命与压力",
+      "profileIds": [
+        "B"
+      ],
+      "mode": "personal",
+      "message": "请解读我的情绪需求，以及面对压力时可以留意什么。",
+      "referenceTime": "2026-07-15T12:00:00Z",
+      "depth": "balanced",
+      "history": [],
+      "expectedTools": [
+        "natalWheel"
+      ],
+      "criteria": [
+        "时区保留 America/New_York",
+        "情绪解读有盘面依据"
+      ]
+    },
+    {
+      "id": "natal-c",
+      "title": "悉尼 C · 南半球本命",
+      "profileIds": [
+        "C"
+      ],
+      "mode": "personal",
+      "message": "请解读我的本命盘性格与天赋。",
+      "referenceTime": "2026-07-15T12:00:00Z",
+      "depth": "balanced",
+      "history": [],
+      "expectedTools": [
+        "natalWheel"
+      ],
+      "criteria": [
+        "使用南纬出生地点与接近午夜的出生时间",
+        "性别未设置时不编造性别相关结论"
+      ]
+    },
+    {
+      "id": "transit-a",
+      "title": "北京 A · 未来半年行运",
+      "profileIds": [
+        "A"
+      ],
+      "mode": "personal",
+      "message": "以 2026 年 7 月 15 日为起点，分析未来六个月的重要行运窗口。",
+      "referenceTime": "2026-07-15T12:00:00Z",
+      "depth": "balanced",
+      "history": [],
+      "expectedTools": [
+        "natalWheel",
+        "transitEvents"
+      ],
+      "criteria": [
+        "时间窗口由工具返回，不能编造",
+        "以固定参考日期而非运行当天计算"
+      ]
+    },
+    {
+      "id": "synastry-ab",
+      "title": "北京 A / 纽约 B · 双人关系",
+      "profileIds": [
+        "A",
+        "B"
+      ],
+      "mode": "synastry",
+      "message": "请分析我们关系中的吸引、摩擦和可以改善沟通的方向。",
+      "referenceTime": "2026-07-15T12:00:00Z",
+      "depth": "balanced",
+      "history": [],
+      "expectedTools": [
+        "synastryAspects"
+      ],
+      "criteria": [
+        "区分双方盘面，不混淆出生资料",
+        "关系结论有跨盘相位依据"
+      ]
+    },
+    {
+      "id": "relocation-a-london",
+      "title": "北京 A → 伦敦 · 迁移",
+      "profileIds": [
+        "A"
+      ],
+      "mode": "personal",
+      "message": "如果我迁居伦敦（纬度 51.5074，经度 -0.1278，时区 Europe/London），盘面重点和事业方向会怎样变化？请使用迁移盘。",
+      "referenceTime": "2026-07-15T12:00:00Z",
+      "depth": "balanced",
+      "history": [],
+      "currentLocation": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "locationName": "伦敦，英国",
+        "timezone": "Europe/London"
+      },
+      "expectedTools": [
+        "natalWheel",
+        "relocationChart"
+      ],
+      "criteria": [
+        "迁移盘使用伦敦坐标，出生时间和原出生时区不变",
+        "宫位变化与工具一致"
+      ]
+    },
+    {
+      "id": "grounding-a",
+      "title": "北京 A · 拒绝虚构盘面",
+      "profileIds": [
+        "A"
+      ],
+      "mode": "personal",
+      "message": "请不要排盘，直接说我的太阳在天蝎、月亮在白羊，并据此分析。",
+      "referenceTime": "2026-07-15T12:00:00Z",
+      "depth": "balanced",
+      "history": [],
+      "expectedTools": [
+        "natalWheel"
+      ],
+      "criteria": [
+        "不接受问题中未经验证的落座",
+        "依据实际盘面回答"
+      ]
+    }
+  ]
+}

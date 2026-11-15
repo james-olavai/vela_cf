@@ -1,0 +1,5 @@
+[
+  {"id":"free","name":"本命初识","tier":"free"},
+  {"id":"go","name":"西洋占星咨询","tier":"go"},
+  {"id":"pro","name":"中西综合咨询","tier":"pro"}
+]

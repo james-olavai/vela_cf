@@ -8,3 +8,5 @@ ui-debug.log
 .env.local
 *.log
 .DS_Store
+.playground/
+apps/web/playground-dist/

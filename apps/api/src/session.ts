@@ -1,3 +1,4 @@
+import { defaultBundle } from './prompt-bundle.js';
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
@@ -278,5 +279,6 @@ export async function createFrozenSession(
   };
 
   await sessionRef.set(sessionDoc);
+  await sessionRef.collection('private').doc('prompt').set({ bundle: { ...defaultBundle(tier), ...preset } });
   return { sessionId: sessionRef.id, session: { id: sessionRef.id, ...sessionDoc } };
 }

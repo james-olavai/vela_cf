@@ -1,3 +1,5 @@
+import { generateReading } from './generate-reading.js';
+import { defaultBundle } from './prompt-bundle.js';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -187,139 +189,17 @@ const chatFlow = ai.defineFlow(
       quotaReserved = true;
 
       const userCreatedAt = new Date().toISOString();
-      const allowedToolNames: AstrologyToolName[] = Array.isArray(session.frozenTools)
-        ? (session.frozenTools as AstrologyToolName[])
-        : ['natalWheel'];
-      const routed = routeTurnCapabilities({
-        tier,
-        depth: input.depth,
-        message: input.message,
-        profileCount: profiles.length,
-        sessionAllowedTools: allowedToolNames,
-      });
-      const tools = [
-        ...routed.routedTools.map((name) => astrologyTools[name]).filter(Boolean),
-        ...(routed.enableSkillLoader ? [astrologyTools.loadSkillReference] : []),
-      ];
-
-      let fullText = '';
-      const toolParts: Array<{ type: 'tool-call'; toolName: string; label: string }> = [];
-      const seenTools = new Set<string>();
-      const chartSnapshot: Record<string, unknown> = {};
-      let precomputedNatal: NatalWheelResult | null = null;
-      try {
-        const primary = profiles[0];
-        if (primary) {
-          precomputedNatal = natalWheel({
-            birthDateTime: String(primary.birthDateTime),
-            latitude: Number(primary.latitude),
-            longitude: Number(primary.longitude),
-            timezone: String(primary.timezone),
-          });
-          chartSnapshot.natal = precomputedNatal;
-        }
-      } catch {
-        // ignore precompute errors on malformed legacy profiles
-      }
-      const factFrameContext = precomputedNatal ? `\n${buildNatalFactSummary(precomputedNatal)}` : '';
-
-      const entityLabel = (et?: string) =>
-        et === 'company' ? '公司' : et === 'country' ? '国家' : '个人';
-      const profileContext = profiles
-        .map(
-          (p, idx) =>
-            `档案${profiles.length > 1 ? idx + 1 : ''}：类型=${entityLabel(p.entityType)}，称呼=${p.name}，出生/成立时间=${p.birthDateTime}，地点=${p.locationName}（纬度 ${p.latitude}，经度 ${p.longitude}，时区 ${p.timezone}），性别=${p.gender ?? 'unset'}。`,
-        )
-        .join('\n');
-
-      const modelName = String(session.frozenModel || 'vertexai/gemini-4-hydrogen');
-      const isGemini4 = modelName.includes('gemini-4-');
-      const { stream, response } = ai.generateStream({
-        model: modelName,
-        system:
-          `${session.frozenPrompt}\n` +
-          '当需要直观呈现关键相位、行运时间窗或合盘维度对比时，可在正文末尾、`SUGGESTIONS:` 之前附带一个可选的 `:::vela-ui` JSON 块（`component` 仅限 `aspect-highlight` | `transit-timeline` | `synastry-meter`，纯 JSON，不要加代码块围栏），例如：\n' +
-          ':::vela-ui\n{"component":"aspect-highlight","title":"核心相位焦点","items":[{"pair":"太阳 □ 土星","orb":"1.2°","tone":"tension","note":"近期压力与定型课题","prompt":"展开解读太阳四分土星对当下选择的启示"}]}\n:::\n' +
-          '在回复正文最后，请另起一行输出 `SUGGESTIONS:` 后跟 2 个简短追问（用 `|` 分隔），例如 `SUGGESTIONS:天顶在水瓶意味着什么？|土星六宫该如何减负？`。\n\n' +
-          profileContext +
-          factFrameContext +
-          `\n${routed.skillIndexPrompt}`,
-        prompt: `${historyContext ? `${historyContext}\n` : ''}用户最新消息: ${input.message}`,
-        tools,
-        maxTurns: routed.maxTurns,
-        config: {
-          ...(isGemini4 ? {} : { temperature: 0.6 }),
-          maxOutputTokens: MAX_OUTPUT_TOKENS_BY_TIER[tier],
-        },
-      });
-
-      for await (const chunk of stream) {
-        if (chunk.toolRequests.length > 0) {
-          for (const req of chunk.toolRequests) {
-            const toolName = req.toolRequest.name;
-            if (!seenTools.has(toolName)) {
-              seenTools.add(toolName);
-              const label = TOOL_LABELS[toolName] ?? `已排盘：${toolName}`;
-              toolParts.push({ type: 'tool-call', toolName, label });
-              sendChunk({ type: 'tool', toolName, label });
-            }
-          }
-        }
-
-        for (const part of chunk.content) {
-          const tr = (part as { toolResponse?: { name?: string; output?: unknown } }).toolResponse;
-          if (tr?.name && tr.output !== undefined) {
-            if (tr.name === 'natalWheel' && !chartSnapshot.natal) {
-              chartSnapshot.natal = tr.output;
-            } else if (tr.name === 'transitEvents') {
-              chartSnapshot.transits = tr.output;
-            } else if (tr.name === 'baziPillars') {
-              chartSnapshot.bazi = tr.output;
-            } else if (tr.name === 'ziweiPalaces') {
-              chartSnapshot.ziwei = tr.output;
-            }
-            if (chartSnapshot.natal) {
-              sendChunk({ type: 'chart', chart: { ...chartSnapshot } });
-            }
-          }
-        }
-
-        if (chunk.role === 'model' && chunk.text) {
-          fullText += chunk.text;
-          sendChunk({ type: 'text', text: chunk.text });
-        }
-      }
-
-      const finalResp = await response;
-      if (!fullText && finalResp.text) {
-        fullText = finalResp.text;
-      }
-
-      if (!chartSnapshot.natal) {
-        try {
-          const primary = profiles[0];
-          chartSnapshot.natal = natalWheel({
-            birthDateTime: String(primary.birthDateTime),
-            latitude: Number(primary.latitude),
-            longitude: Number(primary.longitude),
-            timezone: String(primary.timezone),
-          });
-          sendChunk({ type: 'chart', chart: { ...chartSnapshot } });
-        } catch {
-          // ignore chart preview fallback errors
-        }
-      }
-
-      const { cleanText: rawCleanText, uiBlocks: rawUiBlocks, suggestions } = extractVelaUiBlocks(fullText);
-      const activeNatal = (chartSnapshot.natal as NatalWheelResult | undefined) ?? precomputedNatal;
-      const isSynastry = session.mode === 'synastry' || profiles.length > 1 || seenTools.has('synastryAspects');
-      const { blocks: uiBlocks, droppedCount } = filterHallucinatedUiBlocks(rawUiBlocks, activeNatal, isSynastry);
-      const { text: cleanText, mismatches } = verifyKeySignClaims(rawCleanText, activeNatal);
-      if (droppedCount > 0 || mismatches.length > 0) {
-        console.warn('Anti-hallucination guard triggered', { uid, droppedCount, mismatches });
-      }
-
-      const usageMeta = finalResp.usage;
+      const frozen = await db.collection('users').doc(uid).collection('sessions').doc(input.sessionId).collection('private').doc('prompt').get();
+      const bundle = { ...defaultBundle(tier), ...(frozen.data()?.bundle as object || {}),
+        systemPrompt: String(session.frozenPrompt || defaultBundle(tier).systemPrompt),
+        modelName: String(session.frozenModel || defaultBundle(tier).modelName),
+        allowedTools: Array.isArray(session.frozenTools) ? session.frozenTools : ['natalWheel'],
+      };
+      const generated = await generateReading(ai, { bundle, tier, profiles, message: input.message,
+        historyContext, mode: String(session.mode), depth: input.depth }, sendChunk);
+      const { text: cleanText, uiBlocks, suggestions, toolParts } = generated;
+      sendChunk({type:'chart',chart:generated.chart});
+      const usageMeta = generated.usage;
       const inTokens = Number(usageMeta?.inputTokens ?? 0);
       const outTokens = Number(usageMeta?.outputTokens ?? 0) + Number(usageMeta?.thoughtsTokens ?? 0);
       const costMicroUsd =
