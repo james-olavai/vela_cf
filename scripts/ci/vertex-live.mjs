@@ -16,12 +16,15 @@ mkdirSync('artifacts',{recursive:true});
 const save=()=>writeFileSync('artifacts/vertex-live.json',JSON.stringify(evidence,null,2));
 for(const [name,tier,bundle] of [['current','free',defaultBundle('free')],['frozen-legacy','go',legacy]]) {
   assert.equal(bundle.modelName,'vertexai/gemini-4-hydrogen');
-  const result=await generateReading(ai,{tier,bundle,profiles,message:'请简要解读性格与职业倾向，给出一条具体建议。',signal:AbortSignal.timeout(120_000)});
-  const record={case:name,model:bundle.modelName,characters:result.text.length,rawCharacters:result.rawText.length,finishReason:result.diagnostics.finishReason,usage:result.usage,parameters:result.diagnostics.parameters};
+  const message=name==='frozen-legacy'?'请分析未来三个月事业运势，先调用 transitEvents（windowMonths=3，startDate=2026-11-01），根据结果简要给一条建议。':'请简要解读性格与职业倾向，给出一条具体建议。';
+  const result=await generateReading(ai,{tier,bundle,profiles,message,signal:AbortSignal.timeout(120_000)});
+  if(name==='frozen-legacy') assert(result.diagnostics.tools.includes('transitEvents'),'Transit route was not activated');
+  const record={case:name,model:bundle.modelName,characters:result.text.length,rawCharacters:result.rawText.length,finishReason:result.diagnostics.finishReason,usage:result.usage,tools:result.diagnostics.calls.map(c=>c.name),parameters:result.diagnostics.parameters};
   evidence.push(record);save();
   console.log('Candidate diagnostics',JSON.stringify(record));
   assert(result.text.trim().length>=30,`${name}: missing useful final answer`);
   assert(result.usage?.inputTokens>0,`${name}: missing provider usage`);
+  if(name==='frozen-legacy') assert(result.diagnostics.calls.some(c=>c.name==='transitEvents'),'No real transit tool execution');
 
   console.log(`PASS candidate Vertex ${name}: ${result.text.length} characters`);
 }

@@ -14,7 +14,7 @@ export function parseChat(body) {
   assert(final?.text?.trim().length>=30,'Missing final assistant answer');
   assert(events.some(e=>e.type==='text'&&e.text),'Missing streamed text');
   assert(events.some(e=>e.type==='done'),'Missing stream completion');
-  return {characters:final.text.length,eventTypes:[...new Set(events.map(e=>e.type))]};
+  return {characters:final.text.length,eventTypes:[...new Set(events.map(e=>e.type))],tools:events.filter(e=>e.type==='tool').map(e=>e.toolName)};
 }
 const identity=`https://identitytoolkit.googleapis.com/v1/accounts:`;
 async function authCall(action,data) {
@@ -42,7 +42,8 @@ async function smoke(name,{unlimited=false,exhausted=false,legacy=false}={}) {
       await google(`${documentRoot}/${root}/sessions/${session.id}?updateMask.fieldPaths=frozenPrompt&updateMask.fieldPaths=frozenModel&updateMask.fieldPaths=frozenTools`,{method:'PATCH',body:{fields:fields({frozenPrompt:bundle.systemPrompt,frozenModel:bundle.modelName,frozenTools:bundle.allowedTools})}});
       await writeDocument(`${root}/sessions/${session.id}/private/prompt`,{bundle});
     }
-    const reply=await call('chat',{sessionId:session.id,message:'请简要解读性格与职业倾向，给出一条具体建议。'},true);
+    const message=legacy?'请分析未来三个月事业运势，先调用 transitEvents（windowMonths=3，startDate=2026-11-01），根据结果简要给一条建议。':'请简要解读性格与职业倾向，给出一条具体建议。';
+    const reply=await call('chat',{sessionId:session.id,message},true);
     let result;
     if(exhausted) {
       assert(reply.body.includes('QUOTA_EXCEEDED'),'Expected explicit application quota denial');
@@ -50,6 +51,7 @@ async function smoke(name,{unlimited=false,exhausted=false,legacy=false}={}) {
       result={quotaDenied:true};
     } else {
       assert.equal(reply.res.status,200);result=parseChat(reply.body);
+      if(legacy) assert(result.tools.includes('transitEvents'),'No live transit tool execution');
       const usage=await google(`${documentRoot}/usage/${uid}`);
       assert(Number(usage.fields.used.integerValue)>0,'Missing usage settlement');
       assert.equal(usage.fields.unlimited.booleanValue,unlimited);
