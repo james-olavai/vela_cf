@@ -94,14 +94,14 @@ test("Hydrogen不伪称temperature生效，模型调用使用完整指南", asyn
       };
     },
   };
-  for (const temperature of [0.2, 1.2]) {
-    const bundle = defaultBundle("free");
+  for (const [tier, temperature] of [["free", 0.2], ["go", 1.2], ["pro", 0.6]] as const) {
+    const bundle = defaultBundle(tier);
     bundle.modelName = "vertexai/gemini-4-hydrogen";
     bundle.temperature = temperature;
     bundle.skills.western_natal.reference = `候选指南 ${temperature}`;
     const result = await generateReading(fakeAi as any, {
       bundle,
-      tier: "free",
+      tier,
       message: "我的性格特点是什么？",
       profiles: [
         {
@@ -125,8 +125,9 @@ test("Hydrogen不伪称temperature生效，模型调用使用完整指南", asyn
   }
   assert.deepEqual(
     captured.map((r) => r.config.temperature),
-    [undefined, undefined],
+    [undefined, undefined, undefined],
   );
+  assert.deepEqual(captured.map((r) => r.config.maxOutputTokens), [16384, 16384, 16384]);
 });
 
 test("Genkit实际模型请求包含Zod4行运参数与必填字段", async () => {
