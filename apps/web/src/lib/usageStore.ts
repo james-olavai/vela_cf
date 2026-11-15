@@ -3,6 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import {
   MAX_MONTHLY_SHARE_BONUSES,
   SHARE_BONUS_MICRO_USD,
+  TierSchema,
   utcMonthPeriodStart,
   type UsageRecord,
 } from '@vela-cf/shared';
@@ -25,8 +26,21 @@ export function subscribeUsage(
       }
       const raw = snap.data() as Partial<UsageRecord>;
       const periodStart = String(raw.periodStart ?? currentStart);
+      const unlimited = raw.unlimited === true;
+      const parsedOverride = TierSchema.safeParse(raw.overrideTier);
+      const overrideFields: Partial<UsageRecord> = {
+        ...(unlimited ? { unlimited: true } : {}),
+        ...(parsedOverride.success ? { overrideTier: parsedOverride.data } : {}),
+      };
       if (periodStart < currentStart) {
-        onData({ periodStart: currentStart, used: 0, bonusMicroUsd: 0, shareCount: 0, lastShareDate: '' });
+        onData({
+          periodStart: currentStart,
+          used: 0,
+          bonusMicroUsd: 0,
+          shareCount: 0,
+          lastShareDate: '',
+          ...overrideFields,
+        });
         return;
       }
       onData({
@@ -35,6 +49,7 @@ export function subscribeUsage(
         bonusMicroUsd: Number(raw.bonusMicroUsd ?? 0),
         shareCount: Number(raw.shareCount ?? 0),
         lastShareDate: String(raw.lastShareDate ?? ''),
+        ...overrideFields,
       });
     },
     (err) => handleFirestoreError(err, OperationType.GET, path),

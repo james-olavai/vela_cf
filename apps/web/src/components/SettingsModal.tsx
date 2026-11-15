@@ -60,7 +60,7 @@ export function SettingsModal({
 
   if (!open) return null;
 
-  const pct = computeUsagePercent(usage.used, tier, usage.bonusMicroUsd ?? 0);
+  const pct = usage.unlimited ? 0 : computeUsagePercent(usage.used, tier, usage.bonusMicroUsd ?? 0);
 
   const handleUpgrade = async (target: 'go' | 'pro') => {
     if (!uid) {
@@ -162,7 +162,7 @@ export function SettingsModal({
                     当前方案：{TIER_META[tier].label}
                   </span>
                   <span className="font-mono-num text-[#f7d57f]">
-                    已用 {pct}%
+                    {usage.unlimited ? '无限额度' : `已用 ${pct}%`}
                   </span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-[#070812] overflow-hidden">
