@@ -4,8 +4,8 @@ import { z } from "genkit";
 import { DEFAULT_PRESETS, GUARDRAIL_TAIL } from "./prompt-defaults.js";
 import { ALL_34_TOOLS, SKILL_CATALOG } from "./skills.js";
 import type { Tier } from "@vela-cf/shared";
-export const OUTPUT_INSTRUCTIONS =
-  "必要时在正文末尾附带 :::vela-ui 纯 JSON 块，component 限 aspect-highlight、transit-timeline、synastry-meter。最后另起一行 SUGGESTIONS: 后跟两个简短追问，以 | 分隔。";
+import { PROMPT_TEXT } from "./prompt-resources.generated.js";
+export const OUTPUT_INSTRUCTIONS = PROMPT_TEXT.outputInstructions;
 const text = z.string().min(1).max(30000);
 export const BundleSchema = z
   .object({
@@ -41,7 +41,7 @@ export function defaultBundle(
     ...DEFAULT_PRESETS[tier],
     schemaVersion: 1,
     productId,
-    revision: "default-v1",
+    revision: "consultation-guides-v4",
     outputInstructions: OUTPUT_INSTRUCTIONS,
     skills: Object.fromEntries(
       Object.entries(SKILL_CATALOG).map(([k, v]) => [
@@ -50,12 +50,7 @@ export function defaultBundle(
       ]),
     ),
     toolDescriptions: { ...TOOL_DESCRIPTIONS },
-    templates: {
-      profile: "档案资料：{{data}}",
-      facts: "已验证盘面：{{data}}",
-      history: "{{data}}",
-      route: "{{data}}",
-    },
+    templates: { ...PROMPT_TEXT.templates },
   });
 }
 export function parseBundle(value: unknown): PromptBundle {
@@ -79,7 +74,32 @@ export function parseBundle(value: unknown): PromptBundle {
       throw new Error("模板需要保留 {{data}}，不支持其他变量");
   return b;
 }
+/** Release/evaluation snapshots must be complete; legacy defaults are opt-in elsewhere. */
+export function parseCompleteBundle(value: unknown): PromptBundle {
+  if (!value || typeof value !== "object" ||
+      ["schemaVersion", "productId", "revision"].some(key => !Object.hasOwn(value, key)))
+    throw new Error("完整快照必须显式包含契约、产品与修订版本");
+  const bundle = BundleSchema.parse(value);
+  if (new Set(bundle.allowedTools).size !== bundle.allowedTools.length)
+    throw new Error("工具权限不能重复");
+  const expectedSkills = Object.keys(SKILL_CATALOG).sort();
+  const expectedTools = [...ALL_34_TOOLS, "loadSkillReference"].sort();
+  if (JSON.stringify(Object.keys(bundle.skills).sort()) !== JSON.stringify(expectedSkills))
+    throw new Error("完整快照必须包含全部已登记技法");
+  if (JSON.stringify(Object.keys(bundle.toolDescriptions).sort()) !== JSON.stringify(expectedTools))
+    throw new Error("完整快照必须包含全部已登记工具说明");
+  for (const template of Object.values(bundle.templates)) {
+    if (!template.includes("{{data}}") || /{{(?!data}})/.test(template) || template.includes("{{{"))
+      throw new Error("模板只支持 {{data}}，不得包含其他模板表达式");
+  }
+  return bundle;
+}
 export function bundleHash(bundle: PromptBundle) {
-  return createHash("sha256").update(JSON.stringify(bundle)).digest("hex");
+  const canonical = (value: unknown): unknown =>
+    Array.isArray(value) ? value.map(canonical) :
+    value !== null && typeof value === "object" ? Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a.localeCompare(b, "en")).map(([key, entry]) => [key, canonical(entry)]),
+    ) : value;
+  return createHash("sha256").update(JSON.stringify(canonical(bundle))).digest("hex");
 }
 export { GUARDRAIL_TAIL };

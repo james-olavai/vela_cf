@@ -23,6 +23,7 @@ export async function generateReading(
   ai: Genkit,
   input: {
     bundle: PromptBundle;
+    routingText?: {header:string;load:string;direct:string};
     tier: Tier;
     profiles: any[];
     message: string;
@@ -41,11 +42,20 @@ export async function generateReading(
     bundle = parseBundle(input.bundle),
     calls: any[] = [],
     chart: Record<string, unknown> = {};
+  const loadedReferences: Array<{
+    skillKey: string;
+    title: string;
+    reference: string;
+    revision: string;
+    source: "auto" | "tool";
+  }> = [];
   const tierTools = (await import("./prompt-defaults.js")).DEFAULT_PRESETS[
     input.tier
   ].allowedTools;
   const routed = routeTurnCapabilities({
     tier: input.tier,
+    routingText: input.routingText,
+    skillTexts: bundle.skills,
     depth: input.depth,
     message: input.message,
     profileCount: input.profiles.length,
@@ -83,6 +93,16 @@ export async function generateReading(
         input.toolMode === "fixture" && name !== "loadSkillReference"
           ? fixture!.output
           : await fn();
+      if (name === "loadSkillReference") {
+        const key = (arg as { skillKey: string }).skillKey;
+        const skill = bundle.skills[key];
+        loadedReferences.push({
+          skillKey: key,
+          ...skill,
+          revision: bundle.revision,
+          source: "tool",
+        });
+      }
       const chartKey: Record<string, string> = {
         natalWheel: "natal",
         transitEvents: "transits",
@@ -112,6 +132,32 @@ export async function generateReading(
     const old = catalog[key as keyof typeof catalog];
     index = index.replace(old.title, s.title).replace(old.summary, s.summary);
   }
+  for (const [skillKey, definition] of Object.entries(catalog)) {
+    if (skillKey === "synthesis_master" &&
+        !(routed.routedTools.some((tool) => tool === "natalWheel" || tool === "solarReturn") &&
+          routed.routedTools.some((tool) => tool === "baziPillars" || tool === "baziLiunian" || tool === "ziweiPalaces"))) {
+      continue;
+    }
+    if (
+      !definition.requiredTools.some((tool) =>
+        routed.routedTools.includes(tool),
+      )
+    )
+      continue;
+    const skill = bundle.skills[skillKey];
+    loadedReferences.push({
+      skillKey,
+      ...skill,
+      revision: bundle.revision,
+      source: "auto",
+    });
+  }
+  const referenceContext = loadedReferences
+    .map(
+      (skill) =>
+        `【已加载解读指南：${skill.title} / ${skill.skillKey} / ${skill.revision}】\n${skill.reference}`,
+    )
+    .join("\n\n");
   const render = (name: keyof PromptBundle["templates"], data: string) =>
     bundle.templates[name].replaceAll("{{data}}", data);
   const system = [
@@ -121,6 +167,7 @@ export async function generateReading(
     render("profile", JSON.stringify(input.profiles)),
     render("facts", buildNatalFactSummary(natal)),
     render("route", index),
+    referenceContext,
     `参考时间：${input.referenceTime || new Date().toISOString()}`,
   ].join("\n");
   const prompt = `${render("history", input.historyContext || "")}\n用户最新消息：${input.message}`;
@@ -128,10 +175,21 @@ export async function generateReading(
     ...routed.routedTools,
     ...(routed.enableSkillLoader ? ["loadSkillReference"] : []),
   ];
+  // SDK accepts temperature generally, but Hydrogen's provider ignores it.
+  // Do not label a saved/requested sampling value as an effective setting.
+  const ignoresTemperature = bundle.modelName.includes("gemini-4-hydrogen");
+  const sampling = {
+    requestedTemperature: bundle.temperature,
+    effectiveTemperature: ignoresTemperature
+      ? "provider-default"
+      : bundle.temperature,
+    ignoredParameters: ignoresTemperature ? ["temperature"] : [],
+    parameterNote: ignoresTemperature
+      ? "Hydrogen 服务端忽略温度设置，使用模型默认采样行为。"
+      : undefined,
+  };
   const config = {
-    ...(bundle.modelName.includes("gemini-4-")
-      ? {}
-      : { temperature: bundle.temperature }),
+    ...(ignoresTemperature ? {} : { temperature: bundle.temperature }),
     maxOutputTokens: MAX_OUTPUT_TOKENS_BY_TIER[input.tier],
   };
   if (input.previewOnly)
@@ -148,10 +206,12 @@ export async function generateReading(
         prompt,
         tools: names,
         calls,
+        loadedReferences,
         hash: bundleHash(bundle),
         revision: bundle.revision,
         model: bundle.modelName,
         parameters: config,
+        sampling,
         elapsedMs: Date.now() - start,
         previewOnly: true,
       },
@@ -199,10 +259,12 @@ export async function generateReading(
       prompt,
       tools: names,
       calls,
+      loadedReferences,
       hash: bundleHash(bundle),
       revision: bundle.revision,
       model: bundle.modelName,
       parameters: config,
+      sampling,
       usage: final.usage,
       elapsedMs: Date.now() - start,
       droppedCount: filtered.droppedCount,

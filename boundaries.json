@@ -10,6 +10,7 @@
       "maxSourceLines": 3000,
       "maxCallableFunctions": 6,
       "dependencies": [
+        "@modelcontextprotocol/sdk",
         "@genkit-ai/firebase",
         "@genkit-ai/google-genai",
         "@genkit-ai/vertexai",

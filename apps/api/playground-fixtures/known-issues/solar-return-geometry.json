@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "status": "known-failing-not-fixed",
+  "independentGolden": false,
+  "tool": "solarReturn",
+  "input": {
+    "birthDateTime": "1990-06-15T14:30",
+    "latitude": 39.9042,
+    "longitude": 116.4074,
+    "timezone": "Asia/Shanghai",
+    "targetYear": 2026
+  },
+  "observedAscendant": {
+    "longitude": 103.3427,
+    "house": 1,
+    "signZh": "巨蟹",
+    "signEn": "Cancer",
+    "degreeInSign": 13.3427,
+    "formatted": "巨蟹 13°21′"
+  },
+  "observedHouses": [
+    {
+      "house": 1,
+      "longitude": 103.3427,
+      "signZh": "巨蟹",
+      "signEn": "Cancer",
+      "degreeInSign": 13.3427,
+      "formatted": "巨蟹 13°21′"
+    },
+    {
+      "house": 2,
+      "longitude": 99.1933,
+      "signZh": "巨蟹",
+      "signEn": "Cancer",
+      "degreeInSign": 9.1933,
+      "formatted": "巨蟹 09°12′"
+    },
+    {
+      "house": 3,
+      "longitude": 136.9485,
+      "signZh": "狮子",
+      "signEn": "Leo",
+      "degreeInSign": 16.9485,
+      "formatted": "狮子 16°57′"
+    },
+    {
+      "house": 4,
+      "longitude": 173.4079,
+      "signZh": "处女",
+      "signEn": "Virgo",
+      "degreeInSign": 23.4079,
+      "formatted": "处女 23°24′"
+    },
+    {
+      "house": 5,
+      "longitude": 209.1687,
+      "signZh": "天秤",
+      "signEn": "Libra",
+      "degreeInSign": 29.1687,
+      "formatted": "天秤 29°10′"
+    },
+    {
+      "house": 6,
+      "longitude": 248.6611,
+      "signZh": "射手",
+      "signEn": "Sagittarius",
+      "degreeInSign": 8.6611,
+      "formatted": "射手 08°40′"
+    },
+    {
+      "house": 7,
+      "longitude": 283.3427,
+      "signZh": "摩羯",
+      "signEn": "Capricorn",
+      "degreeInSign": 13.3427,
+      "formatted": "摩羯 13°21′"
+    },
+    {
+      "house": 8,
+      "longitude": 279.1933,
+      "signZh": "摩羯",
+      "signEn": "Capricorn",
+      "degreeInSign": 9.1933,
+      "formatted": "摩羯 09°12′"
+    },
+    {
+      "house": 9,
+      "longitude": 316.9485,
+      "signZh": "水瓶",
+      "signEn": "Aquarius",
+      "degreeInSign": 16.9485,
+      "formatted": "水瓶 16°57′"
+    },
+    {
+      "house": 10,
+      "longitude": 353.4079,
+      "signZh": "双鱼",
+      "signEn": "Pisces",
+      "degreeInSign": 23.4079,
+      "formatted": "双鱼 23°24′"
+    },
+    {
+      "house": 11,
+      "longitude": 29.1687,
+      "signZh": "白羊",
+      "signEn": "Aries",
+      "degreeInSign": 29.1687,
+      "formatted": "白羊 29°10′"
+    },
+    {
+      "house": 12,
+      "longitude": 68.6611,
+      "signZh": "双子",
+      "signEn": "Gemini",
+      "degreeInSign": 8.6611,
+      "formatted": "双子 08°40′"
+    }
+  ],
+  "observedSpans": [
+    {
+      "house": 1,
+      "start": 103.3427,
+      "end": 99.1933,
+      "span": 355.8506
+    },
+    {
+      "house": 2,
+      "start": 99.1933,
+      "end": 136.9485,
+      "span": 37.7552
+    },
+    {
+      "house": 3,
+      "start": 136.9485,
+      "end": 173.4079,
+      "span": 36.45940000000002
+    },
+    {
+      "house": 4,
+      "start": 173.4079,
+      "end": 209.1687,
+      "span": 35.76079999999999
+    },
+    {
+      "house": 5,
+      "start": 209.1687,
+      "end": 248.6611,
+      "span": 39.4924
+    },
+    {
+      "house": 6,
+      "start": 248.6611,
+      "end": 283.3427,
+      "span": 34.681599999999975
+    },
+    {
+      "house": 7,
+      "start": 283.3427,
+      "end": 279.1933,
+      "span": 355.85060000000004
+    },
+    {
+      "house": 8,
+      "start": 279.1933,
+      "end": 316.9485,
+      "span": 37.7552
+    },
+    {
+      "house": 9,
+      "start": 316.9485,
+      "end": 353.4079,
+      "span": 36.45939999999996
+    },
+    {
+      "house": 10,
+      "start": 353.4079,
+      "end": 29.1687,
+      "span": 35.76080000000002
+    },
+    {
+      "house": 11,
+      "start": 29.1687,
+      "end": 68.6611,
+      "span": 39.4924
+    },
+    {
+      "house": 12,
+      "start": 68.6611,
+      "end": 103.3427,
+      "span": 34.68159999999999
+    }
+  ],
+  "observedSpanSum": 1080,
+  "observedPlanetHouseHistogram": {
+    "1": 12
+  },
+  "replayMatch": true,
+  "suspectedCause": "Shared Placidus cusp geometry/quadrant assignment or iteration formula, not LLM JSON/schema conversion. Exact correct astronomical formula requires independent golden validation; no algorithm modification made.",
+  "note": "Observed bad result for regression diagnosis, never use as an expected correct astronomical chart."
+}

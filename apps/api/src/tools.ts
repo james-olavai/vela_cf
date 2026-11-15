@@ -1,3 +1,5 @@
+import { PROMPT_TEXT } from "./prompt-resources.generated.js";
+import { toJSONSchema } from "zod";
 import { z, dynamicTool, type Genkit } from "genkit";
 import * as astro from "@vela-cf/astrology";
 import { SKILL_CATALOG, type SkillKey } from "./skills.js";
@@ -12,214 +14,211 @@ const baseBirthSchema = z.object({
 const specs: Array<[string, string, any, (arg: any) => unknown]> = [
   [
     "natalWheel",
-    "计算个人/公司/事件西洋本命盘（Placidus 宫位与主要相位）。",
+    PROMPT_TEXT.toolDescriptions.natalWheel,
     baseBirthSchema,
     astro.natalWheel,
   ],
   [
     "transitEvents",
-    "计算未来 3/6/12 个月外行星过境本命盘的重要行运窗口。",
+    PROMPT_TEXT.toolDescriptions.transitEvents,
     astro.TransitEventsInputSchema,
     astro.transitEvents,
   ],
   [
     "baziPillars",
-    "基于真太阳时计算东方八字四柱、十神、五行与藏干。",
+    PROMPT_TEXT.toolDescriptions.baziPillars,
     astro.BaziPillarsInputSchema,
     astro.baziPillars,
   ],
   [
     "ziweiPalaces",
-    "计算东方紫微斗数命盘十二宫、主星、辅星与四化（需性别 male/female）。",
+    PROMPT_TEXT.toolDescriptions.ziweiPalaces,
     astro.ZiweiPalacesInputSchema,
     astro.ziweiPalaces,
   ],
   [
     "synastryAspects",
-    "计算 2 至 4 个档案之间的跨盘合盘主要相位对照。",
+    PROMPT_TEXT.toolDescriptions.synastryAspects,
     astro.SynastryAspectsInputSchema,
     astro.synastryAspects,
   ],
   [
     "companyTenthHouse",
-    "计算公司/组织十宫事业盘、天顶与 1/2/6/10 宫资源落点。",
+    PROMPT_TEXT.toolDescriptions.companyTenthHouse,
     astro.CompanyTenthHouseInputSchema,
     astro.companyTenthHouse,
   ],
   [
     "solarReturn",
-    "计算指定公历年份的太阳返照盘。",
+    PROMPT_TEXT.toolDescriptions.solarReturn,
     astro.SolarReturnInputSchema,
     astro.solarReturn,
   ],
   [
     "lunarReturn",
-    "计算指定参考日期附近的月亮返照盘。",
+    PROMPT_TEXT.toolDescriptions.lunarReturn,
     astro.LunarReturnInputSchema,
     astro.lunarReturn,
   ],
   [
     "secondaryProgression",
-    "计算指定日期的次限推运盘（一日一年法）。",
+    PROMPT_TEXT.toolDescriptions.secondaryProgression,
     astro.DateTargetInputSchema,
     astro.secondaryProgression,
   ],
   [
     "solarArc",
-    "计算指定日期的太阳弧推运盘。",
+    PROMPT_TEXT.toolDescriptions.solarArc,
     astro.DateTargetInputSchema,
     astro.solarArc,
   ],
   [
     "transitSnapshot",
-    "计算指定精确时刻的行运天象时刻盘。",
+    PROMPT_TEXT.toolDescriptions.transitSnapshot,
     astro.TransitSnapshotInputSchema,
     astro.transitSnapshot,
   ],
   [
     "compositeChart",
-    "计算双人中点组合盘（Composite Chart）。",
+    PROMPT_TEXT.toolDescriptions.compositeChart,
     astro.DualWheelInputSchema,
     astro.compositeChart,
   ],
   [
     "davisonChart",
-    "计算双人时空中点盘（Davison Chart）。",
+    PROMPT_TEXT.toolDescriptions.davisonChart,
     astro.DualWheelInputSchema,
     astro.davisonChart,
   ],
   [
     "relocationChart",
-    "计算迁移盘（指定目的地的宫位重排）。",
+    PROMPT_TEXT.toolDescriptions.relocationChart,
     astro.RelocationInputSchema,
     astro.relocationChart,
   ],
   [
     "draconicChart",
-    "计算龙首盘（北交点归零基准）。",
+    PROMPT_TEXT.toolDescriptions.draconicChart,
     baseBirthSchema,
     astro.draconicChart,
   ],
   [
     "tertiaryProgression",
-    "计算三限推运盘（一日一太阴月）。",
+    PROMPT_TEXT.toolDescriptions.tertiaryProgression,
     astro.DateTargetInputSchema,
     astro.tertiaryProgression,
   ],
   [
     "minorProgression",
-    "计算小限推运盘（一太阴月一年）。",
+    PROMPT_TEXT.toolDescriptions.minorProgression,
     astro.DateTargetInputSchema,
     astro.minorProgression,
   ],
   [
     "arabicLots",
-    "计算七大希腊点（福点、精神点、爱神点等）。",
+    PROMPT_TEXT.toolDescriptions.arabicLots,
     baseBirthSchema,
     astro.arabicLots,
   ],
   [
     "planetaryReturn",
-    "计算指定行星的返照盘（如土星回归、木星回归）。",
+    PROMPT_TEXT.toolDescriptions.planetaryReturn,
     astro.PlanetaryReturnInputSchema,
     astro.planetaryReturn,
   ],
   [
     "harmonicChart",
-    "计算指定阶数（1-360）的谐波盘。",
+    PROMPT_TEXT.toolDescriptions.harmonicChart,
     astro.HarmonicInputSchema,
     astro.harmonicChart,
   ],
   [
     "antisciaPoints",
-    "计算映点（Antiscia）与反映点及紧密接触。",
+    PROMPT_TEXT.toolDescriptions.antisciaPoints,
     astro.AntisciaInputSchema,
     astro.antisciaPoints,
   ],
   [
     "siderealChart",
-    "计算恒星黄道盘（支持 Lahiri 等岁差基准）。",
+    PROMPT_TEXT.toolDescriptions.siderealChart,
     astro.SiderealInputSchema,
     astro.siderealChart,
   ],
   [
     "heliocentricChart",
-    "计算日心盘行星黄经位置。",
+    PROMPT_TEXT.toolDescriptions.heliocentricChart,
     baseBirthSchema,
     astro.heliocentricChart,
   ],
   [
     "fixedStars",
-    "计算主要恒星与本命星体/四角的合相。",
+    PROMPT_TEXT.toolDescriptions.fixedStars,
     astro.FixedStarsInputSchema,
     astro.fixedStars,
   ],
   [
     "midpointTree",
-    "计算 45° 盘中点树接触相位。",
+    PROMPT_TEXT.toolDescriptions.midpointTree,
     astro.MidpointTreeInputSchema,
     astro.midpointTree,
   ],
   [
     "localSpace",
-    "计算本地方位盘行星方位角与罗盘方向。",
+    PROMPT_TEXT.toolDescriptions.localSpace,
     baseBirthSchema,
     astro.localSpace,
   ],
   [
     "baziDayun",
-    "计算八字大运列表与当前所在大运。",
+    PROMPT_TEXT.toolDescriptions.baziDayun,
     astro.BaziCycleInputSchema,
     astro.baziDayun,
   ],
   [
     "baziLiunian",
-    "计算八字当前大运下的流年干支列表。",
+    PROMPT_TEXT.toolDescriptions.baziLiunian,
     astro.BaziCycleInputSchema,
     astro.baziLiunian,
   ],
   [
     "ziweiDaxian",
-    "计算指定日期的紫微斗数大限宫位与四化。",
+    PROMPT_TEXT.toolDescriptions.ziweiDaxian,
     astro.ZiweiCycleInputSchema,
     astro.ziweiDaxian,
   ],
   [
     "ziweiLiunian",
-    "计算指定日期的紫微斗数流年宫位与四化。",
+    PROMPT_TEXT.toolDescriptions.ziweiLiunian,
     astro.ZiweiCycleInputSchema,
     astro.ziweiLiunian,
   ],
   [
     "firdaria",
-    "计算古典占星 75 年法达星限主星周期。",
+    PROMPT_TEXT.toolDescriptions.firdaria,
     astro.FirdariaInputSchema,
     astro.firdaria,
   ],
   [
     "profection",
-    "计算古典小限法（Annual Profection）流年宫位与年主星。",
+    PROMPT_TEXT.toolDescriptions.profection,
     astro.ProfectionInputSchema,
     astro.profection,
   ],
   [
     "zodiacalReleasing",
-    "计算古典黄道释放（精神点/福点 L1 周期）。",
+    PROMPT_TEXT.toolDescriptions.zodiacalReleasing,
     astro.ZodiacalReleasingInputSchema,
     astro.zodiacalReleasing,
   ],
   [
     "energyCalendar",
-    "计算指定月份（YYYY-MM）每日行运能量评分日历。",
+    PROMPT_TEXT.toolDescriptions.energyCalendar,
     astro.EnergyCalendarInputSchema,
     astro.energyCalendar,
   ],
 ];
 
-export const TOOL_DESCRIPTIONS = Object.fromEntries(
-  specs.map(([name, description]) => [name, description]),
-);
-TOOL_DESCRIPTIONS.loadSkillReference = "按需加载技法解读指南。";
+export const TOOL_DESCRIPTIONS: Record<string, string> = { ...PROMPT_TEXT.toolDescriptions };
 
 export function createAstrologyTools(
   ai: Genkit,
@@ -243,12 +242,20 @@ export function createAstrologyTools(
       {
         name,
         description: runtime?.descriptions?.[name] || description,
-        inputSchema,
+        ...(inputSchema._zod
+          ? {
+              inputJsonSchema: toJSONSchema(inputSchema, {
+                target: "draft-7",
+              }) as any,
+            }
+          : { inputSchema }),
       },
-      async (input: any) =>
-        runtime?.execute
+      async (raw: any) => {
+        const input = inputSchema.parse(raw);
+        return runtime?.execute
           ? runtime.execute(name, input, () => fn(input))
-          : fn(input),
+          : fn(input);
+      },
     );
 
   const tools = Object.fromEntries(
@@ -260,7 +267,7 @@ export function createAstrologyTools(
       name: "loadSkillReference",
       description:
         runtime?.descriptions?.loadSkillReference ||
-        "渐进式披露工具：按需加载指定占星/命理技法的详细 Reference 解读框架与规范。",
+        TOOL_DESCRIPTIONS.loadSkillReference,
       inputSchema: z.object({
         skillKey: z.enum([
           "western_natal",

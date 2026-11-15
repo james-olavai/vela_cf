@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "runtimeContractVersion": 1,
+  "revision": "consultation-guides-v4",
+  "products": {
+    "free": {
+      "tier": "free",
+      "prompt": "products/free"
+    },
+    "go": {
+      "tier": "go",
+      "prompt": "products/go"
+    },
+    "pro": {
+      "tier": "pro",
+      "prompt": "products/pro"
+    }
+  }
+}

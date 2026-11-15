@@ -1,0 +1,6 @@
+{
+  "profile": "档案资料：{{data}}",
+  "facts": "已验证盘面：{{data}}",
+  "history": "{{data}}",
+  "route": "{{data}}"
+}

@@ -12,12 +12,14 @@
     "dev": "npx firebase-tools emulators:start --only functions,firestore,auth",
     "genkit:ui": "npm run build && npx -y genkit-cli start -- node dist/index.cjs",
     "deploy": "npx firebase-tools deploy --only functions,firestore",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prebuild": "node ../../scripts/prompt-build.mjs --check"
   },
   "dependencies": {
     "@genkit-ai/firebase": "^1.0.0",
     "@genkit-ai/google-genai": "^1.0.0",
     "@genkit-ai/vertexai": "^1.0.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "firebase-admin": "^13.0.0",
     "firebase-functions": "^6.0.0",
     "genkit": "^1.0.0",

@@ -17,29 +17,37 @@ vela_cf/
 ├── firestore.rules      # Firestore 安全规则
 ├── firestore.indexes.json
 ├── apps/
-│   └── api/             # Cloud Functions (2nd gen, Node 22, asia-southeast1) + Genkit + Dotprompt
+│   ├── api/             # Cloud Functions (2nd gen, Node 22, asia-southeast1) + Genkit + Dotprompt
+│   └── web/             # React/Vite 用户界面
 └── packages/
     ├── astrology/       # 中西排盘纯函数（iztro + lunar-javascript + Swiss Ephemeris WASM）+ 回归测试
     └── shared/          # 订阅档位 (free/go/pro)、配额上限、共享 Schema 与类型
 ```
 
-- 前端 `apps/web` 尚未创建：复用 `../vela/frontend-v2` 的 UI 组件，数据层基于 Firebase Web SDK 重写，构建产物由 Firebase Hosting 托管（LLD §5）。
+- 前端位于 `apps/web`，使用 Firebase Web SDK，构建产物由 Firebase Hosting 托管（LLD §5）。
 - Admin 界面、对外 Remote MCP、Cloud SQL、定时任务、Langfuse、PostHog / Analytics 不在第一阶段（LLD §6）。
 
 ## 当前状态
 
-已完成架构切换与边界规则对齐，三个 workspace 还没有 `src/`，下一步是 LLD §9 的 Phase 0。
+四个 workspace 已有实现。Prompt 调优采用本地 MCP 与独立私有仓库 [vela-prompts](https://github.com/james-olavai/vela-prompts)，旧 Playground 网页和 HTTP 服务已删除。当前实现、验证限制及上线门以 LLD §4.7、§8.5、§9 为准，代码存在不代表生产已部署。
 
-## 快速开始（切片 1 之后可用）
+## 快速开始
 
 ```bash
-npm install
+npm ci
 npm run check
 npm run typecheck
+npm test
+npm run build                          # apps/web/dist
+npm --workspace=apps/api run build     # apps/api/dist
 
 cp .env.example apps/api/.env
 npm run dev:api                          # 启动 Firebase Local Emulators
 ```
+
+## Prompt 调优
+
+使用独立私有仓库的 README、AGENTS.md 和 `.agents/skills/vela-prompt-tuning/SKILL.md` 接入个人 harness。主仓库可运行 `npm run prompt:mcp`；`npm run tuning:pack -- --output <新目录>` 生成固定运行时的独立交付包。模型凭据保留在本机，不提交 `.env` 或原始 trace。
 
 ## 上线前必须完成
 

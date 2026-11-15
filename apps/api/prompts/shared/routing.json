@@ -1,0 +1,5 @@
+{
+  "header": "【智能路由与技法目录】本轮已按档位({{tier}}){{depth}}路由工具：{{tools}}。",
+  "load": "【渐进式披露】若需深入展开某技法框架，可先调用 `loadSkillReference` 按需加载对应 `skillKey` 的 Reference 指南，再调用排盘工具。",
+  "direct": "请直接调用上述已路由的排盘工具获取真实数据后作答。"
+}
