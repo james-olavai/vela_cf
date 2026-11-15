@@ -246,6 +246,15 @@ export function createAstrologyTools(
           ? {
               inputJsonSchema: toJSONSchema(inputSchema, {
                 target: "draft-7",
+                override: ({ jsonSchema }) => {
+                  const choices = jsonSchema.anyOf;
+                  if (!jsonSchema.type && choices?.length && choices.every((v: any) => v.type === "number" && typeof v.const === "number")) {
+                    // Vertex's legacy converter drops untyped anyOf properties. Preserve the union locally;
+                    // publish a typed number with allowed values, and keep Zod's exact runtime validation.
+                    jsonSchema.type = "number";
+                    jsonSchema.description = `${jsonSchema.description || ""} Allowed values: ${choices.map((v: any) => v.const).join(", ")}.`;
+                  }
+                },
               }) as any,
             }
           : { inputSchema }),
