@@ -524,3 +524,16 @@ A/B 固定资料、问题、历史、参考时间、运行时、模型及工具�
 **补充约定**：
 - **流式响应失败行为**：模型流式生成中途抛错或中断时，服务端回滚会话锁（`releaseSessionTurn`）与配额预留（`releaseQuota`），不删除上一轮消息、不写入半轮消息；前端捕获异常后将乐观消息列表恢复为调用前快照（`existingMessages`）。
 - **分享奖励验证规则**：Web 端第三方社交平台无分享完成回调，产品采用「触发保存海报 / 复制分享文案 / 系统原生分享后解锁领取」的自助激励机制（记录 `lastShareMethod: 'native' | 'poster' | 'copy'`），由服务端可信时间事务与 `firestore.rules`（`request.time`）严格限制每日 1 次、每自然月最多 3 次。
+
+
+## 10. CI/CD 与发布验收
+
+Gitea 是发布入口，GitHub 同步代码。每次 main/PR/tag 提交运行 `ci`：固定 Node 22.23.2、Firebase CLI 15.36.0、Playwright Core 1.62.1；使用 `npm ci`，完成边界/类型、单元及传输契约、Prompt/MCP、真实 Auth + Firestore Emulator 的 Rules 与并发事务、浏览器回归及双端构建。浏览器工具安装在 Runner 临时目录，不依赖相邻项目；UI 数据明确使用 mock，不作为真实模型可用性证据。独立调优包的 `test:tuning` 需要指定交付目录，不以默认跳过冒充本项目 CI 检查。
+
+CI 生成 `release-<SHA>` 产物，内含预编译 API、同次构建的前端、实际应用命名数据库的规则配置、按本次已安装版本固定的 API 依赖及独立 lock、逐文件 SHA256 清单和版本文件。生成器拒绝解析出根 lock 中不存在的依赖版本。部署直接使用该产物，不重新编译前端/API；云端按包内 lock 安装。
+
+生产发布仅由 v* tag 或 main 上显式 workflow_dispatch 触发，必须依赖 `ci` 成功。缺少 `FIREBASE_SERVICE_ACCOUNT` 立即失败；先用候选代码、相同 Vertex 模型及旧冻结 Bundle 进行真实模型验证，失败不执行部署。发布前保存 Vela 六个 Functions 的源存档引用、Hosting 版本及应用命名数据库 Ruleset；不操作同项目内其他应用或 Storage 规则。更新 Functions/Hosting/Firestore Rules 后，校验线上 SHA/资源，并用自动创建和清理的合成账号验证正常免费咨询、旧冻结配置的超预算无限账号、真实额度用尽拒绝；检查流式正文、done、最终结果、消息落库、用量结算、预留释放及会话解锁。HTTP 200 或静态首页可访问均不算聊天成功。
+
+部署或线上验证失败时，尝试恢复上述三类版本，等待 Functions 恢复操作完成；即使某类恢复失败也继续尝试其他服务，并以失败退出、保留恢复快照及验证证据。`npm test` 覆盖 SSE 假成功、流式错误及部分回滚失败。回滚脚本不修改用户业务数据；数据库结构破坏性迁移不属于这条自动恢复路径。
+
+发布身份为 `vela-ci-deployer@yhvhchen-387212.iam.gserviceaccount.com`，用于部署、模型验证及合成账号数据清理；runtime 的 actAs 权限单独限定在当前运行服务账号。私钥只保存在 Gitea Secret，执行时写入权限 0600 的 Runner 临时文件，EXIT 清理，不进入日志和产物。更新版本前先在 PR 验证契约与实际模型，禁止依赖浮动 CLI 或手动绕过 CI 发布。main 通过 Gitea 分支保护要求 PR CI 成功，禁止直接推送。

@@ -1,5 +1,4 @@
 name: Vela CI/CD
-
 on:
   push:
     branches: [main]
@@ -8,109 +7,89 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      run_deepseek_smoke:
-        description: 'Run low-cost DeepSeek tool-calling smoke test'
-        type: boolean
-        default: false
       deploy_firebase:
-        description: 'Deploy Firebase Functions, Hosting, and Firestore rules'
+        description: 'Release this main commit after all checks and real Vertex smoke'
         type: boolean
         default: false
-
+concurrency:
+  group: vela-ci-and-release
+  cancel-in-progress: false
 jobs:
-  lint-and-build:
+  ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          node-version: '22.23.2'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - run: npm ci
-      - run: npm run check
-      - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
-      - run: npm --workspace apps/web run build
-      - run: npm --workspace apps/api run build
-
-  mock-gateway-e2e:
-    needs: lint-and-build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Start Mock LLM Gateway & Vite Dev Server and run E2E smoke
+      - run: npm run test:prompts
+      - name: Real Firestore Rules and quota transaction emulator tests
+        run: npx --yes firebase-tools@15.36.0 emulators:exec --only auth,firestore --project demo-vela-ci --config firebase.ci.json "npm run test:rules"
+      - name: Install isolated browser tooling
         run: |
-          node scripts/mock-llm-gateway.mjs &
-          MOCK_PID=$!
-          npm run dev &
-          WEB_PID=$!
-          trap "kill $MOCK_PID $WEB_PID 2>/dev/null || true" EXIT
-
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8787/health >/dev/null && curl -fsS http://127.0.0.1:3000/ >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-
-          LLM_BASE_URL=http://127.0.0.1:8787/v1 \
-          WEB_BASE_URL=http://127.0.0.1:3000 \
-          node scripts/ci-smoke.mjs
-
-  deepseek-smoke:
-    needs: mock-gateway-e2e
-    if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.run_deepseek_smoke) ||
-      contains(github.event.head_commit.message, '[smoke]') ||
-      startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+          npm install --prefix "$RUNNER_TEMP/vela-browser" --no-package-lock --ignore-scripts playwright-core@1.62.1
+          node "$RUNNER_TEMP/vela-browser/node_modules/playwright-core/cli.js" install --with-deps chromium
+      - name: Browser regressions (mocked data, no paid calls)
+        run: PLAYWRIGHT_CORE_PATH="$RUNNER_TEMP/vela-browser/node_modules/playwright-core" ARTIFACT_DIR=artifacts/browser npm run test:ci-ui
+      - run: npm run build && npm --workspace apps/api run build
+      - run: npm run release:prepare
+      - uses: actions/upload-artifact@v3
         with:
-          node-version: 22
-      - name: Run low-cost DeepSeek function-calling smoke
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        run: |
-          if [ -z "$DEEPSEEK_API_KEY" ]; then
-            echo "DEEPSEEK_API_KEY secret not set; skipping."
-            exit 0
-          fi
-          LLM_BASE_URL=https://api.deepseek.com/v1 \
-          LLM_API_KEY="$DEEPSEEK_API_KEY" \
-          LLM_MODEL=deepseek-chat \
-          node scripts/ci-smoke.mjs
-
+          name: release-${{ github.sha }}
+          path: release.tar.gz
+          retention-days: 14
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: ci-evidence-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
   deploy-firebase:
-    needs: mock-gateway-e2e
+    needs: ci
     if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && inputs.deploy_firebase)
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && (inputs.deploy_firebase == true || inputs.deploy_firebase == 'true'))
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          node-version: '22.23.2'
       - run: npm ci
-      - run: npm --workspace apps/web run build
-      - run: npm --workspace apps/api run build
-      - name: Deploy to Firebase
+      - uses: actions/download-artifact@v3
+        with:
+          name: release-${{ github.sha }}
+      - name: Use the exact artifact tested by CI
+        run: mkdir -p .release && tar -xzf release.tar.gz -C .release
+      - name: Candidate Vertex check, deploy, verify and automatically roll back on failure
         env:
-          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI: 'true'
         run: |
-          if [ -z "$GOOGLE_APPLICATION_CREDENTIALS_JSON" ]; then
-            echo "FIREBASE_SERVICE_ACCOUNT secret not set."
-            exit 1
-          fi
-          printf '%s' "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > /tmp/gcp-sa.json
-          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-sa.json
-          npx --yes firebase-tools deploy --only functions,hosting,firestore:rules --non-interactive
-          rm -f /tmp/gcp-sa.json
+          set -eu
+          test -n "$FIREBASE_SERVICE_ACCOUNT" || { echo 'Missing mandatory release credentials'; exit 1; }
+          umask 077
+          CREDENTIAL_FILE="$RUNNER_TEMP/vela-release-credentials.json"
+          trap 'rm -f "$CREDENTIAL_FILE"' EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$CREDENTIAL_FILE"
+          export GOOGLE_APPLICATION_CREDENTIALS="$CREDENTIAL_FILE"
+          node --import ./scripts/register-ts.mjs scripts/ci/vertex-live.mjs
+          npm run release
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -9,3 +9,8 @@ ui-debug.log
 *.log
 .DS_Store
 .playground/
+
+.ci-tools/
+.release/
+artifacts/
+release.tar.gz
