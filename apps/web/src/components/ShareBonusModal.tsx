@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MAX_MONTHLY_SHARE_BONUSES, type ProfileRecord, type Tier, type UsageRecord } from '@vela-cf/shared';
 import { computePortraitSummary, renderVelaSharePoster } from '../lib/portrait';
-import { claimDailyShareBonus, formatAppError, type ChartSnapshot } from '../lib/store';
+import { claimDailyShareBonus, formatAppError, type ChartSnapshot, type ShareClaimMethod } from '../lib/store';
 import { IconGift } from './Icons';
 
 interface ShareBonusModalProps {
@@ -19,7 +19,7 @@ interface ShareBonusModalProps {
 export function ShareBonusModal({ open, uid, tier, usage, profile, chart, onClose, onClaimed, onOpenUpgrade }: ShareBonusModalProps) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [sharedActionDone, setSharedActionDone] = useState(false);
+  const [sharedActionDone, setSharedActionDone] = useState<ShareClaimMethod | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const summary = chart?.natal ? computePortraitSummary(chart.natal) : null;
@@ -28,7 +28,7 @@ export function ShareBonusModal({ open, uid, tier, usage, profile, chart, onClos
 
   useEffect(() => {
     if (!open) {
-      setSharedActionDone(false);
+      setSharedActionDone(null);
       setNotice(null);
       return;
     }
@@ -54,7 +54,7 @@ export function ShareBonusModal({ open, uid, tier, usage, profile, chart, onClos
     link.download = `vela-portrait-${profile?.name || 'card'}.png`;
     link.href = canvasRef.current.toDataURL('image/png');
     link.click();
-    setSharedActionDone(true);
+    setSharedActionDone('poster');
     setNotice('已保存分享海报图片，发送给好友后即可点击下方领取。');
   };
 
@@ -65,7 +65,7 @@ export function ShareBonusModal({ open, uid, tier, usage, profile, chart, onClos
       } else {
         throw new Error('NO_CLIPBOARD');
       }
-      setSharedActionDone(true);
+      setSharedActionDone('copy');
       setNotice('已复制分享文案与链接，发送给好友后即可点击下方领取。');
     } catch {
       setNotice('当前浏览器限制自动复制，请先保存分享海报图片再领取。');
@@ -107,14 +107,16 @@ export function ShareBonusModal({ open, uid, tier, usage, profile, chart, onClos
     setBusy(true);
     setNotice(null);
     try {
+      let method: ShareClaimMethod = sharedActionDone ?? 'poster';
       if (canNativeShare) {
         const completed = await triggerNativeShare();
         if (!completed) {
           setNotice('已取消系统分享，完成分享后即可领取 +1 次额度。');
           return;
         }
+        method = 'native';
       }
-      const next = await claimDailyShareBonus(uid);
+      const next = await claimDailyShareBonus(uid, method);
       onClaimed(next);
       setNotice(canNativeShare ? '已完成系统分享，成功领取 +1 次深度推演额度！' : '已确认分享，成功领取 +1 次深度推演额度！');
     } catch (err) {

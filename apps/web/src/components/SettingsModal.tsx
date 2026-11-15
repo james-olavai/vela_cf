@@ -1,13 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import {
   computeUsagePercent,
   nextUtcMonthResetLabel,
   TIER_META,
-  type EntityType,
-  type Gender,
-  type LocationCandidate,
-  type ProfileInput,
-  type ProfileRecord,
   type Tier,
   type UsageRecord,
 } from '@vela-cf/shared';
@@ -18,12 +13,9 @@ import {
   deleteUserAccount,
   exportUserDataJson,
   formatAppError,
-  removeProfile,
-  saveProfile,
-  searchLocations,
 } from '../lib/store';
 
-export type SettingsTab = 'subscription' | 'profiles' | 'account';
+export type SettingsTab = 'subscription' | 'account';
 
 interface SettingsModalProps {
   open: boolean;
@@ -32,7 +24,6 @@ interface SettingsModalProps {
   email: string;
   tier: Tier;
   usage: UsageRecord;
-  profiles: ProfileRecord[];
   onClose: () => void;
   onSignOut: () => void;
   onRequireLogin: () => void;
@@ -45,7 +36,6 @@ export function SettingsModal({
   email,
   tier,
   usage,
-  profiles,
   onClose,
   onSignOut,
   onRequireLogin,
@@ -61,18 +51,6 @@ export function SettingsModal({
     }
   }, [open, initialTab]);
 
-  // Profile form state
-  const [editingId, setEditingId] = useState<string | undefined>(undefined);
-  const [name, setName] = useState('');
-  const [entityType, setEntityType] = useState<EntityType>('person');
-  const [birthDateTime, setBirthDateTime] = useState('1994-06-03T08:20');
-  const [cityQuery, setCityQuery] = useState('');
-  const [candidates, setCandidates] = useState<LocationCandidate[]>([]);
-  const [selectedLoc, setSelectedLoc] = useState<LocationCandidate | null>(null);
-  const [gender, setGender] = useState<Gender>('unset');
-  const [profileBusy, setProfileBusy] = useState(false);
-
-  // Delete & export confirm
   const [deleteText, setDeleteText] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
@@ -119,57 +97,6 @@ export function SettingsModal({
       setNotice(err instanceof Error ? err.message : '打开订阅管理失败');
     } finally {
       setCheckoutBusy(null);
-    }
-  };
-
-  const handleSearchCity = async () => {
-    if (!cityQuery.trim()) return;
-    setNotice(null);
-    try {
-      const list = await searchLocations(cityQuery);
-      setCandidates(list);
-      if (list.length === 0) setNotice('未找到匹配城市，请尝试英文或拼音。');
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : '城市搜索失败');
-    }
-  };
-
-  const handleSaveProfile = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!uid) {
-      onClose();
-      onRequireLogin();
-      return;
-    }
-    if (!selectedLoc) {
-      setNotice('请先搜索并选中出生城市。');
-      return;
-    }
-    setProfileBusy(true);
-    setNotice(null);
-    try {
-      const payload: ProfileInput = {
-        name: name.trim(),
-        entityType,
-        birthDateTime,
-        locationName: selectedLoc.displayName,
-        latitude: selectedLoc.latitude,
-        longitude: selectedLoc.longitude,
-        timezone: selectedLoc.timezone,
-        gender: entityType === 'person' ? gender : 'unset',
-      };
-      await saveProfile(uid, editingId ?? null, payload);
-      setEditingId(undefined);
-      setName('');
-      setEntityType('person');
-      setCityQuery('');
-      setSelectedLoc(null);
-      setCandidates([]);
-      setNotice('档案已保存。');
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : '保存档案失败');
-    } finally {
-      setProfileBusy(false);
     }
   };
 
@@ -308,156 +235,6 @@ export function SettingsModal({
                   </button>
                 </div>
               )}
-            </div>
-          )}
-
-          {tab === 'profiles' && (
-            <div className="flex flex-col gap-5">
-              {profiles.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  {profiles.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center justify-between gap-3 px-4 py-3 rounded-[10px] border border-[#26304d] bg-[#161d33]"
-                    >
-                      <div className="min-w-0">
-                        <p className="m-0 text-[14px] font-bold text-[#f8fafc]">{p.name}</p>
-                        <p className="m-0 font-mono-num text-[12px] text-[#a3b0c5] truncate">
-                          {p.birthDateTime.replace('T', ' ')} · {p.locationName}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingId(p.id);
-                            setName(p.name);
-                            setEntityType(p.entityType ?? 'person');
-                            setBirthDateTime(p.birthDateTime);
-                            setCityQuery(p.locationName);
-                            setSelectedLoc({
-                              displayName: p.locationName,
-                              latitude: p.latitude,
-                              longitude: p.longitude,
-                              timezone: p.timezone,
-                            });
-                            setGender(p.gender);
-                          }}
-                          className="min-h-[34px] px-3 rounded-[8px] border border-[#3a4668] bg-transparent text-[12px] text-[#c3cde0] cursor-pointer"
-                        >
-                          编辑
-                        </button>
-                        {uid && (
-                          <button
-                            type="button"
-                            onClick={() => void removeProfile(uid, p.id)}
-                            className="min-h-[34px] px-3 rounded-[8px] border border-[#3a4668] bg-transparent text-[12px] text-[#ff9d8a] cursor-pointer"
-                          >
-                            删除
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <form onSubmit={(e) => void handleSaveProfile(e)} className="p-4 rounded-[12px] border border-[#26304d] bg-[#070812] flex flex-col gap-3">
-                <h3 className="m-0 text-[15px] font-bold text-[#f8fafc]">
-                  {editingId ? '编辑出生档案' : '新建出生档案'}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input
-                    required
-                    placeholder="称呼（如：本人）"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="min-h-[42px] px-3 rounded-[8px] border border-[#3a4668] bg-[#101527] text-[#f8fafc] text-[14px]"
-                  />
-                  <input
-                    required
-                    type="datetime-local"
-                    value={birthDateTime}
-                    onChange={(e) => setBirthDateTime(e.target.value)}
-                    className="min-h-[42px] px-3 rounded-[8px] border border-[#3a4668] bg-[#101527] text-[#f8fafc] text-[14px]"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  {(
-                    [
-                      { id: 'person', label: '个人' },
-                      { id: 'company', label: '公司 (Pro)' },
-                      { id: 'country', label: '国家 (Pro)' },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      disabled={opt.id !== 'person' && !TIER_META[tier].allowsEntityCharts}
-                      onClick={() => setEntityType(opt.id)}
-                      className={`min-h-[34px] px-3 rounded-[8px] border text-[12px] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
-                        entityType === opt.id
-                          ? 'border-[#e0b64a] bg-[#1d1a0f] text-[#f7d57f]'
-                          : 'border-[#26304d] bg-[#101527] text-[#c3cde0]'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    placeholder="输入出生城市搜索"
-                    value={cityQuery}
-                    onChange={(e) => setCityQuery(e.target.value)}
-                    className="flex-1 min-h-[42px] px-3 rounded-[8px] border border-[#3a4668] bg-[#101527] text-[#f8fafc] text-[14px]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleSearchCity()}
-                    className="min-h-[42px] px-4 rounded-[8px] border border-[#3a4668] bg-[#161d33] text-[#f8fafc] text-[13px] cursor-pointer"
-                  >
-                    搜索城市
-                  </button>
-                </div>
-                {candidates.length > 0 && (
-                  <div className="flex flex-col gap-1">
-                    {candidates.map((c, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setSelectedLoc(c);
-                          setCityQuery(c.displayName);
-                          setCandidates([]);
-                        }}
-                        className="text-left px-3 py-2 rounded-[8px] border border-[#26304d] bg-[#161d33] text-[13px] text-[#f8fafc] hover:border-[#e0b64a] cursor-pointer"
-                      >
-                        {c.displayName} ({c.timezone})
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-3">
-                  <select
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value as Gender)}
-                    aria-label="性别（紫微斗数需要）"
-                    className="min-h-[42px] px-3 rounded-[8px] border border-[#3a4668] bg-[#101527] text-[#f8fafc] text-[14px]"
-                  >
-                    <option value="unset">性别：暂不填写</option>
-                    <option value="female">女</option>
-                    <option value="male">男</option>
-                  </select>
-                  <button
-                    type="submit"
-                    disabled={profileBusy}
-                    className="min-h-[42px] px-5 rounded-[8px] bg-[#e0b64a] text-[#1a1405] text-[14px] font-bold border-0 cursor-pointer"
-                  >
-                    {profileBusy ? '保存中…' : '保存档案'}
-                  </button>
-                </div>
-              </form>
             </div>
           )}
 

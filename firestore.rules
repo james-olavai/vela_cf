@@ -18,6 +18,23 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function currentUtcDate() {
+      let y = string(request.time.year());
+      let m = request.time.month() < 10 ? '0' + string(request.time.month()) : string(request.time.month());
+      let d = request.time.day() < 10 ? '0' + string(request.time.day()) : string(request.time.day());
+      return y + '-' + m + '-' + d;
+    }
+
+    function currentUtcPeriodStart() {
+      let y = string(request.time.year());
+      let m = request.time.month() < 10 ? '0' + string(request.time.month()) : string(request.time.month());
+      return y + '-' + m + '-01T00:00:00Z';
+    }
+
+    function hasValidShareMethod(data) {
+      return !('lastShareMethod' in data) || data.lastShareMethod in ['native', 'poster', 'copy'];
+    }
+
     function isValidProfile(data) {
       return data.keys().hasAll(['name', 'birthDateTime', 'locationName', 'latitude', 'longitude', 'timezone', 'gender'])
         && data.keys().hasOnly(['name', 'entityType', 'birthDateTime', 'locationName', 'latitude', 'longitude', 'timezone', 'gender', 'consentedOther', 'createdAt', 'updatedAt'])
@@ -44,26 +61,41 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // 配额：客户端本人只读；仅允许本人按日领取分享奖励（上限 3 次/月，每次 +30000 micro-USD）
+    // 配额：客户端本人只读；分享奖励优先走服务端事务，规则侧同步以 request.time 可信 UTC 日期与账期双重锁死
     match /usage/{uid} {
       allow get: if isValidId(uid) && isOwner(uid);
       allow list, delete: if false;
       allow create: if isValidId(uid) && isOwner(uid)
-        && request.resource.data.keys().hasOnly(['periodStart', 'used', 'bonusMicroUsd', 'shareCount', 'lastShareDate'])
-        && request.resource.data.periodStart is string && request.resource.data.periodStart.size() >= 7 && request.resource.data.periodStart.size() <= 24
+        && request.resource.data.keys().hasAll(['periodStart', 'used', 'bonusMicroUsd', 'shareCount', 'lastShareDate'])
+        && request.resource.data.keys().hasOnly(['periodStart', 'used', 'bonusMicroUsd', 'shareCount', 'lastShareDate', 'lastShareMethod'])
+        && request.resource.data.periodStart == currentUtcPeriodStart()
         && request.resource.data.used == 0
         && request.resource.data.bonusMicroUsd == 30000
         && request.resource.data.shareCount == 1
-        && request.resource.data.lastShareDate is string && request.resource.data.lastShareDate.size() == 10;
+        && request.resource.data.lastShareDate == currentUtcDate()
+        && hasValidShareMethod(request.resource.data);
       allow update: if isValidId(uid) && isOwner(uid)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bonusMicroUsd', 'shareCount', 'lastShareDate'])
-        && request.resource.data.bonusMicroUsd == resource.data.get('bonusMicroUsd', 0) + 30000
-        && request.resource.data.bonusMicroUsd <= 90000
-        && request.resource.data.shareCount == resource.data.get('shareCount', 0) + 1
-        && request.resource.data.shareCount <= 3
-        && request.resource.data.lastShareDate is string
-        && request.resource.data.lastShareDate.size() == 10
-        && request.resource.data.lastShareDate != resource.data.get('lastShareDate', '');
+        && hasValidShareMethod(request.resource.data)
+        && request.resource.data.lastShareDate == currentUtcDate()
+        && (
+          (
+            resource.data.get('periodStart', '') == currentUtcPeriodStart()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bonusMicroUsd', 'shareCount', 'lastShareDate', 'lastShareMethod'])
+            && resource.data.get('lastShareDate', '') != currentUtcDate()
+            && request.resource.data.bonusMicroUsd == resource.data.get('bonusMicroUsd', 0) + 30000
+            && request.resource.data.bonusMicroUsd <= 90000
+            && request.resource.data.shareCount == resource.data.get('shareCount', 0) + 1
+            && request.resource.data.shareCount <= 3
+          )
+          || (
+            resource.data.get('periodStart', '') < currentUtcPeriodStart()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['periodStart', 'used', 'bonusMicroUsd', 'shareCount', 'lastShareDate', 'lastShareMethod', 'reservations'])
+            && request.resource.data.periodStart == currentUtcPeriodStart()
+            && request.resource.data.used == 0
+            && request.resource.data.bonusMicroUsd == 30000
+            && request.resource.data.shareCount == 1
+          )
+        );
     }
 
     // 用户主文档与子集合

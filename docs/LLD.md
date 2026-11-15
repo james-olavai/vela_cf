@@ -345,3 +345,20 @@ await db.runTransaction(async (tx) => {
 | **切片 3：配额与订阅** | 1 周 | §4.3 Firestore 配额事务与并发测试；配置 `Run Payments with Stripe` 扩展；前端接入 Checkout 与 Customer Portal | 配额模拟器测试通过；Stripe 测试模式下完成升级（`stripeRole` 生效）、续订、取消 |
 | **切片 4：前端补全与合规** | 1 周 | 档案管理、商品目录、城市搜索（`resolveLocation`）、排盘事实展示组件；GA4 Consent Mode v2；导出数据（`exportUserData`）与删除账号（`deleteAccount` + `Delete User Data` 扩展） | `docs/DESIGN.md` §2 的页面全部可用，删号与导出实测通过 |
 | **上线准备** | 3 天 | 开启 App Check 强制校验；完成 §8.5 检查清单 | 清单全部勾完 |
+
+### 9.1 架构与代码审查整改（2026-11-15）
+
+以下事项纳入现有切片，按风险顺序推进；沿用上述阶段截止日期，不单独估算日期。不得提前执行当前阶段之外的工作。
+
+| 优先级 | 阶段 | 任务与范围 | 验收条件 | 状态 |
+| --- | --- | --- | --- | --- |
+| P1 | 切片 3 | 修复并发配额检查：模型调用前原子预留额度（`reserveQuota`，含 120s TTL 自动清理过期在途预留），完成后按实际费用结算（`settleQuota`），失败释放预留（`releaseQuota`） | Emulator 测试覆盖同一用户并发、超限、失败释放、TTL 过期清理和跨周期；并发请求不能绕过额度门槛 | 已完成（`apps/api/src/quota.ts`） |
+| P1 | 切片 4 | 修复删号与订阅取消：缺少 Stripe 配置或取消失败时在 `users/{uid}.deletionState` 保留可重试状态，不报告删除成功；订阅全部取消后再删除 Auth 与 `users`/`usage`/`customers` | 模拟器测试覆盖无密钥拦截、部分订阅取消失败保留状态及重试成功删除，确认不会留下用户无法管理的有效订阅 | 已完成（`apps/api/src/account.ts`） |
+| P2 | 切片 2 | 修复长对话上下文：按 `createdAt desc limit(20)` 选取最近 20 条消息并恢复时间正序送入模型 | 超过 20 条消息的会话包含最新 20 条消息、排除较早消息，顺序正确 | 已完成（`apps/api/src/session.ts`） |
+| P2 | 切片 2 | 保证编辑上一轮与消息落库的一致性：通过单会话互斥锁（`activeTurnId`）拦截并发请求；生成失败不删原消息、不写半轮消息；生成成功后单事务原子提交替换与新消息 | 生成失败不丢失原对话；成功时替换和新一轮完整提交；并发情况下返回 `SESSION_BUSY` 不交错或误删 | 已完成（`apps/api/src/session.ts`） |
+| P2 | 切片 3 | 加固分享奖励：产品规则明确为完成保存海报/复制链接/系统分享动作后解锁领取（记录 `lastShareMethod`）；服务端事务与 `firestore.rules`（基于 `request.time`）双重校验可信 UTC 日期、每日 1 次及每周期 3 次上限 | 模拟器覆盖伪造日期、同日并发领取、每日及周期上限和跨周期重置；奖励规则与产品行为一致 | 已完成（`apps/api/src/quota.ts`、`firestore.rules`） |
+| P3 | 切片 4 | 按会话、档案、用量及账号生命周期拆分职责：API 拆分为 `quota.ts`、`session.ts`、`account.ts`；Web 存储层拆分为 `profileStore.ts`、`sessionStore.ts`、`usageStore.ts`、`accountStore.ts`，抽离 `WorkbenchSidebar.tsx` | 相关职责边界清晰，现有用户流程、代码行数预算（`npm run check`）、类型检查与构建全部通过 | 已完成 |
+
+**补充约定**：
+- **流式响应失败行为**：模型流式生成中途抛错或中断时，服务端回滚会话锁（`releaseSessionTurn`）与配额预留（`releaseQuota`），不删除上一轮消息、不写入半轮消息；前端捕获异常后将乐观消息列表恢复为调用前快照（`existingMessages`）。
+- **分享奖励验证规则**：Web 端第三方社交平台无分享完成回调，产品采用「触发保存海报 / 复制分享文案 / 系统原生分享后解锁领取」的自助激励机制（记录 `lastShareMethod: 'native' | 'poster' | 'copy'`），由服务端可信时间事务与 `firestore.rules`（`request.time`）严格限制每日 1 次、每自然月最多 3 次。
