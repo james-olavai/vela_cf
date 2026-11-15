@@ -20,7 +20,7 @@ import {
   type UsageRecord,
   utcMonthPeriodStart,
 } from '@vela-cf/shared';
-import { SettingsModal, type EmailAuthMode, type SettingsTab } from './components/SettingsModal';
+import { SettingsModal, type EmailAuthMode } from './components/SettingsModal';
 import { auth, googleProvider, initAnalyticsConsent } from './lib/firebase';
 import { navigate, usePathname } from './lib/router';
 import {
@@ -52,7 +52,6 @@ export function App() {
   }));
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('account');
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
@@ -294,11 +293,10 @@ export function App() {
         activeSession={activeSession}
         pendingHandoff={pendingHandoff}
         onClearPendingHandoff={() => setPendingHandoff(null)}
-        onOpenAccountModal={(tab = 'account', handoff) => {
+        onOpenAccountModal={(handoff) => {
           if (handoff) setPendingHandoff(handoff);
           setAuthError(null);
           setAuthNotice(null);
-          setSettingsTab(tab);
           setSettingsOpen(true);
         }}
         onStartSession={handleStartSession}
@@ -307,11 +305,8 @@ export function App() {
 
       <SettingsModal
         open={settingsOpen}
-        initialTab={settingsTab}
         uid={user?.uid ?? null}
         email={user?.email ?? 'Google 用户'}
-        tier={effectiveTier}
-        usage={usage}
         authBusy={authBusy}
         authError={authError}
         authNotice={authNotice}

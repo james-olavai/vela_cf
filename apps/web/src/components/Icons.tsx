@@ -99,3 +99,12 @@ export function IconPencil({ size = 15 }: IconProps) {
     </svg>
   );
 }
+
+export function IconCrown({ size = 18 }: IconProps) {
+  return (
+    <svg {...baseProps(size)}>
+      <path d="M3 18h18l-1.5-10-4.5 4-3-6-3 6-4.5-4L3 18z" />
+      <path d="M4 21h16" />
+    </svg>
+  );
+}

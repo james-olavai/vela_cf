@@ -47,6 +47,7 @@ export const TIER_META: Record<
     label: string;
     priceLabel: string;
     monthlyBudgetMicroUsd: number;
+    maxProfiles: number;
     maxSynastryProfiles: number;
     allowsEntityCharts: boolean;
     highlights: string[];
@@ -56,32 +57,35 @@ export const TIER_META: Record<
     label: '免费档',
     priceLabel: '$0',
     monthlyBudgetMicroUsd: QUOTA_BUDGET_MICRO_USD.free,
+    maxProfiles: 1,
     maxSynastryProfiles: 0,
     allowsEntityCharts: false,
-    highlights: ['每月约 3 次免费体验', '个人西洋本命盘基础解读'],
+    highlights: ['每月约 3 次免费体验', '可保存 1 个个人出生档案 · 西洋本命盘基础解读'],
   },
   go: {
     label: 'Go',
     priceLabel: '$9.9',
     monthlyBudgetMicroUsd: QUOTA_BUDGET_MICRO_USD.go,
+    maxProfiles: 5,
     maxSynastryProfiles: 2,
     allowsEntityCharts: false,
     highlights: [
       '每月约 55–70 次常规对话额度',
+      '默认可存放 5 个档案 · 支持双人合盘勾选',
       '西洋占星常见盘面（本命、行运、日月返照、次限/太阳弧、组合盘、迁移盘）',
-      '双人合盘（2 个档案）',
     ],
   },
   pro: {
     label: 'Pro',
     priceLabel: '$24.9',
     monthlyBudgetMicroUsd: QUOTA_BUDGET_MICRO_USD.pro,
+    maxProfiles: 50,
     maxSynastryProfiles: 4,
     allowsEntityCharts: true,
     highlights: [
       '每月约 100–120 次多维推演额度',
-      '解锁全部 34 项中西占星与命理工具（含高阶盘型、古典时间主星、八字/紫微流年大限）',
-      '专属「推演深度」切换（速览 / 均衡 / 全维）+ 最多 4 档案合盘（含个人 / 公司 / 国家）',
+      '升级可存放 50 个档案（含个人 / 公司 / 国家）· 最多 4 档案合盘',
+      '解锁全部 34 项中西占星与命理工具 + 专属「推演深度」切换（速览 / 均衡 / 全维）',
     ],
   },
 };

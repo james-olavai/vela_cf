@@ -24,10 +24,11 @@ import {
   IconStop,
 } from '../components/Icons';
 import { NatalPortraitModal } from '../components/NatalPortraitModal';
-import type { SettingsTab } from '../components/SettingsModal';
+import { ProfileManagerSubpage, type ProfileManagerLaunch } from '../components/ProfileSidebarPanel';
+import { SubscriptionSubpage } from '../components/SettingsModal';
 import { ShareBonusModal } from '../components/ShareBonusModal';
 import { SoftAurora } from '../components/SoftAurora';
-import { WorkbenchSidebar } from '../components/WorkbenchSidebar';
+import { WorkbenchSidebar, type ActiveSubpage } from '../components/WorkbenchSidebar';
 import { computePortraitSummary } from '../lib/portrait';
 import { navigate } from '../lib/router';
 import {
@@ -60,7 +61,7 @@ interface WorkbenchPageProps {
   activeSession: SessionRecord | null;
   pendingHandoff: PendingHandoff | null;
   onClearPendingHandoff: () => void;
-  onOpenAccountModal: (tab?: SettingsTab, handoff?: PendingHandoff) => void;
+  onOpenAccountModal: (handoff?: PendingHandoff) => void;
   onStartSession: (mode: ConsultationMode, profiles: ProfileRecord[]) => Promise<SessionRecord>;
   onSelectSession: (sessionId: string | null) => void;
 }
@@ -104,6 +105,8 @@ export function WorkbenchPage({
   onSelectSession,
 }: WorkbenchPageProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeSubpage, setActiveSubpage] = useState<ActiveSubpage>(null);
+  const [profileLaunch, setProfileLaunch] = useState<ProfileManagerLaunch>({ seq: 0 });
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [portraitOpen, setPortraitOpen] = useState(false);
@@ -150,7 +153,7 @@ export function WorkbenchPage({
       setChart(null);
       return;
     }
-    const validIds = selectedProfileIds.filter((id) =>
+    const validIds = [...new Set(selectedProfileIds)].filter((id) =>
       effectiveProfiles.some((p) => p.id === id),
     );
     if (validIds.length === 0) {
@@ -207,14 +210,16 @@ export function WorkbenchPage({
     );
   };
 
-  const activeProfiles = effectiveProfiles.filter((p) => selectedProfileIds.includes(p.id));
+  const activeProfiles = selectedProfileIds
+    .map((id) => effectiveProfiles.find((p) => p.id === id))
+    .filter((p): p is ProfileRecord => Boolean(p));
   const primaryProfile = activeProfiles[0] ?? effectiveProfiles[0] ?? null;
   const portraitSummary = chart?.natal ? computePortraitSummary(chart.natal) : null;
   const mode: ConsultationMode = activeProfiles.length >= 2 ? 'synastry' : 'personal';
   const needsMoreProfiles = effectiveProfiles.length === 0;
 
   const requestAuthWithDrafts = (question = '', selectedIndices = [0]) => {
-    onOpenAccountModal('account', {
+    onOpenAccountModal({
       draftProfiles: effectiveProfiles.map((p) => ({
         name: p.name,
         entityType: p.entityType ?? 'person',
@@ -287,34 +292,50 @@ export function WorkbenchPage({
       );
   const quotaNearLimit = !quotaExhausted && Boolean(uid) && usagePercent >= 80;
 
-  const handleToggleProfile = (id: string) => {
+  const handleSetPrimaryProfile = (id: string) => {
+    setSelectedProfileIds((prev) => {
+      const others = prev.filter((x) => x !== id).slice(0, Math.max(0, maxSelectable - 1));
+      return [id, ...others];
+    });
+  };
+
+  const handleToggleSynastryProfile = (id: string) => {
     if (maxSelectable <= 1) {
-      setSelectedProfileIds([id]);
+      setActiveSubpage('subscription');
       return;
     }
     setSelectedProfileIds((prev) => {
-      if (prev.includes(id)) {
-        return prev.length > 1 ? prev.filter((x) => x !== id) : prev;
-      }
-      if (prev.length >= maxSelectable) {
-        return [...prev.slice(1), id];
-      }
+      const primary = prev[0] ?? effectiveProfiles[0]?.id;
+      if (!primary || id === primary) return prev;
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= maxSelectable) return [primary, ...prev.slice(2), id];
       return [...prev, id];
     });
   };
 
+  const openProfileManager = (opts?: { startAdd?: boolean; editId?: string }) => {
+    setProfileLaunch((prev) => ({ seq: prev.seq + 1, ...opts }));
+    setActiveSubpage('profiles');
+  };
+
   const handleSaveSidebarProfile = async (input: ProfileInput, editId?: string) => {
+    if (!editId && effectiveProfiles.length >= TIER_META[tier].maxProfiles) {
+      throw new Error(`当前${TIER_META[tier].label}最多存放 ${TIER_META[tier].maxProfiles} 个档案，请先删除旧档案或升级方案`);
+    }
+    const selectSavedProfile = (savedId: string) => {
+      setSelectedProfileIds((prev) => {
+        const rest = prev.filter((x) => x !== savedId);
+        return maxSelectable <= 1
+          ? [savedId]
+          : rest.length < maxSelectable
+            ? [...rest, savedId]
+            : [...rest.slice(1), savedId];
+      });
+    };
+
     if (uid) {
       const savedId = await saveProfile(uid, editId ?? null, input);
-      if (!editId) {
-        setSelectedProfileIds((prev) =>
-          maxSelectable <= 1
-            ? [savedId]
-            : prev.length < maxSelectable
-              ? [...prev, savedId]
-              : [...prev.slice(1), savedId],
-        );
-      }
+      if (!editId) selectSavedProfile(savedId);
       return;
     }
     const now = new Date().toISOString();
@@ -328,13 +349,7 @@ export function WorkbenchPage({
     setDraftProfiles((prev) =>
       editId ? prev.map((p) => (p.id === editId ? record : p)) : [record, ...prev],
     );
-    setSelectedProfileIds((prev) =>
-      maxSelectable <= 1
-        ? [nextId]
-        : prev.length < maxSelectable
-          ? [...prev, nextId]
-          : [...prev.slice(1), nextId],
-    );
+    selectSavedProfile(nextId);
     void fetchNatalChart(null, record)
       .then((preview) => setChart(preview))
       .catch(() => undefined);
@@ -355,7 +370,7 @@ export function WorkbenchPage({
     setStreamError(null);
 
     if (effectiveProfiles.length === 0) {
-      setStreamError('请先在左侧边栏点击「+ 添加出生信息」');
+      setStreamError('请先在左侧「档案管理」添加出生信息');
       return;
     }
 
@@ -458,7 +473,7 @@ export function WorkbenchPage({
           </span>
           <button
             type="button"
-            onClick={() => onOpenAccountModal('subscription')}
+            onClick={() => setActiveSubpage('subscription')}
             className="px-2.5 py-1 rounded-[12px] border-0 bg-[#e0b64a] text-[#1a1405] text-[12px] font-bold cursor-pointer shrink-0 hover:bg-[#f7d57f]"
           >
             升级套餐
@@ -489,7 +504,7 @@ export function WorkbenchPage({
               )}
             <button
               type="button"
-              onClick={() => onOpenAccountModal('subscription')}
+              onClick={() => setActiveSubpage('subscription')}
               className="min-h-[40px] px-5 rounded-[20px] border-0 bg-[#e0b64a] text-[#1a1405] text-[13px] font-bold cursor-pointer"
             >
               升级订阅继续对话
@@ -508,7 +523,7 @@ export function WorkbenchPage({
             disabled={needsMoreProfiles}
             placeholder={
               effectiveProfiles.length === 0
-                ? '点击左上角 Logo 添加出生信息'
+                ? '请先在左侧「档案管理」添加出生信息'
                 : '问问Vela，问问宇宙'
             }
             value={inputText}
@@ -582,21 +597,22 @@ export function WorkbenchPage({
         displayName={displayName}
         photoURL={photoURL}
         tier={tier}
+        usage={effectiveUsage}
         sidebarOpen={sidebarOpen}
+        activeSubpage={activeSubpage}
         needsMoreProfiles={needsMoreProfiles}
         portraitSubtitle={portraitSubtitle}
         profiles={effectiveProfiles}
         selectedProfileIds={selectedProfileIds}
         onSetSidebarOpen={setSidebarOpen}
-        onNewSession={() => onSelectSession(null)}
+        onNewSession={() => { setActiveSubpage(null); onSelectSession(null); }}
         onOpenHistorySearch={() => setHistorySearchOpen(true)}
         onOpenPortrait={() => setPortraitOpen(true)}
-        onOpenAccountOrAuth={() =>
-          uid ? onOpenAccountModal('account') : requestAuthWithDrafts()
-        }
-        onToggleProfile={handleToggleProfile}
-        onSaveProfile={handleSaveSidebarProfile}
-        onDeleteProfile={handleDeleteSidebarProfile}
+        onOpenProfileManager={openProfileManager}
+        onOpenSubscription={() => setActiveSubpage('subscription')}
+        onOpenAccountOrAuth={() => (uid ? onOpenAccountModal() : requestAuthWithDrafts())}
+        onSetPrimaryProfile={handleSetPrimaryProfile}
+        onToggleSynastryProfile={handleToggleSynastryProfile}
       />
 
       <main className="flex-1 min-w-0 flex flex-col h-full relative overflow-hidden isolate">
@@ -636,7 +652,49 @@ export function WorkbenchPage({
           )}
         </header>
 
-        {messages.length === 0 ? (
+        {activeSubpage ? (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1e2740]">
+              <button
+                type="button"
+                onClick={() => setActiveSubpage(null)}
+                data-testid="subpage-back"
+                className="rounded-[8px] px-2.5 py-1 border-0 bg-transparent text-[12.5px] text-[#a3b0c5] hover:bg-[#101527] hover:text-[#f8fafc] cursor-pointer"
+              >
+                ← 返回对话
+              </button>
+              <span className="text-[14px] font-semibold text-[#f8fafc]">
+                {activeSubpage === 'profiles' ? '✦ 档案管理' : '✦ 订阅与额度'}
+              </span>
+              <span className="w-16" />
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 md:p-6">
+              {activeSubpage === 'profiles' ? (
+                <ProfileManagerSubpage
+                  uid={uid}
+                  tier={tier}
+                  profiles={effectiveProfiles}
+                  selectedProfileIds={selectedProfileIds}
+                  launch={profileLaunch}
+                  onSetPrimaryProfile={handleSetPrimaryProfile}
+                  onToggleSynastryProfile={handleToggleSynastryProfile}
+                  onSaveProfile={handleSaveSidebarProfile}
+                  onDeleteProfile={handleDeleteSidebarProfile}
+                  onOpenSubscription={() => setActiveSubpage('subscription')}
+                />
+              ) : (
+                <SubscriptionSubpage
+                  uid={uid}
+                  tier={tier}
+                  usage={effectiveUsage}
+                  profileCount={effectiveProfiles.length}
+                  onRequestAuth={() => requestAuthWithDrafts()}
+                  onOpenShare={() => setShareModalOpen(true)}
+                />
+              )}
+            </div>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center px-4 pb-10">
             <h1 className="m-0 mb-6 font-serif-sc text-[28px] sm:text-[34px] font-bold text-[#f8fafc] text-center">
               此刻你最在意什么？
@@ -804,7 +862,7 @@ export function WorkbenchPage({
         open={historySearchOpen}
         sessions={sessions}
         activeSessionId={activeSession?.id ?? null}
-        onSelectSession={(sid) => { onSelectSession(sid); setSidebarOpen(false); }}
+        onSelectSession={(sid) => { setActiveSubpage(null); onSelectSession(sid); setSidebarOpen(false); }}
         onClose={() => setHistorySearchOpen(false)}
       />
 
@@ -826,7 +884,7 @@ export function WorkbenchPage({
           chart={chart}
           onClose={() => setShareModalOpen(false)}
           onClaimed={(next) => setUsageOverride(next)}
-          onOpenUpgrade={() => onOpenAccountModal('subscription')}
+          onOpenUpgrade={() => { setShareModalOpen(false); setActiveSubpage('subscription'); }}
         />
       )}
     </div>
