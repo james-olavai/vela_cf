@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
   isSignInWithEmailLink,
@@ -20,7 +20,7 @@ import {
   type UsageRecord,
   utcMonthPeriodStart,
 } from '@vela-cf/shared';
-import { SettingsModal, type EmailAuthMode } from './components/SettingsModal';
+import type { EmailAuthMode } from './components/SettingsModal';
 import { auth, googleProvider, initAnalyticsConsent } from './lib/firebase';
 import { navigate, usePathname } from './lib/router';
 import {
@@ -36,13 +36,19 @@ import {
 import { LegalPage } from './pages/LegalPage';
 import { WorkbenchPage, type PendingHandoff } from './pages/WorkbenchPage';
 
+const SettingsModal = lazy(() => import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal })));
+
 const MAGIC_EMAIL_KEY = 'vela_magic_link_email';
 const MAGIC_HANDOFF_KEY = 'vela_magic_link_handoff';
 
 export function App() {
   const pathname = usePathname();
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const uidRef = useRef(user?.uid);
+  uidRef.current = user?.uid;
   const [tier, setTier] = useState<Tier>('free');
   const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
@@ -74,7 +80,7 @@ export function App() {
         });
       }
       if (handoff.chart && savedProfiles[0]) {
-        saveCachedChart(uid, savedProfiles[0].id, handoff.chart);
+        saveCachedChart(uid, savedProfiles[handoff.selectedIndices[0] ?? 0] ?? savedProfiles[0], handoff.chart);
       }
       if (handoff.question && savedProfiles.length > 0) {
         const chosen = handoff.selectedIndices
@@ -115,6 +121,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    let generation = 0;
+    let lastUid: string | null = null;
     let unsubProfiles: (() => void) | undefined;
     let unsubSessions: (() => void) | undefined;
     let unsubUsage: (() => void) | undefined;
@@ -153,8 +161,11 @@ export function App() {
     }
 
     const unsubAuth = onIdTokenChanged(auth, async (nextUser) => {
+      const run = ++generation;
       cleanupSubs();
-
+      setDataError(null);
+      if (lastUid !== (nextUser?.uid ?? null)) { setProfiles([]); setSessions([]); setUsage({ periodStart: utcMonthPeriodStart(), used: 0 }); }
+      lastUid = nextUser?.uid ?? null;
       setUser(nextUser);
       if (!nextUser) {
         setTier('free');
@@ -168,22 +179,27 @@ export function App() {
       try {
         const tokenRes = await nextUser.getIdTokenResult();
         const parsedTier = TierSchema.safeParse(tokenRes.claims.stripeRole);
+        if (run !== generation) return;
         setTier(parsedTier.success ? parsedTier.data : 'free');
       } catch {
+        if (run !== generation) return;
         setTier('free');
       }
 
-      unsubProfiles = subscribeProfiles(nextUser.uid, setProfiles);
-      unsubSessions = subscribeSessions(nextUser.uid, setSessions);
-      unsubUsage = subscribeUsage(nextUser.uid, setUsage);
+      if (run !== generation) return;
+      const failed = () => { if (run === generation) setDataError('档案、历史或额度加载失败，请检查网络后重试'); };
+      unsubProfiles = subscribeProfiles(nextUser.uid, (next) => { if (run === generation) setProfiles(next); }, failed);
+      unsubSessions = subscribeSessions(nextUser.uid, (next) => { if (run === generation) setSessions(next); }, failed);
+      unsubUsage = subscribeUsage(nextUser.uid, (next) => { if (run === generation) setUsage(next); }, failed);
       setAuthReady(true);
     });
 
     return () => {
+      ++generation;
       unsubAuth();
       cleanupSubs();
     };
-  }, []);
+  }, [retry]);
 
   const handleConfirmGoogleLogin = async () => {
     setAuthBusy(true);
@@ -253,8 +269,8 @@ export function App() {
     initialQuestion?: string,
   ): Promise<SessionRecord> => {
     const session = await createConsultationSession(mode, selectedProfiles, initialQuestion);
+    if (uidRef.current !== user?.uid) throw new Error('登录状态已改变，请重试');
     setSessions((prev) => (prev.some((s) => s.id === session.id) ? prev : [session, ...prev]));
-    navigate(`/consult/${session.id}`);
     return session;
   };
 
@@ -263,11 +279,11 @@ export function App() {
 
   if (!authReady) {
     return (
-      <main className="min-h-screen bg-[#070812] text-[#f8fafc] flex items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-[16px] border border-[#26304d] bg-[#101527] p-8 flex flex-col gap-4">
-          <div className="h-5 w-24 rounded bg-[#1d2540]" />
-          <div className="h-8 w-3/4 rounded bg-[#1d2540]" />
-          <div className="h-4 w-full rounded bg-[#161d33]" />
+      <main className="min-h-screen bg-base text-primary flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-[16px] border border-border bg-panel p-8 flex flex-col gap-4">
+          <div className="h-5 w-24 rounded bg-bubble" />
+          <div className="h-8 w-3/4 rounded bg-bubble" />
+          <div className="h-4 w-full rounded bg-panel-2" />
         </div>
       </main>
     );
@@ -284,7 +300,8 @@ export function App() {
 
   return (
     <>
-      <WorkbenchPage
+      {dataError && <div role="alert" className="fixed top-0 inset-x-0 z-30 bg-panel text-danger p-2">{dataError}<button type="button" onClick={() => setRetry((n) => n + 1)} className="ml-2 underline">重新加载</button></div>}
+      <WorkbenchPage key={user?.uid ?? 'visitor'}
         uid={user?.uid ?? null}
         displayName={user?.displayName ?? user?.email ?? '未登录访客'}
         photoURL={user?.photoURL ?? null}
@@ -305,7 +322,8 @@ export function App() {
         onSelectSession={(sid) => navigate(sid ? `/consult/${sid}` : '/')}
       />
 
-      <SettingsModal
+      <Suspense fallback={<p role="status" className="sr-only">正在加载账号界面</p>}>
+      {settingsOpen && <SettingsModal key={user?.uid ?? 'visitor'}
         open={settingsOpen}
         uid={user?.uid ?? null}
         email={user?.email ?? 'Google 用户'}
@@ -321,7 +339,8 @@ export function App() {
           setPendingHandoff(null);
         }}
         onSignOut={() => void handleSignOut()}
-      />
+      />}
+      </Suspense>
     </>
   );
 }

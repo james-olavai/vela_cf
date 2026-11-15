@@ -57,19 +57,19 @@ export interface ChartSnapshot {
   } | null;
 }
 
-const chartKey = (uid: string, profileId: string) => `vela_chart_v1_${uid}_${profileId}`;
+const chartKey = (uid: string, profile: ProfileRecord) =>
+  `vela_chart_v2_${uid}_${JSON.stringify([profile.id, profile.birthDateTime, profile.latitude, profile.longitude, profile.timezone, profile.gender])}`;
 
-export function loadCachedChart(uid: string, profileId: string): ChartSnapshot | null {
+export function loadCachedChart(uid: string, profile: ProfileRecord): ChartSnapshot | null {
   try {
-    const raw = localStorage.getItem(chartKey(uid, profileId));
-    return raw ? (JSON.parse(raw) as ChartSnapshot) : null;
-  } catch {
-    return null;
-  }
+    const raw = sessionStorage.getItem(chartKey(uid, profile));
+    const chart = raw ? JSON.parse(raw) as ChartSnapshot : null;
+    return chart?.natal?.planets?.length ? chart : null;
+  } catch { return null; }
 }
 
-export function saveCachedChart(uid: string, profileId: string, chart: ChartSnapshot): void {
-  localStorage.setItem(chartKey(uid, profileId), JSON.stringify(chart));
+export function saveCachedChart(uid: string, profile: ProfileRecord, chart: ChartSnapshot): void {
+  try { sessionStorage.setItem(chartKey(uid, profile), JSON.stringify(chart)); } catch { /* Cache is optional. */ }
 }
 
 const E2E_PROFILES_KEY = 'vela_e2e_profiles_v1';
@@ -92,6 +92,7 @@ function writeE2eProfiles(list: ProfileRecord[]): void {
 export function subscribeProfiles(
   uid: string,
   onData: (profiles: ProfileRecord[]) => void,
+  onError: (error: unknown) => void = console.error,
 ): () => void {
   if (import.meta.env.DEV && uid === 'e2e_test_user') {
     const emit = () => onData(readE2eProfiles());
@@ -99,7 +100,6 @@ export function subscribeProfiles(
     window.addEventListener(E2E_PROFILES_EVENT, emit);
     return () => window.removeEventListener(E2E_PROFILES_EVENT, emit);
   }
-  const path = `users/${uid}/profiles`;
   return onSnapshot(
     collection(db, 'users', uid, 'profiles'),
     (snap) => {
@@ -110,7 +110,7 @@ export function subscribeProfiles(
       list.sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
       onData(list);
     },
-    (err) => handleFirestoreError(err, OperationType.LIST, path),
+    onError,
   );
 }
 
@@ -194,7 +194,8 @@ export async function searchLocations(queryText: string): Promise<LocationCandid
     );
     const res = await fn({ query: q });
     return res.data?.results ?? [];
-  } catch {
+  } catch (error) {
+    if (!import.meta.env.DEV) throw error;
     const resp = await fetch(`/api/locations?q=${encodeURIComponent(q)}`);
     if (!resp.ok) throw new Error('城市搜索服务暂时不可用');
     const data = (await resp.json()) as { results?: LocationCandidate[] };
@@ -219,7 +220,8 @@ export async function fetchNatalChart(
       timezone: profile.timezone,
     });
     natal = res.data.natal;
-  } catch {
+  } catch (error) {
+    if (!import.meta.env.DEV) throw error;
     const resp = await fetch('/api/astrology', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -229,10 +231,10 @@ export async function fetchNatalChart(
     const data = (await resp.json()) as { natal: ChartSnapshot['natal'] };
     natal = data.natal;
   }
-  const prev = uid ? loadCachedChart(uid, profile.id) : null;
+  const prev = uid ? loadCachedChart(uid, profile) : null;
   const next: ChartSnapshot = { ...prev, natal };
   if (uid) {
-    saveCachedChart(uid, profile.id, next);
+    saveCachedChart(uid, profile, next);
   }
   return next;
 }

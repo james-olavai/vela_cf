@@ -14,8 +14,8 @@ export type ShareClaimMethod = 'native' | 'poster' | 'copy';
 export function subscribeUsage(
   uid: string,
   onData: (usage: UsageRecord) => void,
+  onError: (error: unknown) => void = console.error,
 ): () => void {
-  const path = `usage/${uid}`;
   return onSnapshot(
     doc(db, 'usage', uid),
     (snap) => {
@@ -52,7 +52,7 @@ export function subscribeUsage(
         ...overrideFields,
       });
     },
-    (err) => handleFirestoreError(err, OperationType.GET, path),
+    onError,
   );
 }
 

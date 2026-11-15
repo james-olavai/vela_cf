@@ -79,7 +79,7 @@ a:hover {
 }
 
 .vela-thinking-dot {
-  animation: vela-pulse 1.4s ease-in-out infinite;
+  @media (prefers-reduced-motion: no-preference) { animation: vela-pulse 1.4s ease-in-out infinite; }
 }
 
 @keyframes vela-aurora-breathe {
@@ -93,7 +93,7 @@ a:hover {
 
 .vela-aurora-glow {
   background: radial-gradient(60% 45% at 50% 0%, rgba(224, 182, 74, 0.14) 0%, rgba(168, 192, 240, 0.06) 45%, transparent 100%);
-  animation: vela-aurora-breathe 3.2s ease-in-out infinite;
+  @media (prefers-reduced-motion: no-preference) { animation: vela-aurora-breathe 3.2s ease-in-out infinite; }
 }
 
 @media print {
@@ -114,11 +114,64 @@ a:hover {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-  }
+
+.vela-modal { margin: auto; padding: 0; border: 0; background: transparent; color: var(--text); max-height: 94dvh; }
+.vela-modal:modal { overscroll-behavior: contain; }
+.vela-modal::backdrop { background: rgb(0 0 0 / 75%); overflow: hidden; overscroll-behavior: contain; }
+.vela-drawer { margin: 0; width: min(280px, 100vw); height: 100dvh; max-height: 100dvh; }
+button, input:not([type="checkbox"]):not([type="radio"]), select { min-height: 44px; }
+button { min-width: 44px; }
+input:not([type="checkbox"]):not([type="radio"]), textarea, select { font-size: max(1rem, 1em); }
+label { font-size: 0.875rem; color: var(--text-secondary); }
+:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 2px; }
+
+@theme inline {
+  --color-base: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-bubble: var(--bubble);
+  --color-selected: var(--selected);
+  --color-divider: var(--divider);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--text);
+  --color-body: var(--text-body);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-on-accent: var(--on-accent);
+  --color-info: var(--info);
+  --color-danger: var(--danger);
 }
+
+label:has(input[type="checkbox"]), label:has(input[type="radio"]) { min-height: 44px; }
+
+.vela-markdown { min-width: 0; font-size: 1rem; line-height: 1.85; color: var(--text-body); overflow-wrap: anywhere; }
+.vela-markdown > :first-child { margin-top: 0; }
+.vela-markdown > :last-child { margin-bottom: 0; }
+.vela-markdown p { margin: 0 0 0.85rem; white-space: pre-wrap; }
+.vela-markdown :is(h1,h2,h3,h4,h5,h6) { margin: 1.25rem 0 0.65rem; line-height: 1.5; font-weight: 700; color: var(--accent-bright); }
+.vela-markdown h1 { font-size: 1.4rem; }
+.vela-markdown h2 { font-size: 1.25rem; }
+.vela-markdown :is(h3,h4,h5,h6) { font-size: 1.1rem; }
+.vela-markdown strong { font-weight: 700; color: var(--accent-bright); }
+.vela-markdown :is(ul,ol) { margin: 0.65rem 0 1rem; padding-inline-start: 1.6rem; }
+.vela-markdown ul { list-style: disc; }
+.vela-markdown ol { list-style: decimal; }
+.vela-markdown li { margin: 0.25rem 0; }
+.vela-markdown li > :is(ul,ol) { margin-block: 0.25rem; }
+.vela-markdown li > p { margin-bottom: 0.35rem; }
+.vela-markdown .task-list-item { list-style: none; }
+.vela-markdown input[type="checkbox"] { margin-inline-end: 0.5rem; accent-color: var(--accent); }
+.vela-markdown blockquote { margin: 1rem 0; border-inline-start: 3px solid var(--border-strong); padding-inline-start: 1rem; color: var(--text-secondary); }
+.vela-markdown a { text-decoration: underline; text-underline-offset: 0.2em; }
+.vela-markdown hr { border: 0; border-top: 1px solid var(--divider); margin: 1.25rem 0; }
+.vela-markdown code { font-family: 'IBM Plex Mono', monospace; font-size: 0.875em; background: var(--panel-2); border-radius: 4px; padding: 0.1em 0.3em; }
+.vela-markdown pre { max-width: 100%; overflow-x: auto; margin: 1rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); white-space: pre; overflow-wrap: normal; line-height: 1.6; }
+.vela-markdown pre code { padding: 0; border-radius: 0; background: transparent; }
+.vela-markdown-table { max-width: 100%; overflow-x: auto; margin: 1rem 0; border: 1px solid var(--border); border-radius: 10px; }
+.vela-markdown table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.vela-markdown :is(th,td) { border: 1px solid var(--border); padding: 0.6rem 0.85rem; min-width: 7rem; }
+.vela-markdown th { font-weight: 600; background: var(--panel); color: var(--text); }
+.vela-markdown .footnotes { margin-top: 1.5rem; font-size: 0.875rem; color: var(--text-secondary); }

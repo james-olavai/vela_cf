@@ -232,6 +232,8 @@ export function SoftAurora({ color1 = '#e8b84d', color2 = '#605cff', brightness 
       running = false;
     };
     const onVis = () => { if (document.hidden) stop(); else start(); };
+    const onMotion = () => { stop(); start(); };
+    motionQuery?.addEventListener('change', onMotion);
     document.addEventListener('visibilitychange', onVis);
     start();
 
@@ -239,6 +241,7 @@ export function SoftAurora({ color1 = '#e8b84d', color2 = '#605cff', brightness 
       stop();
       window.removeEventListener('resize', resize);
       document.removeEventListener('visibilitychange', onVis);
+      motionQuery?.removeEventListener('change', onMotion);
       if (mouseEnabled) {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseleave', onLeave);

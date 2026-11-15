@@ -20,14 +20,16 @@ import {
   type Tier,
   type UsageRecord,
 } from '@vela-cf/shared';
-import { db, functions, handleFirestoreError, OperationType } from './firebase';
+import { db, functions } from './firebase';
 import { saveCachedChart, type ChartSnapshot } from './profileStore';
+
+const e2eMode = import.meta.env.DEV && new URLSearchParams(window.location.search).get('e2e') === '1';
 
 export function subscribeSessions(
   uid: string,
   onData: (sessions: SessionRecord[]) => void,
+  onError: (error: unknown) => void = console.error,
 ): () => void {
-  const path = `users/${uid}/sessions`;
   return onSnapshot(
     collection(db, 'users', uid, 'sessions'),
     (snap) => {
@@ -38,7 +40,7 @@ export function subscribeSessions(
       list.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
       onData(list);
     },
-    (err) => handleFirestoreError(err, OperationType.LIST, path),
+    onError,
   );
 }
 
@@ -46,6 +48,7 @@ export function subscribeMessages(
   uid: string,
   sessionId: string,
   onData: (messages: MessageRecord[]) => void,
+  onError: (error: unknown) => void = console.error,
 ): () => void {
   if (import.meta.env.DEV && uid === 'e2e_test_user') {
     return () => {};
@@ -64,7 +67,7 @@ export function subscribeMessages(
       }));
       onData(list);
     },
-    (err) => handleFirestoreError(err, OperationType.LIST, path),
+    onError,
   );
 }
 
@@ -73,7 +76,7 @@ export async function createConsultationSession(
   profiles: ProfileRecord[],
   initialQuestion?: string,
 ): Promise<SessionRecord> {
-  if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('e2e') === '1') {
+  if (e2eMode) {
     const now = new Date().toISOString();
     const names = profiles.map((p) => p.name).join(' × ');
     const defaultTitle = mode === 'synastry' ? `合盘 · ${names}` : names;
@@ -140,6 +143,7 @@ export async function streamConsultationReply(params: {
     onQuotaExceeded,
   } = params;
   const primaryProfile = profiles[0];
+  signal.throwIfAborted();
 
   if (!usage.unlimited && usage.used >= computeEffectiveBudget(tier, usage.bonusMicroUsd ?? 0)) {
     onQuotaExceeded();
@@ -170,9 +174,12 @@ export async function streamConsultationReply(params: {
   onUpdateMessages(currentMsgs);
 
   let fullText = '';
+  let updateTimer: ReturnType<typeof setTimeout> | undefined;
   const toolParts: MessagePart[] = [];
 
   const updateAssistant = (suggestions?: string[], extraBlocks: AstroUiBlock[] = []) => {
+    clearTimeout(updateTimer);
+    updateTimer = undefined;
     const { cleanText, uiBlocks } = extractVelaUiBlocks(fullText);
     const parts: MessagePart[] = [...toolParts];
     if (cleanText) {
@@ -186,6 +193,8 @@ export async function streamConsultationReply(params: {
     );
     onUpdateMessages(currentMsgs);
   };
+
+  const scheduleUpdate = () => { updateTimer ??= setTimeout(() => updateAssistant(), 50); };
 
   try {
     if (import.meta.env.DEV && uid === 'e2e_test_user') {
@@ -215,7 +224,8 @@ export async function streamConsultationReply(params: {
       let currentEvent = '';
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
+        if (done) { if (updateTimer) updateAssistant(); break; }
+        signal.throwIfAborted();
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split('\n');
         buf = lines.pop() ?? '';
@@ -235,7 +245,9 @@ export async function streamConsultationReply(params: {
               onUpdateChart(payload as unknown as ChartSnapshot);
             } else if (currentEvent === 'delta' && payload.text) {
               fullText += String(payload.text);
-              updateAssistant();
+              scheduleUpdate();
+            } else if (currentEvent === 'error') {
+              throw new Error(String(payload.message ?? '生成失败'));
             } else if (currentEvent === 'done') {
               updateAssistant(Array.isArray(payload.suggestions) ? (payload.suggestions as string[]) : []);
             }
@@ -256,6 +268,7 @@ export async function streamConsultationReply(params: {
     );
 
     for await (const chunk of stream) {
+      signal.throwIfAborted();
       if (chunk.type === 'tool' && chunk.toolName) {
         toolParts.push({
           type: 'tool-call',
@@ -265,27 +278,28 @@ export async function streamConsultationReply(params: {
         updateAssistant();
       } else if (chunk.type === 'chart' && chunk.chart) {
         if (primaryProfile) {
-          saveCachedChart(uid, primaryProfile.id, chunk.chart);
+          saveCachedChart(uid, primaryProfile, chunk.chart);
         }
         onUpdateChart(chunk.chart);
       } else if (chunk.type === 'text' && chunk.text) {
         fullText += chunk.text;
-        updateAssistant();
+        scheduleUpdate();
       } else if (chunk.type === 'done') {
         updateAssistant(chunk.suggestions ?? []);
       }
     }
 
     const finalRes = await data;
-    if (!fullText && finalRes?.text) {
-      fullText = finalRes.text;
-      updateAssistant(finalRes.suggestions ?? [], finalRes.uiBlocks ?? []);
-    }
+    signal.throwIfAborted();
+    if (finalRes?.text) fullText = finalRes.text;
+    updateAssistant(finalRes?.suggestions ?? [], finalRes?.uiBlocks ?? []);
   } catch (err) {
-    onUpdateMessages(existingMessages);
+    clearTimeout(updateTimer);
     const code = (err as { code?: string })?.code ?? '';
     const msg = err instanceof Error ? err.message : String(err ?? '');
-    if ((err instanceof DOMException && err.name === 'AbortError') || msg.includes('cancelled')) {
+    if (signal.aborted || (err instanceof DOMException && err.name === 'AbortError') || msg.includes('cancelled')) {
+      if (fullText || toolParts.length) updateAssistant();
+      else onUpdateMessages([...baseMessages, userMsg]);
       return;
     }
     if (code === 'functions/resource-exhausted' || msg.includes('QUOTA_EXCEEDED')) {
@@ -293,5 +307,7 @@ export async function streamConsultationReply(params: {
       return;
     }
     throw err;
+  } finally {
+    clearTimeout(updateTimer);
   }
 }

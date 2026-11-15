@@ -1,13 +1,5 @@
-import QRCode from 'qrcode';
 import type { ProfileRecord } from '@vela-cf/shared';
 import type { ChartPlanet, ChartSnapshot } from './store';
-
-export interface CalendarDay {
-  day: number;
-  score: number;
-  phase: string;
-  events: string[];
-}
 
 export interface PortraitSummary {
   sunSign: string;
@@ -21,7 +13,6 @@ export interface PortraitSummary {
   modalities: { cardinal: number; fixed: number; mutable: number };
   signEnergy: Array<{ sign: string; pct: number }>;
   dominantPlanets: Array<{ name: string; sign: string; weight: number }>;
-  calendar: { month: string; days: CalendarDay[]; average: number };
 }
 
 const SIGN_EN: Record<string, string> = {
@@ -66,14 +57,6 @@ export function sunriseImageUrl(sunZh: string, ascZh: string, gender?: string): 
   return `/avatar_designs_v2/${sun}/${sun}-${asc}-${gender === 'male' ? 'masc' : 'fem'}.webp`;
 }
 
-export function scoreColor(score: number): string {
-  if (score >= 80) return '#e8b84d';
-  if (score >= 65) return '#8b7bd8';
-  if (score >= 50) return '#3b5080';
-  if (score >= 35) return '#475569';
-  return '#4a3b5a';
-}
-
 export function computePortraitSummary(natal: NonNullable<ChartSnapshot['natal']>): PortraitSummary {
   const planets = natal.planets as ChartPlanet[];
   const sun = planets.find((p) => p.key === 'Sun');
@@ -87,9 +70,9 @@ export function computePortraitSummary(natal: NonNullable<ChartSnapshot['natal']
   const signWeights: Record<string, number> = {};
   const planetWeights: Array<{ name: string; sign: string; weight: number }> = [];
 
-  planets.forEach((p, idx) => {
+  planets.forEach((p) => {
     const signKey = normalizeSign(p.signZh);
-    const w = idx <= 1 ? 3 : idx <= 4 ? 2 : 1;
+    const w = ['Sun', 'Moon'].includes(p.key) ? 3 : ['Mercury', 'Venus', 'Mars'].includes(p.key) ? 2 : 1;
     signWeights[p.signZh] = (signWeights[p.signZh] ?? 0) + w;
     planetWeights.push({ name: p.nameZh, sign: p.signZh, weight: Number((w + (p.house === 1 || p.house === 10 ? 0.5 : 0)).toFixed(1)) });
     if (FIRE.has(signKey)) el.fire += 1;
@@ -106,6 +89,7 @@ export function computePortraitSummary(natal: NonNullable<ChartSnapshot['natal']
   const pct = (n: number) => Math.round((n / totalP) * 100);
   const elements = { fire: pct(el.fire), earth: pct(el.earth), air: pct(el.air), water: pct(el.water) };
   const elementTraits = Object.entries(elements)
+    .filter(([, value]) => value > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
     .map(([k]) => ELEMENT_TRAITS[k]);
@@ -115,29 +99,12 @@ export function computePortraitSummary(natal: NonNullable<ChartSnapshot['natal']
     .map(([sign, w]) => ({ sign, pct: Math.round((w / totalW) * 100) }));
   const dominantPlanets = planetWeights.sort((a, b) => b.weight - a.weight).slice(0, 3);
 
-  const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth() + 1;
-  const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const baseLon = sun?.longitude ?? 0;
-  const phases = ['新月蓄力', '上弦推进', '满月峰值', '下弦沉淀'];
-  const days: CalendarDay[] = Array.from({ length: dim }, (_, i) => {
-    const day = i + 1;
-    const wave = Math.sin((day / dim) * Math.PI * 2 + (baseLon * Math.PI) / 180);
-    const moonWave = Math.cos(((day * 12.2 + (moon?.longitude ?? 0)) * Math.PI) / 180);
-    const score = Math.max(28, Math.min(96, Math.round(64 + wave * 18 + moonWave * 12)));
-    const phase = phases[Math.floor(((day - 1) / dim) * 4) % 4];
-    const events = score >= 84 ? ['顺行高能窗口'] : score <= 38 ? ['静修沉淀日'] : [];
-    return { day, score, phase, events };
-  });
-  const average = Math.round(days.reduce((s, d) => s + d.score, 0) / days.length);
   const [epithet, archetype, insight] = ARCHETYPES[normalizeSign(sunSign)] ?? ['观星行者', '本命星图', '每一颗星体落点都在讲述你独特的节奏与天赋坐标。'];
 
   return {
     sunSign, moonSign, ascSign, epithet, archetype, insight, elementTraits, elements,
     modalities: { cardinal: pct(mod.cardinal), fixed: pct(mod.fixed), mutable: pct(mod.mutable) },
     signEnergy, dominantPlanets,
-    calendar: { month: `${y}-${String(m).padStart(2, '0')}`, days, average },
   };
 }
 
@@ -251,18 +218,11 @@ export async function renderVelaSharePoster(
     });
     y += 268;
 
-    ctx.fillStyle = '#cbd5e1';
-    ctx.font = '22px sans-serif';
-    ctx.fillText(`本月运势趋势 · 月均 ${summary.calendar.average} 分`, 84, y);
-    const bw = Math.floor((W - 168) / summary.calendar.days.length);
-    summary.calendar.days.forEach((d, i) => {
-      ctx.fillStyle = scoreColor(d.score);
-      const bh = Math.round((d.score / 100) * 52);
-      ctx.fillRect(84 + i * bw, y + 72 - bh, Math.max(5, bw - 3), bh);
-    });
+
   }
 
   try {
+    const { default: QRCode } = await import('qrcode');
     const qrDataUrl = await QRCode.toDataURL(shareUrl, { width: 160, margin: 1, color: { dark: '#0b1020', light: '#f8fafc' } });
     const qrImg = await new Promise<HTMLImageElement>((res, rej) => {
       const el = new Image();

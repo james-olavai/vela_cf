@@ -24,14 +24,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       <div
         role="alert"
         data-testid="app-error-boundary"
-        className="flex min-h-dvh w-full flex-col items-center justify-center gap-4 bg-[#070812] p-6 text-center text-[#f8fafc]"
+        className="flex min-h-dvh w-full flex-col items-center justify-center gap-4 bg-base p-6 text-center text-primary"
       >
         <p className="m-0 text-lg font-bold">页面暂时无法显示</p>
-        <p className="m-0 text-sm text-[#c3cde0]">页面遇到意外问题，请刷新后重试。</p>
+        <p className="m-0 text-sm text-secondary">页面遇到意外问题，请刷新后重试。</p>
         <button
           type="button"
           onClick={this.handleRefresh}
-          className="min-h-[44px] rounded-[10px] border border-[#3a4668] bg-transparent px-4 py-2 text-sm text-[#f8fafc] cursor-pointer hover:border-[#e0b64a]"
+          className="min-h-[44px] rounded-[10px] border border-border-strong bg-transparent px-4 py-2 text-sm text-primary cursor-pointer hover:border-accent"
         >
           刷新页面
         </button>

@@ -427,6 +427,7 @@ A/B 固定资料、问题、历史、参考时间、运行时、模型及工具�
 | 全量 34 个排盘工具 + `loadSkillReference`（`maxAstrologyTools: 35`） | 先补齐原 `vela` 全部 34 项占星/命理算法，再配合推演深度、智能路由与 Reference 渐进式披露 | `boundaries.json` 同步上调 `packages/astrology`、`packages/shared` 与 `apps/api` 行数与工具上限 |
 | 旧工作台前端扩容申请（已撤销） | 目标已改为 §4.7 私有 GitHub + harness + 本地 MCP | 旧 UI 已按负责人要求删除，不扩大原有前端行数预算 |
 | 本地 MCP 官方 SDK（2026-11-15 已按用户实施指令接入） | 已安装依赖不能提供 stdio MCP 能力，用户明确要求实施独立调优库 | API 增加固定 `@modelcontextprotocol/sdk@1.32.2` 及依赖白名单，不增加 workspace、部署函数或代码行数预算 |
+| LLM 回复 Markdown（2026-11-15 按用户确认的实施方案接入） | 正则渲染无法覆盖列表、GFM 表格、引用与代码块；现有 assistant-ui Markdown 组件需要另接会话运行时 | 前端增加固定 `react-markdown@10.1.0` 与 `remark-gfm@4.0.1`，同步依赖白名单；按需加载独立渲染组件，关闭原始 HTML、过滤链接协议并将模型图片降级为替代文字，不增加运行时、UI 框架或行数预算 |
 
 ---
 

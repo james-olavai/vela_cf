@@ -1,8 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getAnalytics, isSupported, setConsent } from 'firebase/analytics';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import firebaseConfig from '../../../../firebase-applet-config.json';
 
@@ -31,66 +30,18 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: Array<{
-      providerId?: string | null;
-      email?: string | null;
-    }>;
-  };
+export function handleFirestoreError(error: unknown, operation: OperationType, path: string | null): never {
+  console.error('Firestore request failed', operation, path, (error as { code?: string })?.code);
+  const code = (error as { code?: string })?.code;
+  throw new Error(code === 'permission-denied' ? '暂无权限，请重新登录后重试' : '数据暂时无法读写，请检查网络后重试');
 }
 
-export function handleFirestoreError(
-  error: unknown,
-  operationType: OperationType,
-  path: string | null,
-): never {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo:
-        auth.currentUser?.providerData?.map((provider) => ({
-          providerId: provider.providerId,
-          email: provider.email,
-        })) ?? [],
-    },
-    operationType,
-    path,
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
-
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
-  }
-}
-void testConnection();
-
-let analyticsReady = false;
+let analyticsConsent: typeof import('firebase/analytics')['setConsent'] | undefined;
 export async function initAnalyticsConsent(): Promise<void> {
   if (!firebaseConfig.measurementId) return;
   try {
+    const { getAnalytics, isSupported, setConsent } = await import('firebase/analytics');
     if (!(await isSupported())) return;
-    getAnalytics(app);
     const saved = localStorage.getItem('vela_consent_analytics');
     setConsent({
       analytics_storage: saved === 'granted' ? 'granted' : 'denied',
@@ -98,7 +49,8 @@ export async function initAnalyticsConsent(): Promise<void> {
       ad_user_data: 'denied',
       ad_personalization: 'denied',
     });
-    analyticsReady = true;
+    getAnalytics(app);
+    analyticsConsent = setConsent;
   } catch {
     // Analytics unavailable
   }
@@ -106,8 +58,8 @@ export async function initAnalyticsConsent(): Promise<void> {
 
 export function updateAnalyticsConsent(granted: boolean): void {
   localStorage.setItem('vela_consent_analytics', granted ? 'granted' : 'denied');
-  if (!analyticsReady) return;
-  setConsent({
+  if (!analyticsConsent) return;
+  analyticsConsent({
     analytics_storage: granted ? 'granted' : 'denied',
     ad_storage: 'denied',
     ad_user_data: 'denied',

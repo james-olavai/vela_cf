@@ -33,8 +33,9 @@ async function addProfileInSubpage(page, { name, entity = '个人', city, gender
     await form.locator(`button:has-text("${entity}")`).click();
   }
   await form.locator('input[placeholder*="称呼"], input[placeholder*="名称"]').fill(name);
+  await form.locator('input[type="datetime-local"]').fill('1994-06-03T08:20');
   await form.locator('input[placeholder="出生城市 / 地点"]').fill(city);
-  await form.locator('button:has-text("搜")').click();
+  await form.locator('button:has-text("搜索城市")').click();
   const cityOption = form.locator(`button:has-text("${city}")`).first();
   await cityOption.waitFor({ state: 'visible', timeout: 8000 });
   await cityOption.click();
@@ -43,6 +44,7 @@ async function addProfileInSubpage(page, { name, entity = '个人', city, gender
   }
   await form.locator('button[type="submit"]').click();
   await form.waitFor({ state: 'detached', timeout: 8000 });
+  await page.locator('[data-testid="sidebar-nav-profiles"]').click();
 }
 
 async function runBrowserE2E() {
@@ -69,7 +71,7 @@ async function runBrowserE2E() {
     await bottomLeftLoginBtn.waitFor({ state: 'visible', timeout: 10000 });
     await bottomLeftLoginBtn.click();
 
-    const modal = vPage.locator('[role="dialog"][aria-labelledby="settings-title"]');
+    const modal = vPage.locator('dialog[aria-labelledby="settings-title"]');
     await modal.waitFor({ state: 'visible', timeout: 5000 });
     const modalText = await modal.innerText();
     assert.ok(modalText.includes('使用 Google 账号继续并开始解读'), 'Google login button must be visible');
@@ -118,9 +120,9 @@ async function runBrowserE2E() {
     // Return to conversation & open Natal Portrait Modal
     await vPage.locator('[data-testid="subpage-back"]').click();
     await vAside.locator('[data-testid="sidebar-nav-portrait"]').click();
-    const portraitDialog = vPage.locator('[role="dialog"][aria-labelledby="natal-portrait-title"]');
+    const portraitDialog = vPage.locator('dialog[aria-labelledby="natal-portrait-title"]');
     await portraitDialog.waitFor({ state: 'visible', timeout: 8000 });
-    await portraitDialog.getByText('本月能量日历').waitFor({ state: 'visible', timeout: 15000 });
+    await portraitDialog.getByText('指定日期天象盘').waitFor({ state: 'visible', timeout: 15000 });
     await portraitDialog.locator('button[aria-label="关闭个人星盘画像"]').click();
     console.log('[browser-e2e] ✓ Profile Manager Subpage, Quick Select, and Portrait verified');
 
@@ -201,7 +203,7 @@ async function runBrowserE2E() {
     );
 
     await pAside.locator('[data-testid="sidebar-nav-history"]').click();
-    const historyDialog = pPage.locator('[role="dialog"][aria-labelledby="history-search-title"]');
+    const historyDialog = pPage.locator('dialog[aria-labelledby="history-search-title"]');
     await historyDialog.waitFor({ state: 'visible', timeout: 5000 });
     const historyText = await historyDialog.innerText();
     assert.ok(historyText.includes('合盘契合度'), 'History modal title must show question summary');

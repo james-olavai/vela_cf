@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ProfileRecord } from '@vela-cf/shared';
-import { computePortraitSummary, scoreColor, sunriseImageUrl, type CalendarDay } from '../lib/portrait';
+import { computePortraitSummary, sunriseImageUrl } from '../lib/portrait';
 import type { ChartSnapshot } from '../lib/store';
+import { Modal } from './Modal';
 import { ElementRadar } from './ElementRadar';
-import { IconGift, IconSparkles } from './Icons';
+import { IconGift } from './Icons';
 import { TransitChartCard } from './TransitChartCard';
 
 interface NatalPortraitModalProps {
@@ -14,195 +15,76 @@ interface NatalPortraitModalProps {
   onOpenShare: () => void;
 }
 
-const ELEM_META = [
-  { key: 'fire' as const, label: '火相', color: '#f87171' },
-  { key: 'earth' as const, label: '土相', color: '#34d399' },
-  { key: 'air' as const, label: '风相', color: '#60a5fa' },
-  { key: 'water' as const, label: '水相', color: '#a78bfa' },
-];
+const ELEMENTS = { fire: '火相', earth: '土相', air: '风相', water: '水相' } as const;
 
 export function NatalPortraitModal({ open, profile, chart, onClose, onOpenShare }: NatalPortraitModalProps) {
-  const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
-  if (!open || !profile) return null;
-
-  const summary = chart?.natal ? computePortraitSummary(chart.natal) : null;
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [transitOpen, setTransitOpen] = useState(false);
+  const summary = useMemo(() => chart?.natal ? computePortraitSummary(chart.natal) : null, [chart?.natal]);
+  if (!profile) return null;
   const imgUrl = summary ? sunriseImageUrl(summary.sunSign, summary.ascSign, profile.gender) : '';
-  const activeDay = selectedDay ?? summary?.calendar.days[new Date().getUTCDate() - 1] ?? null;
-
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="natal-portrait-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
-      <div className="w-full max-w-[780px] max-h-[90dvh] rounded-[18px] border border-amber-500/20 bg-gradient-to-b from-[#0f1424] via-[#0b0e1b] to-[#070913] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <span className="text-amber-400 flex items-center"><IconSparkles size={18} /></span>
-            <h2 id="natal-portrait-title" className="m-0 font-serif-sc text-[17px] font-bold text-[#f8fafc]">
-              {profile.name} 的星盘能量画像
-            </h2>
-          </div>
-          <button type="button" onClick={onClose} aria-label="关闭个人星盘画像" className="min-h-[34px] min-w-[34px] rounded-[8px] border border-[#26304d] bg-transparent text-[#c3cde0] hover:text-[#f8fafc] cursor-pointer">
-            ✕
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 flex flex-col gap-5">
-          {!summary ? (
-            <div className="py-12 text-center text-[14px] text-[#c3cde0]">正在根据出生档案自动生成星盘画像…</div>
-          ) : (
-            <>
-              <div className="text-center">
-                <div className="font-serif-sc text-[26px] sm:text-[30px] font-black tracking-wider text-[#f7d57f]">
-                  「{summary.epithet}」
-                </div>
-                <div className="mt-1 flex items-center justify-center gap-2 text-[11.5px] text-[#9aa8c7]">
-                  <span>✦</span><span>核心原型：{summary.archetype}</span><span>✦</span>
-                </div>
+    <Modal open={open} onClose={onClose} labelledBy="natal-portrait-title" className="w-[calc(100%_-_2rem)] max-w-[680px]">
+      <div className="max-h-[90dvh] rounded-[16px] border border-border bg-panel flex flex-col overflow-hidden">
+        <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-divider">
+          <h2 id="natal-portrait-title" className="m-0 min-w-0 text-[17px] font-semibold text-primary [overflow-wrap:anywhere]">{profile.name} 的星盘能量画像</h2>
+          <button type="button" onClick={onClose} aria-label="关闭个人星盘画像" className="shrink-0 rounded-[10px] px-3 text-secondary hover:bg-panel-2">✕</button>
+        </header>
+        <div className="min-h-0 overflow-y-auto p-4 sm:p-6 flex flex-col gap-4 text-[14px] text-secondary">
+          {!summary ? <p role="status">正在根据出生档案生成画像…</p> : <>
+            <section className="flex items-center gap-4">
+              {imgUrl && <img src={imgUrl} width={96} height={128} alt={`${summary.sunSign}日升${summary.ascSign}主题插画`}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }} className="w-24 h-32 object-cover rounded-[12px] shrink-0" />}
+              <div className="min-w-0">
+                <h3 className="m-0 text-[20px] sm:text-[24px] font-serif-sc text-accent-bright">「{summary.epithet}」</h3>
+                <p className="my-2 text-[14px]">{summary.archetype}</p>
+                <p className="m-0 text-[13px] text-muted">{summary.elementTraits.join(' · ')}</p>
               </div>
-
-              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 sm:p-5">
-                <div className="flex flex-col-reverse md:flex-row items-center justify-center gap-7">
-                  {imgUrl && (
-                    <div className="relative shrink-0">
-                      <img
-                        src={imgUrl}
-                        alt={`${summary.sunSign}日升${summary.ascSign}`}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        className="h-[300px] w-[186px] sm:h-[340px] sm:w-[210px] object-cover rounded-2xl border border-amber-500/35 shadow-[0_8px_32px_rgba(232,184,77,0.18)]"
-                      />
-                      <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-500/35 bg-[#070812]/90 px-3 py-0.5 text-[11px] font-semibold text-amber-200">
-                        ☀️ {summary.sunSign} · ⬆️ {summary.ascSign}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex-1 min-w-0 w-full flex flex-col items-center gap-3">
-                    <ElementRadar elements={summary.elements} size={154} />
-                    <div className="grid w-full max-w-[290px] grid-cols-2 gap-2 text-[11px]">
-                      {ELEM_META.map((m) => (
-                        <div key={m.key} className="rounded-lg bg-white/[0.03] px-2.5 py-1.5 flex flex-col gap-1">
-                          <div className="flex justify-between">
-                            <span style={{ color: m.color }}>{m.label}</span>
-                            <span className="font-mono-num text-[#cbd5e1]">{summary.elements[m.key]}%</span>
-                          </div>
-                          <div className="h-1 rounded-full bg-white/10 overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${Math.max(6, summary.elements[m.key])}%`, background: m.color }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="text-[10.5px] text-[#9aa8c7]">
-                      形态分布：基本 {summary.modalities.cardinal}% · 固定 {summary.modalities.fixed}% · 变动 {summary.modalities.mutable}%
-                    </div>
-                  </div>
+            </section>
+            <dl className="m-0 grid grid-cols-3 gap-2">
+              {[['太阳', summary.sunSign], ['月亮', summary.moonSign], ['上升', summary.ascSign]].map(([label, sign]) => (
+                <div key={label} className="rounded-[12px] border border-border bg-base p-3 text-center">
+                  <dt className="text-[13px] text-muted">{label}</dt><dd className="m-0 mt-1 font-serif-sc text-[18px] text-primary">{sign}</dd>
                 </div>
-                <div className="mt-3.5 border-t border-white/[0.06] pt-2.5 text-center text-[11.5px] text-[#cbd5e1]">
-                  {summary.elementTraits.join('  ·  ')}
-                </div>
+              ))}
+            </dl>
+            <p className="m-0 leading-relaxed">{summary.insight}</p>
+            <p className="m-0 text-[13px] text-muted">以上为星座象征性描述，展开下方查看分布与计算口径。</p>
+            <details className="rounded-[12px] border border-border px-4">
+              <summary className="min-h-11 py-3 cursor-pointer font-medium text-primary">元素与模式分布</summary>
+              <div className="pb-4 flex flex-col sm:flex-row items-center gap-4">
+                <ElementRadar elements={summary.elements} size={180} />
+                <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-2">
+                  {Object.entries(ELEMENTS).map(([key, label]) => <div key={key}><dt>{label}</dt><dd className="m-0 font-mono-num text-primary">{summary.elements[key as keyof typeof ELEMENTS]}%</dd></div>)}
+                </dl>
               </div>
-
-              <div className="grid grid-cols-3 gap-2.5">
-                {[
-                  { label: '☀️ 太阳 · 内在核心', val: summary.sunSign, desc: '本我意志 · 核心追求', color: 'text-amber-300' },
-                  { label: '🌙 月亮 · 情感内核', val: summary.moonSign, desc: '潜意识 · 心灵归宿', color: 'text-indigo-200' },
-                  { label: '⬆️ 上升 · 外在形象', val: summary.ascSign, desc: '人格面具 · 处世之道', color: 'text-purple-200' },
-                ].map((x) => (
-                  <div key={x.label} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-center">
-                    <div className="text-[10.5px] text-[#9aa8c7]">{x.label}</div>
-                    <div className={`my-1 font-serif-sc text-[18px] font-bold ${x.color}`}>{x.val}</div>
-                    <div className="text-[10px] text-slate-500">{x.desc}</div>
-                  </div>
-                ))}
+              <p className="mt-0 text-[13px] text-muted">按盘中各星体等权计数并四舍五入；基本 {summary.modalities.cardinal}% · 固定 {summary.modalities.fixed}% · 变动 {summary.modalities.mutable}%。</p>
+            </details>
+            <details className="rounded-[12px] border border-border px-4">
+              <summary className="min-h-11 py-3 cursor-pointer font-medium text-primary">星座与行星权重</summary>
+              <dl className="m-0 flex flex-col gap-2">
+                {summary.signEnergy.map((s) => <div key={s.sign} className="flex justify-between gap-3"><dt>{s.sign}</dt><dd className="m-0 font-mono-num text-primary">{s.pct}%</dd></div>)}
+              </dl>
+              <p className="text-[13px] text-muted">星座占比以太阳、月亮各 3 份，水星、金星、火星各 2 份，其余各 1 份计算；此处显示前三位。</p>
+              <dl className="m-0 flex flex-col gap-2">
+                {summary.dominantPlanets.map((p) => <div key={p.name} className="flex justify-between gap-3"><dt>{p.name} · {p.sign}</dt><dd className="m-0 font-mono-num text-primary">{p.weight}×</dd></div>)}
+              </dl>
+              <p className="text-[13px] text-muted">行星权重在上述基础上，第 1 或第 10 宫加 0.5；这是展示排序规则，不是预测准确率或运势评分。</p>
+            </details>
+            <details className="rounded-[12px] border border-border px-4" onToggle={(e) => setTransitOpen(e.currentTarget.open)}>
+              <summary className="min-h-11 py-3 cursor-pointer font-medium text-primary">指定日期天象盘</summary>
+              <div className="pb-4 flex flex-col items-center gap-3">
+                <label htmlFor="transit-date">日期（出生地时区，当地 12:00）</label>
+                <input id="transit-date" type="date" required value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full min-w-0 rounded-[10px] border border-border-strong bg-base px-3" />
+                {open && transitOpen && <TransitChartCard dateISO={selectedDate || null} profile={profile} />}
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3.5 flex flex-col gap-2">
-                  <div className="text-[11.5px] font-semibold text-[#e2e8f0]">✦ 能量最盛的星座</div>
-                  {summary.signEnergy.map((s, i) => (
-                    <div key={s.sign} className="flex items-center gap-2 text-[12px]">
-                      <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px] font-bold">
-                        {i === 0 ? '领军' : i === 1 ? '次席' : '辅佐'}
-                      </span>
-                      <span className="w-12 font-semibold text-[#f8fafc]">{s.sign}</span>
-                      <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                        <div className="h-full rounded-full bg-[#e8b84d]" style={{ width: `${Math.min(100, s.pct * 2.5)}%` }} />
-                      </div>
-                      <span className="font-mono-num text-amber-300">{s.pct}%</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3.5 flex flex-col gap-2">
-                  <div className="text-[11.5px] font-semibold text-[#e2e8f0]">✦ 主导行星影响力</div>
-                  {summary.dominantPlanets.map((p) => (
-                    <div key={p.name} className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5 text-[12px]">
-                      <span className="text-[#f8fafc]">{p.name} · <span className="text-[#9aa8c7]">{p.sign}</span></span>
-                      <span className="font-mono-num text-amber-300">{p.weight}× 权重</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border-l-2 border-amber-400/80 border-y border-r border-white/[0.08] bg-gradient-to-r from-amber-500/[0.08] via-purple-500/[0.03] to-transparent p-3.5">
-                <div className="text-[11.5px] font-semibold text-amber-300 mb-1">✨ 能量格局深度洞察</div>
-                <p className="m-0 text-[12px] leading-relaxed text-[#cbd5e1]">{summary.insight}</p>
-              </div>
-
-              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-semibold text-[#f8fafc]">✦ 本月能量日历 ({summary.calendar.month})</span>
-                    <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10.5px] text-amber-300">
-                      月均 {summary.calendar.average} 分
-                    </span>
-                  </div>
-                  <span className="text-[10.5px] text-[#9aa8c7]">点击日期查看即时天象盘</span>
-                </div>
-
-                <div className="flex flex-col lg:flex-row items-center justify-center gap-6">
-                  <div className="flex flex-col items-center">
-                    <div className="grid grid-cols-7 gap-1.5">
-                      {['一', '二', '三', '四', '五', '六', '日'].map((w) => (
-                        <div key={w} className="h-5 w-7 text-center text-[10px] text-slate-500">{w}</div>
-                      ))}
-                      {summary.calendar.days.map((d) => (
-                        <button key={d.day} type="button" onClick={() => setSelectedDay(d)} style={{ background: scoreColor(d.score) }} className={`relative h-7 w-7 rounded-lg text-[10px] font-bold text-black/85 cursor-pointer border-0 ${activeDay?.day === d.day ? 'ring-2 ring-amber-400' : ''}`}>
-                          <span>{d.day}</span>
-                          {d.events.length > 0 && <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-white" />}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="mt-2.5 flex items-center gap-2 text-[10px] text-slate-500">
-                      <span>沉潜蓄力</span>
-                      <div className="h-2 w-16 rounded-full bg-gradient-to-r from-[#4a3b5a] via-[#3b5080] via-[#8b7bd8] to-[#e8b84d]" />
-                      <span className="text-amber-300">高能峰值</span>
-                    </div>
-                  </div>
-                  <TransitChartCard dateISO={activeDay ? `${summary.calendar.month}-${String(activeDay.day).padStart(2, '0')}` : null} profile={profile} />
-                </div>
-
-                {activeDay && (
-                  <div className="mx-auto rounded-full border border-amber-500/25 bg-[#070812]/85 px-4 py-1 text-center text-[11.5px] text-[#cbd5e1]">
-                    <span className="font-bold text-amber-300">{summary.calendar.month}-{String(activeDay.day).padStart(2, '0')}</span>
-                    {' · '}{activeDay.score} 分{' · '}{activeDay.phase}
-                    {activeDay.events.length > 0 && <span className="text-purple-300"> 【{activeDay.events.join('/')}】</span>}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-3 text-[11.5px] leading-relaxed text-[#cbd5e1] flex items-start gap-2.5">
-                <span className="text-base shrink-0">🌞</span>
-                <div>
-                  你的太阳年度能量窗口在 <span className="font-bold text-amber-300">{summary.sunSign.slice(0, 2)}季</span>（{summary.sunSign}生日后 30 天）—— 这是你一年中能量最充沛、最适合开启新计划与重大决策的黄金周期。
-                </div>
-              </div>
-
-              <button type="button" onClick={() => { onClose(); onOpenShare(); }} className="w-full min-h-[44px] rounded-xl border-0 bg-gradient-to-r from-[#f5d77f] via-[#e8b84d] to-[#d19a28] text-[#0d111d] text-[14px] font-bold flex items-center justify-center gap-2 cursor-pointer">
-                <IconGift size={16} />
-                <span>一键生成能量分享海报（含雷达与日历）</span>
-              </button>
-            </>
-          )}
+            </details>
+            <button type="button" onClick={() => { onClose(); onOpenShare(); }} className="w-full rounded-[12px] border-0 bg-accent py-3 text-[14px] font-semibold text-on-accent flex items-center justify-center gap-2 hover:bg-accent-bright">
+              <IconGift size={16} />生成星盘画像分享海报
+            </button>
+          </>}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

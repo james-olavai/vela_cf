@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import type { ChartSnapshot } from '../lib/store';
 import { NatalWheelSvg } from './NatalWheelSvg';
 
@@ -28,7 +28,7 @@ function formatChartSummaryText(chart: ChartSnapshot, profileName: string): stri
   return lines.join('\n');
 }
 
-export function ChartFactCard({
+export const ChartFactCard = memo(function ChartFactCard({
   chart,
   profileName,
   birthSummary,
@@ -57,17 +57,17 @@ export function ChartFactCard({
   };
 
   return (
-    <div className="print-only-clean rounded-[14px] border border-[#26304d] bg-[#101527] overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-[#1e2740]">
+    <div className="print-only-clean rounded-[14px] border border-border bg-panel overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-divider">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1d1a0f] border border-[#e0b64a]/60 text-[11px] text-[#f7d57f]">
+          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-selected border border-accent/60 text-[13px] text-accent-bright">
             ✓
           </span>
           <div className="min-w-0">
-            <p className="m-0 text-[14px] font-bold text-[#f8fafc] truncate">
+            <p className="m-0 text-[14px] font-bold text-primary truncate">
               星盘事实 · {profileName}
             </p>
-            <p className="m-0 font-mono-num text-[12px] text-[#a3b0c5] truncate">
+            <p className="m-0 font-mono-num text-[13px] text-muted truncate">
               {birthSummary ? `${birthSummary} · ` : ''}
               {sun ? `太阳${sun.signZh}` : ''}
               {moon ? ` · 月亮${moon.signZh}` : ''}
@@ -80,14 +80,14 @@ export function ChartFactCard({
           <button
             type="button"
             onClick={() => void handleCopy()}
-            className="min-h-[34px] px-2.5 rounded-[8px] border border-[#26304d] bg-transparent text-[12px] text-[#c3cde0] hover:border-[#3a4668] hover:text-[#f8fafc] cursor-pointer"
+            className="min-h-[34px] px-2.5 rounded-[8px] border border-border bg-transparent text-[13px] text-secondary hover:border-border-strong hover:text-primary cursor-pointer"
           >
             {copied ? '已复制' : '复制'}
           </button>
           <button
             type="button"
             onClick={() => window.print()}
-            className="min-h-[34px] px-2.5 rounded-[8px] border border-[#26304d] bg-transparent text-[12px] text-[#c3cde0] hover:border-[#3a4668] hover:text-[#f8fafc] cursor-pointer"
+            className="min-h-[34px] px-2.5 rounded-[8px] border border-border bg-transparent text-[13px] text-secondary hover:border-border-strong hover:text-primary cursor-pointer"
           >
             打印
           </button>
@@ -95,7 +95,7 @@ export function ChartFactCard({
             type="button"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            className="min-h-[34px] px-3 rounded-[8px] border border-[#e0b64a]/50 bg-[#1d1a0f] text-[12px] font-medium text-[#f7d57f] hover:border-[#e0b64a] cursor-pointer"
+            className="min-h-[34px] px-3 rounded-[8px] border border-accent/50 bg-selected text-[13px] font-medium text-accent-bright hover:border-accent cursor-pointer"
           >
             {expanded ? '收起盘面' : '展开盘面'}
           </button>
@@ -105,7 +105,7 @@ export function ChartFactCard({
       {expanded && (
         <div className="p-4 flex flex-col gap-4">
           {(hasTransits || hasEastern) && (
-            <div className="no-print flex flex-wrap gap-1.5 border-b border-[#1e2740] pb-2.5">
+            <div className="no-print flex flex-wrap gap-1.5 border-b border-divider pb-2.5">
               {(
                 [
                   { id: 'natal', label: '西洋本命', show: true },
@@ -119,10 +119,10 @@ export function ChartFactCard({
                     key={t.id}
                     type="button"
                     onClick={() => setActiveTab(t.id)}
-                    className={`min-h-[30px] px-3 rounded-[15px] border text-[12px] font-medium cursor-pointer ${
+                    className={`min-h-[30px] px-3 rounded-[15px] border text-[13px] font-medium cursor-pointer ${
                       activeTab === t.id
-                        ? 'border-[#e0b64a] bg-[#1d1a0f] text-[#f7d57f]'
-                        : 'border-[#26304d] bg-transparent text-[#c3cde0]'
+                        ? 'border-accent bg-selected text-accent-bright'
+                        : 'border-border bg-transparent text-secondary'
                     }`}
                   >
                     {t.label}
@@ -139,9 +139,9 @@ export function ChartFactCard({
                 </div>
 
                 <div className="flex-1 w-full min-w-0">
-                  <div className="flex items-center justify-between text-[12px] text-[#a3b0c5] mb-2">
+                  <div className="flex items-center justify-between text-[13px] text-muted mb-2">
                     <span>{chart.natal.houseSystem} 宫位制</span>
-                    <span className="font-mono-num text-[#f7d57f]">
+                    <span className="font-mono-num text-accent-bright">
                       ASC {chart.natal.ascendant.formatted} · MC {chart.natal.midheaven.formatted}
                     </span>
                   </div>
@@ -149,15 +149,15 @@ export function ChartFactCard({
                   <table className="w-full border-collapse text-[13px]">
                     <tbody>
                       {visiblePlanets.map((p) => (
-                        <tr key={p.key} className="border-b border-[#1e2740]/70">
-                          <td className="py-1.5 text-[#f8fafc] font-medium">
+                        <tr key={p.key} className="border-b border-divider/70">
+                          <td className="py-1.5 text-primary font-medium">
                             {p.nameZh}
                             {p.retrograde && (
-                              <span className="ml-1 font-mono-num text-[11px] text-[#ff9d8a]">R</span>
+                              <span className="ml-1 font-mono-num text-[13px] text-danger">R</span>
                             )}
                           </td>
-                          <td className="py-1.5 font-mono-num text-[#f7d57f]">{p.formatted}</td>
-                          <td className="py-1.5 text-right text-[#a3b0c5]">第 {p.house} 宫</td>
+                          <td className="py-1.5 font-mono-num text-accent-bright">{p.formatted}</td>
+                          <td className="py-1.5 text-right text-muted">第 {p.house} 宫</td>
                         </tr>
                       ))}
                     </tbody>
@@ -167,7 +167,7 @@ export function ChartFactCard({
                     <button
                       type="button"
                       onClick={() => setShowAll((v) => !v)}
-                      className="no-print mt-2 bg-transparent border-0 p-0 text-[12px] text-[#e0b64a] hover:text-[#f7d57f] cursor-pointer"
+                      className="no-print mt-2 bg-transparent border-0 p-0 text-[13px] text-accent hover:text-accent-bright cursor-pointer"
                     >
                       {showAll ? '收起部分星体' : `查看全部 ${chart.natal.planets.length} 颗星体与相位`}
                     </button>
@@ -176,13 +176,13 @@ export function ChartFactCard({
               </div>
 
               {showAll && chart.natal.aspects.length > 0 && (
-                <div className="pt-3 border-t border-[#1e2740]">
-                  <p className="m-0 mb-2 text-[12px] font-medium text-[#a3b0c5]">主要相位</p>
+                <div className="pt-3 border-t border-divider">
+                  <p className="m-0 mb-2 text-[13px] font-medium text-muted">主要相位</p>
                   <div className="flex flex-wrap gap-1.5">
                     {chart.natal.aspects.slice(0, 10).map((asp, idx) => (
                       <span
                         key={idx}
-                        className="px-2 py-1 rounded-[6px] border border-[#26304d] bg-[#161d33] font-mono-num text-[12px] text-[#c3cde0]"
+                        className="px-2 py-1 rounded-[6px] border border-border bg-panel-2 font-mono-num text-[13px] text-secondary"
                       >
                         {asp.pointA} {asp.aspect} {asp.pointB} ({asp.orb}°)
                       </span>
@@ -195,20 +195,20 @@ export function ChartFactCard({
 
           {activeTab === 'transits' && chart.transits && (
             <div className="flex flex-col gap-2">
-              <p className="m-0 text-[12px] text-[#a3b0c5]">
+              <p className="m-0 text-[13px] text-muted">
                 未来 {chart.transits.windowMonths} 个月主要行运相位事件
               </p>
               <div className="flex flex-col gap-1.5">
                 {chart.transits.events.slice(0, 10).map((ev, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between gap-3 px-3 py-2 rounded-[8px] border border-[#26304d] bg-[#161d33] text-[12.5px]"
+                    className="flex items-center justify-between gap-3 px-3 py-2 rounded-[8px] border border-border bg-panel-2 text-[13px]"
                   >
-                    <span className="font-mono-num text-[#f7d57f] shrink-0">{ev.date}</span>
-                    <span className="text-[#f8fafc] truncate">
+                    <span className="font-mono-num text-accent-bright shrink-0">{ev.date}</span>
+                    <span className="text-primary truncate">
                       {ev.transitPlanet} {ev.aspect} {ev.natalPoint}
                     </span>
-                    <span className="font-mono-num text-[#a3b0c5] shrink-0">{ev.orb}°</span>
+                    <span className="font-mono-num text-muted shrink-0">{ev.orb}°</span>
                   </div>
                 ))}
               </div>
@@ -219,20 +219,20 @@ export function ChartFactCard({
             <div className="flex flex-col gap-4">
               {chart.bazi && (
                 <div>
-                  <p className="m-0 mb-2 text-[12px] font-medium text-[#a3b0c5]">
+                  <p className="m-0 mb-2 text-[13px] font-medium text-muted">
                     八字四柱 · 真太阳时 {chart.bazi.trueSolarTime} · 日主 {chart.bazi.dayMaster}
                   </p>
                   <div className="grid grid-cols-4 gap-2">
                     {chart.bazi.pillars.map((pil) => (
                       <div
                         key={pil.name}
-                        className="p-2 rounded-[8px] border border-[#26304d] bg-[#161d33] text-center"
+                        className="p-2 rounded-[8px] border border-border bg-panel-2 text-center"
                       >
-                        <div className="text-[11px] text-[#a3b0c5]">{pil.name}</div>
-                        <div className="font-serif-sc text-[15px] font-bold text-[#f7d57f]">
+                        <div className="text-[13px] text-muted">{pil.name}</div>
+                        <div className="font-serif-sc text-[15px] font-bold text-accent-bright">
                           {pil.ganZhi}
                         </div>
-                        <div className="text-[11px] text-[#c3cde0]">{pil.tenGod}</div>
+                        <div className="text-[13px] text-secondary">{pil.tenGod}</div>
                       </div>
                     ))}
                   </div>
@@ -240,20 +240,20 @@ export function ChartFactCard({
               )}
 
               {chart.ziwei && (
-                <div className="pt-2 border-t border-[#1e2740]">
-                  <p className="m-0 mb-2 text-[12px] font-medium text-[#a3b0c5]">
+                <div className="pt-2 border-t border-divider">
+                  <p className="m-0 mb-2 text-[13px] font-medium text-muted">
                     紫微斗数 · {chart.ziwei.fiveElementsClass} · 命主 {chart.ziwei.soulStar} · 身主 {chart.ziwei.bodyStar}
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {chart.ziwei.palaces.slice(0, 6).map((pal) => (
                       <div
                         key={pal.name}
-                        className="p-2 rounded-[8px] border border-[#26304d] bg-[#161d33] text-[12px]"
+                        className="p-2 rounded-[8px] border border-border bg-panel-2 text-[13px]"
                       >
-                        <div className="font-bold text-[#f8fafc]">
+                        <div className="font-bold text-primary">
                           {pal.name}（{pal.earthlyBranch}）
                         </div>
-                        <div className="text-[#f7d57f] truncate">
+                        <div className="text-accent-bright truncate">
                           {pal.majorStars.map((s) => s.name).join('、') || '空宫'}
                         </div>
                       </div>
@@ -267,4 +267,4 @@ export function ChartFactCard({
       )}
     </div>
   );
-}
+});

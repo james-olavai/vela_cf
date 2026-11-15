@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   computeEffectiveBudget,
   computeUsagePercent,
   nextUtcMonthResetLabel,
   TIER_META,
+  ProfileInputSchema,
   type AnalysisDepth,
   type AstroUiBlock,
   type ConsultationMode,
@@ -23,14 +24,11 @@ import {
   IconPencil,
   IconStop,
 } from '../components/Icons';
-import { NatalPortraitModal } from '../components/NatalPortraitModal';
 import { ProfileManagerSubpage, type ProfileManagerLaunch } from '../components/ProfileSidebarPanel';
-import { SubscriptionSubpage } from '../components/SettingsModal';
-import { ShareBonusModal } from '../components/ShareBonusModal';
 import { SoftAurora } from '../components/SoftAurora';
 import { WorkbenchSidebar, type ActiveSubpage } from '../components/WorkbenchSidebar';
 import { computePortraitSummary } from '../lib/portrait';
-import { navigate } from '../lib/router';
+import { navigate, usePathname } from '../lib/router';
 import {
   fetchNatalChart,
   formatAppError,
@@ -41,6 +39,11 @@ import {
   subscribeMessages,
   type ChartSnapshot,
 } from '../lib/store';
+
+const MarkdownMessage = lazy(() => import('../components/MarkdownMessage'));
+const NatalPortraitModal = lazy(() => import('../components/NatalPortraitModal').then((m) => ({ default: m.NatalPortraitModal })));
+const SubscriptionSubpage = lazy(() => import('../components/SubscriptionSubpage').then((m) => ({ default: m.SubscriptionSubpage })));
+const ShareBonusModal = lazy(() => import('../components/ShareBonusModal').then((m) => ({ default: m.ShareBonusModal })));
 
 export interface PendingHandoff {
   draftProfiles: ProfileInput[];
@@ -66,29 +69,6 @@ interface WorkbenchPageProps {
   onSelectSession: (sessionId: string | null) => void;
 }
 
-function renderFormattedText(text: string) {
-  return text.split(/\n{2,}/).map((rawPara, pIdx) => {
-    const para = rawPara.trim();
-    if (/^-{3,}$/.test(para)) return <hr key={pIdx} className="my-3 border-0 border-t border-[#26304d]" />;
-    const headingMatch = para.match(/^(#{1,4})\s+(.+)$/);
-    if (headingMatch) {
-      return <h3 key={pIdx} className="m-0 mt-4 mb-2 font-serif-sc text-[17px] font-bold text-[#f7d57f]">{headingMatch[2].replace(/\*\*/g, '')}</h3>;
-    }
-    const cleaned = para.replace(/^#{1,4}\s+/gm, '');
-    return (
-      <p key={pIdx} className="m-0 mb-3 last:mb-0 text-[15.5px] leading-[1.85] text-[#e8edf6] whitespace-pre-wrap">
-        {cleaned.split(/(\*\*[^*]+\*\*)/g).map((tok, tIdx) =>
-          tok.startsWith('**') && tok.endsWith('**') ? (
-            <strong key={tIdx} className="font-semibold text-[#f7d57f]">{tok.slice(2, -2)}</strong>
-          ) : (
-            <span key={tIdx}>{tok}</span>
-          ),
-        )}
-      </p>
-    );
-  });
-}
-
 export function WorkbenchPage({
   uid,
   displayName,
@@ -104,6 +84,14 @@ export function WorkbenchPage({
   onStartSession,
   onSelectSession,
 }: WorkbenchPageProps) {
+  const pathname = usePathname();
+  const [messageRetry, setMessageRetry] = useState(0);
+  const [chartRetry, setChartRetry] = useState(0);
+  const [chartError, setChartError] = useState<string | null>(null);
+  const [chartOwner, setChartOwner] = useState('');
+  const followEndRef = useRef(true);
+  const [awayFromEnd, setAwayFromEnd] = useState(false);
+  const [replyNotice, setReplyNotice] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSubpage, setActiveSubpage] = useState<ActiveSubpage>(null);
   const [profileLaunch, setProfileLaunch] = useState<ProfileManagerLaunch>({ seq: 0 });
@@ -129,23 +117,32 @@ export function WorkbenchPage({
   const [inputText, setInputText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [failedTurn, setFailedTurn] = useState<{ text: string; edit: boolean } | null>(null);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [depth, setDepth] = useState<AnalysisDepth>('balanced');
 
-  const abortRef = useRef<AbortController | null>(null);
+  const abortRef = useRef<{ controller: AbortController; path: string } | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const focusAfterSaveRef = useRef(false);
   const handoffConsumedRef = useRef(false);
   const isStreamingRef = useRef(false);
+
+  useEffect(() => {
+    if (!activeSubpage && effectiveProfiles.length && focusAfterSaveRef.current) {
+      focusAfterSaveRef.current = false;
+      textareaRef.current?.focus();
+    }
+  }, [activeSubpage, effectiveProfiles]);
 
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
-  }, [inputText]);
+  }, [inputText, activeSubpage]);
 
   useEffect(() => {
     if (effectiveProfiles.length === 0) {
@@ -165,42 +162,31 @@ export function WorkbenchPage({
     }
   }, [effectiveProfiles, maxSelectable]);
 
+  const cancelStream = () => {
+    const request = abortRef.current;
+    abortRef.current = null;
+    request?.controller.abort();
+    isStreamingRef.current = false;
+    setIsStreaming(false);
+    setStreamError(null);
+    setFailedTurn(null);
+    setReplyNotice('');
+  };
+  useEffect(() => () => { abortRef.current?.controller.abort(); abortRef.current = null; }, []);
   useEffect(() => {
+    if (abortRef.current && abortRef.current.path !== pathname) cancelStream();
     setEditingMsgId(null);
-    if (!uid || !activeSession) {
-      setMessages([]);
-      return;
-    }
-    const sessionPids =
-      activeSession.profileIds && activeSession.profileIds.length > 0
-        ? activeSession.profileIds
-        : [activeSession.profileId];
-    setSelectedProfileIds(sessionPids);
-
-    const unsubMsgs = subscribeMessages(uid, activeSession.id, (serverMsgs) => {
-      if (!isStreamingRef.current) {
-        setMessages(serverMsgs);
-      }
-    });
-
-    const cached = loadCachedChart(uid, sessionPids[0]);
-    if (cached) {
-      setChart(cached);
-    } else {
-      const p = profiles.find((x) => x.id === sessionPids[0]);
-      if (p) {
-        void fetchNatalChart(uid, p).then(setChart).catch(() => {});
-      }
-    }
-    return () => unsubMsgs();
-  }, [uid, activeSession?.id]);
-
-  useEffect(() => {
-    if (activeSession || selectedProfileIds.length === 0) return;
-    const primary = effectiveProfiles.find((p) => p.id === selectedProfileIds[0]);
-    if (!primary) return;
-    void fetchNatalChart(uid, primary).then(setChart).catch(() => {});
-  }, [uid, selectedProfileIds[0], activeSession?.id]);
+    followEndRef.current = true;
+    setAwayFromEnd(false);
+    if (!abortRef.current) setMessages([]);
+    if (!uid || !activeSession) return;
+    setSelectedProfileIds(activeSession.profileIds?.length ? activeSession.profileIds : [activeSession.profileId]);
+    let alive = true;
+    const unsub = subscribeMessages(uid, activeSession.id, (serverMsgs) => {
+      if (alive && !isStreamingRef.current) setMessages(serverMsgs);
+    }, () => { if (alive) setStreamError('历史消息加载失败，请重试'); });
+    return () => { alive = false; unsub(); };
+  }, [uid, pathname, activeSession?.id, messageRetry]);
 
   const notifyQuotaExceeded = () => {
     const budget = computeEffectiveBudget(tier, effectiveUsage.bonusMicroUsd ?? 0);
@@ -210,13 +196,29 @@ export function WorkbenchPage({
     );
   };
 
-  const activeProfiles = selectedProfileIds
+  const sessionProfileIds = activeSession ? (activeSession.profileIds?.length ? activeSession.profileIds : [activeSession.profileId]) : null;
+  const activeProfiles = (sessionProfileIds ?? selectedProfileIds)
     .map((id) => effectiveProfiles.find((p) => p.id === id))
     .filter((p): p is ProfileRecord => Boolean(p));
-  const primaryProfile = activeProfiles[0] ?? effectiveProfiles[0] ?? null;
-  const portraitSummary = chart?.natal ? computePortraitSummary(chart.natal) : null;
+  const primaryProfile = activeProfiles[0] ?? (activeSession ? null : effectiveProfiles[0]) ?? null;
+  const chartSignature = JSON.stringify(primaryProfile && [primaryProfile.id, primaryProfile.birthDateTime, primaryProfile.latitude, primaryProfile.longitude, primaryProfile.timezone, primaryProfile.gender]);
+  const visibleChart = chartOwner === chartSignature ? chart : null;
+  const portraitSummary = useMemo(() => visibleChart?.natal ? computePortraitSummary(visibleChart.natal) : null, [visibleChart?.natal]);
+  useEffect(() => {
+    let alive = true;
+    setChart(null);
+    setChartOwner(chartSignature);
+    setChartError(null);
+    if (!primaryProfile) return;
+    const cached = uid ? loadCachedChart(uid, primaryProfile) : null;
+    if (cached) { setChart(cached); return; }
+    void fetchNatalChart(uid, primaryProfile).then((next) => { if (alive) setChart(next); })
+      .catch(() => { if (alive) setChartError('星盘加载失败，请检查网络后重试'); });
+    return () => { alive = false; };
+  }, [uid, chartSignature, chartRetry]);
   const mode: ConsultationMode = activeProfiles.length >= 2 ? 'synastry' : 'personal';
   const needsMoreProfiles = effectiveProfiles.length === 0;
+  const consultationLabel = `${(activeSession?.mode ?? mode) === 'synastry' ? '合盘' : '个人'} · ${activeSession?.profileName ?? (activeProfiles.map((p) => p.name).join(' × ') || primaryProfile?.name || '')}`;
 
   const requestAuthWithDrafts = (question = '', selectedIndices = [0]) => {
     onOpenAccountModal({
@@ -229,8 +231,9 @@ export function WorkbenchPage({
         longitude: p.longitude,
         timezone: p.timezone,
         gender: p.gender ?? 'unset',
+        consentedOther: p.consentedOther,
       })),
-      chart,
+      chart: visibleChart,
       mode,
       selectedIndices,
       question,
@@ -238,46 +241,8 @@ export function WorkbenchPage({
   };
 
   useEffect(() => {
-    if (!uid || !activeSession || !pendingHandoff || handoffConsumedRef.current) return;
-    handoffConsumedRef.current = true;
-    const sessionProfiles = profiles.filter((p) =>
-      activeSession.profileIds?.includes(p.id) || p.id === activeSession.profileId,
-    );
-    if (sessionProfiles.length === 0) return;
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-    isStreamingRef.current = true;
-    setIsStreaming(true);
-    setStreamError(null);
-
-    void streamConsultationReply({
-      uid,
-      tier,
-      usage: effectiveUsage,
-      session: activeSession,
-      profiles: sessionProfiles,
-      existingMessages: [],
-      userText: pendingHandoff.question,
-      signal: controller.signal,
-      onUpdateMessages: setMessages,
-      onUpdateChart: setChart,
-      onQuotaExceeded: notifyQuotaExceeded,
-    })
-      .catch((err) => {
-        setStreamError(formatAppError(err, '生成回复失败'));
-      })
-      .finally(() => {
-        isStreamingRef.current = false;
-        setIsStreaming(false);
-        abortRef.current = null;
-        onClearPendingHandoff();
-      });
-  }, [uid, activeSession?.id, pendingHandoff, profiles]);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isStreaming]);
+    if (followEndRef.current) endRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
+  }, [messages, isStreaming, activeSubpage]);
 
   const quotaExhausted =
     !effectiveUsage.unlimited &&
@@ -293,13 +258,17 @@ export function WorkbenchPage({
   const quotaNearLimit = !quotaExhausted && Boolean(uid) && usagePercent >= 80;
 
   const handleSetPrimaryProfile = (id: string) => {
+    cancelStream();
+    if (activeSession) onSelectSession(null);
     setSelectedProfileIds((prev) => {
-      const others = prev.filter((x) => x !== id).slice(0, Math.max(0, maxSelectable - 1));
+      const others = prev.length > 1 ? prev.filter((x) => x !== id).slice(0, Math.max(0, maxSelectable - 1)) : [];
       return [id, ...others];
     });
   };
 
   const handleToggleSynastryProfile = (id: string) => {
+    cancelStream();
+    if (activeSession) onSelectSession(null);
     if (maxSelectable <= 1) {
       setActiveSubpage('subscription');
       return;
@@ -319,10 +288,17 @@ export function WorkbenchPage({
   };
 
   const handleSaveSidebarProfile = async (input: ProfileInput, editId?: string) => {
+    cancelStream();
+    input = ProfileInputSchema.parse(input);
     if (!editId && effectiveProfiles.length >= TIER_META[tier].maxProfiles) {
       throw new Error(`当前${TIER_META[tier].label}最多存放 ${TIER_META[tier].maxProfiles} 个档案，请先删除旧档案或升级方案`);
     }
-    const selectSavedProfile = (savedId: string) => {
+    const finishSave = (savedId: string) => {
+      focusAfterSaveRef.current = true;
+      setActiveSubpage(null);
+      setReplyNotice('档案已保存，可以开始咨询');
+      if (editId) return;
+      if (activeSession) onSelectSession(null);
       setSelectedProfileIds((prev) => {
         const rest = prev.filter((x) => x !== savedId);
         return maxSelectable <= 1
@@ -335,7 +311,7 @@ export function WorkbenchPage({
 
     if (uid) {
       const savedId = await saveProfile(uid, editId ?? null, input);
-      if (!editId) selectSavedProfile(savedId);
+      finishSave(savedId);
       return;
     }
     const now = new Date().toISOString();
@@ -349,13 +325,11 @@ export function WorkbenchPage({
     setDraftProfiles((prev) =>
       editId ? prev.map((p) => (p.id === editId ? record : p)) : [record, ...prev],
     );
-    selectSavedProfile(nextId);
-    void fetchNatalChart(null, record)
-      .then((preview) => setChart(preview))
-      .catch(() => undefined);
+    finishSave(nextId);
   };
 
   const handleDeleteSidebarProfile = async (id: string) => {
+    cancelStream();
     if (uid) {
       await removeProfile(uid, id);
     } else {
@@ -366,8 +340,10 @@ export function WorkbenchPage({
 
   const handleSend = async (rawText?: string, editLastTurn = false) => {
     const text = (rawText ?? inputText).trim();
-    if (!text || isStreaming) return;
+    if (!text || isStreamingRef.current) return;
     setStreamError(null);
+    setFailedTurn(null);
+    setReplyNotice('');
 
     if (effectiveProfiles.length === 0) {
       setStreamError('请先在左侧「档案管理」添加出生信息');
@@ -383,6 +359,10 @@ export function WorkbenchPage({
       return;
     }
 
+    if (sessionProfileIds?.some((id) => !profiles.some((p) => p.id === id))) {
+      setStreamError('此咨询的档案已删除，请切换对象开启新咨询');
+      return;
+    }
     if (quotaExhausted) {
       notifyQuotaExceeded();
       return;
@@ -391,25 +371,27 @@ export function WorkbenchPage({
     else setInputText('');
 
     const prevMessages = messages;
-    const lastUserIdx = editLastTurn ? prevMessages.map((m) => m.role).lastIndexOf('user') : -1;
-    const baseMessages = editLastTurn && lastUserIdx >= 0 ? prevMessages.slice(0, lastUserIdx) : prevMessages;
-    const nowIso = new Date().toISOString();
-    setMessages([
-      ...baseMessages,
-      { id: `opt_${Date.now()}_u`, role: 'user', parts: [{ type: 'text', text }], createdAt: nowIso },
-      { id: `opt_${Date.now()}_a`, role: 'assistant', parts: [], createdAt: nowIso },
-    ]);
-
     const controller = new AbortController();
-    abortRef.current = controller;
+    const request = { controller, path: window.location.pathname };
+    abortRef.current = request;
+    let exceeded = false;
+    const current = () => abortRef.current === request && request.path === window.location.pathname;
     isStreamingRef.current = true;
     setIsStreaming(true);
+    followEndRef.current = true;
+    setAwayFromEnd(false);
 
     try {
       const targetSession = activeSession ?? (await onStartSession(mode, activeProfiles, text));
+      if (!current()) return;
+      if (!activeSession) {
+        request.path = `/consult/${targetSession.id}`;
+        onSelectSession(targetSession.id);
+      }
+      if (controller.signal.aborted) { setInputText((draft) => draft || text); return; }
       const sessionProfiles =
         activeSession && activeSession.profileIds?.length
-          ? profiles.filter((p) => activeSession.profileIds.includes(p.id))
+          ? activeSession.profileIds.map((id) => profiles.find((p) => p.id === id)).filter((p): p is ProfileRecord => Boolean(p))
           : activeProfiles;
 
       await streamConsultationReply({
@@ -423,19 +405,37 @@ export function WorkbenchPage({
         editLastTurn,
         depth: tier === 'pro' ? depth : undefined,
         signal: controller.signal,
-        onUpdateMessages: setMessages,
-        onUpdateChart: setChart,
-        onQuotaExceeded: notifyQuotaExceeded,
+        onUpdateMessages: (next) => { if (current()) setMessages(next); },
+        onUpdateChart: (next) => { if (current() && chartSignature === chartOwner) setChart(next); },
+        onQuotaExceeded: () => { exceeded = true; if (current()) { notifyQuotaExceeded(); setMessages(prevMessages); setInputText((draft) => draft || text); } },
       });
+      if (current() && !exceeded && !controller.signal.aborted) setReplyNotice('回复已完成');
     } catch (err) {
-      setMessages(prevMessages);
-      setStreamError(formatAppError(err, '发送失败，请重试'));
+      if (current()) {
+        setMessages(prevMessages);
+        if (editLastTurn) setEditingMsgId([...messages].reverse().find((m) => m.role === 'user')?.id ?? null);
+        else setInputText((draft) => draft || text);
+        setFailedTurn({ text, edit: editLastTurn });
+        setStreamError(formatAppError(err, '发送失败，请重试'));
+      }
     } finally {
-      isStreamingRef.current = false;
-      setIsStreaming(false);
-      abortRef.current = null;
+      if (current()) {
+        if (controller.signal.aborted) setReplyNotice('已停止生成，已保留收到的内容');
+        isStreamingRef.current = false;
+        setIsStreaming(false);
+        abortRef.current = null;
+      }
     }
   };
+
+  useEffect(() => {
+    if (!pendingHandoff) { handoffConsumedRef.current = false; return; }
+    if (!uid || !activeSession || !pendingHandoff.question || handoffConsumedRef.current) return;
+    if (!(activeSession.profileIds ?? [activeSession.profileId]).every((id) => profiles.some((p) => p.id === id))) return;
+    handoffConsumedRef.current = true;
+    onClearPendingHandoff();
+    void handleSend(pendingHandoff.question);
+  }, [uid, activeSession?.id, pendingHandoff, profiles]);
 
   const handleCopyMessage = async (id: string, text: string) => {
     try {
@@ -460,21 +460,25 @@ export function WorkbenchPage({
 
   const renderComposer = () => (
     <div className="no-print w-full max-w-[760px] mx-auto flex flex-col gap-2">
+      <p role="status" className="m-0 min-h-5 px-1 text-[13px] text-muted">{isStreaming ? '正在生成回复…' : failedTurn ? '生成失败，可重试上一条' : replyNotice}</p>
       {streamError && (
-        <div className="px-3.5 py-2 rounded-[10px] border border-[#ff9d8a]/40 bg-[#1d1215] text-[13px] text-[#ff9d8a]">
+        <div role="alert" className="px-3.5 py-2 rounded-[10px] border border-danger/40 bg-[#1d1215] text-[13px] text-danger">
           {streamError}
+          {failedTurn
+            ? <button type="button" onClick={() => void handleSend(failedTurn.text, failedTurn.edit)} className="ml-2 underline">重试上一条</button>
+            : <button type="button" onClick={() => { setStreamError(null); setMessageRetry((n) => n + 1); }} className="ml-2 underline">重新加载消息</button>}
         </div>
       )}
 
       {quotaNearLimit && (
-        <div className="px-3.5 py-2 rounded-[12px] border border-[#e0b64a]/40 bg-[#1d1a0f]/80 flex items-center justify-between gap-3 text-[12.5px]">
-          <span className="text-[#f7d57f]">
+        <div className="px-3.5 py-2 rounded-[12px] border border-accent/40 bg-selected/80 flex items-center justify-between gap-3 text-[13px]">
+          <span className="text-accent-bright">
             本月额度已使用 {usagePercent}%，即将用完（{nextUtcMonthResetLabel()} UTC 重置）
           </span>
           <button
             type="button"
             onClick={() => setActiveSubpage('subscription')}
-            className="px-2.5 py-1 rounded-[12px] border-0 bg-[#e0b64a] text-[#1a1405] text-[12px] font-bold cursor-pointer shrink-0 hover:bg-[#f7d57f]"
+            className="px-2.5 py-1 rounded-[12px] border-0 bg-accent text-on-accent text-[13px] font-bold cursor-pointer shrink-0 hover:bg-accent-bright"
           >
             升级套餐
           </button>
@@ -482,12 +486,13 @@ export function WorkbenchPage({
       )}
 
       {quotaExhausted ? (
-        <div className="p-4 rounded-[20px] border border-[#e0b64a]/50 bg-[#101527] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="p-4 rounded-[20px] border border-accent/50 bg-panel flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p className="m-0 text-[14px] font-bold text-[#f8fafc]">
+            <button type="button" onClick={() => openProfileManager()} aria-label={`切换咨询对象，当前${consultationLabel}`} className="max-w-full text-left text-[13px] text-secondary [overflow-wrap:anywhere]">{consultationLabel} ⌄</button>
+            <p className="m-0 text-[14px] font-bold text-primary">
               本月额度已用完（100%）
             </p>
-            <p className="m-0 text-[12px] text-[#a3b0c5]">
+            <p className="m-0 text-[13px] text-muted">
               下次重置：{nextUtcMonthResetLabel()}（UTC）
             </p>
           </div>
@@ -497,7 +502,7 @@ export function WorkbenchPage({
                 <button
                   type="button"
                   onClick={() => setShareModalOpen(true)}
-                  className="min-h-[40px] px-4 rounded-[20px] border border-[#e0b64a]/60 bg-transparent text-[#f7d57f] text-[13px] font-medium cursor-pointer hover:bg-[#1d1a0f]"
+                  className="min-h-[40px] px-4 rounded-[20px] border border-accent/60 bg-transparent text-accent-bright text-[13px] font-medium cursor-pointer hover:bg-selected"
                 >
                   分享领额度
                 </button>
@@ -505,7 +510,7 @@ export function WorkbenchPage({
             <button
               type="button"
               onClick={() => setActiveSubpage('subscription')}
-              className="min-h-[40px] px-5 rounded-[20px] border-0 bg-[#e0b64a] text-[#1a1405] text-[13px] font-bold cursor-pointer"
+              className="min-h-[40px] px-5 rounded-[20px] border-0 bg-accent text-on-accent text-[13px] font-bold cursor-pointer"
             >
               升级订阅继续对话
             </button>
@@ -514,16 +519,17 @@ export function WorkbenchPage({
       ) : (
         <form
           onSubmit={handleSubmitForm}
-          className="rounded-[26px] border border-[#26304d] bg-[#101527] pl-4 pr-2 py-2 flex items-end gap-2 focus-within:border-[#3a4668]"
+          className="rounded-[22px] border border-border bg-panel p-3 flex flex-col gap-2 focus-within:border-border-strong"
         >
+          <label htmlFor="consult-question" className="sr-only">咨询问题</label>
           <textarea
-            ref={textareaRef}
+            id="consult-question" ref={textareaRef}
             rows={1}
             maxLength={2000}
             disabled={needsMoreProfiles}
             placeholder={
               effectiveProfiles.length === 0
-                ? '请先在左侧「档案管理」添加出生信息'
+                ? '请先添加出生信息'
                 : '问问Vela，问问宇宙'
             }
             value={inputText}
@@ -534,44 +540,34 @@ export function WorkbenchPage({
                 void handleSend();
               }
             }}
-            className="flex-1 min-w-0 resize-none bg-transparent border-0 py-[6px] text-[15px] leading-[24px] text-[#f8fafc] placeholder-[#a3b0c5] focus:outline-none disabled:opacity-60"
+            className="w-full min-w-0 resize-none bg-transparent border-0 px-1 py-2 text-[15px] leading-[24px] text-primary placeholder-muted focus:outline-none disabled:opacity-60"
           />
 
-          {inputText.length > 1500 && (
-            <span className="shrink-0 pb-2 font-mono-num text-[11px] text-[#a3b0c5]">
-              {inputText.length}/2000
-            </span>
-          )}
-
-          {tier === 'pro' && (
-            <div className="shrink-0 flex items-center rounded-full border border-[#26304d] bg-[#0b0e1a] p-0.5" title="推演深度：控制每轮披露的星盘工具与技法层级">
-              {([
-                { id: 'quick', label: '速览' },
-                { id: 'balanced', label: '均衡' },
-                { id: 'deep', label: '全维' },
-              ] as const).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setDepth(opt.id)}
-                  className={`px-2 py-1 rounded-full border-0 text-[11px] font-medium cursor-pointer transition-colors ${
-                    depth === opt.id
-                      ? 'bg-[#e0b64a]/20 text-[#f7d57f]'
-                      : 'bg-transparent text-[#8e9bb5] hover:text-[#f8fafc]'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex w-full min-w-0 items-center gap-2">
+            <button type="button" disabled={isStreaming} onClick={() => openProfileManager()}
+              aria-label={`切换咨询对象，当前${consultationLabel}`} title={consultationLabel}
+              className="flex-1 min-w-0 flex items-center gap-1 rounded-[12px] border border-border bg-transparent px-2 text-left text-[13px] text-secondary cursor-pointer hover:bg-panel-2 disabled:opacity-50">
+              <span className="truncate">{consultationLabel}</span><span aria-hidden="true">⌄</span>
+            </button>
+            {tier === 'pro' && <>
+              <select aria-label="推演深度" value={depth} onChange={(e) => setDepth(e.target.value as AnalysisDepth)} disabled={isStreaming}
+                className="sm:hidden min-w-0 max-w-[96px] shrink-0 rounded-[12px] border border-border bg-panel px-2 text-secondary">
+                <option value="quick">速览</option><option value="balanced">均衡</option><option value="deep">全维</option>
+              </select>
+              <div role="group" aria-label="推演深度" className="hidden sm:flex shrink-0 items-center rounded-full border border-border p-0.5">
+                {([{ id: 'quick', label: '速览' }, { id: 'balanced', label: '均衡' }, { id: 'deep', label: '全维' }] as const).map((opt) => (
+                  <button key={opt.id} type="button" disabled={isStreaming} aria-pressed={depth === opt.id} onClick={() => setDepth(opt.id)}
+                    className={`px-3 rounded-full border-0 text-[13px] cursor-pointer ${depth === opt.id ? 'bg-accent/20 text-accent-bright' : 'bg-transparent text-muted'}`}>{opt.label}</button>
+                ))}
+              </div>
+            </>}
 
           {isStreaming ? (
             <button
               type="button"
-              onClick={() => abortRef.current?.abort()}
+              onClick={() => abortRef.current?.controller.abort()}
               aria-label="停止生成"
-              className="shrink-0 w-9 h-9 rounded-full border-0 bg-[#e0b64a] text-[#1a1405] flex items-center justify-center cursor-pointer"
+              className="shrink-0 w-9 h-9 rounded-full border-0 bg-accent text-on-accent flex items-center justify-center cursor-pointer"
             >
               <IconStop size={15} />
             </button>
@@ -580,18 +576,20 @@ export function WorkbenchPage({
               type="submit"
               disabled={!inputText.trim() || needsMoreProfiles}
               aria-label="发送"
-              className="shrink-0 w-9 h-9 rounded-full border-0 bg-[#e0b64a] text-[#1a1405] flex items-center justify-center cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+              className="shrink-0 w-9 h-9 rounded-full border-0 bg-accent text-on-accent flex items-center justify-center cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
             >
               <IconArrowUp size={18} />
             </button>
           )}
+          </div>
+          {inputText.length > 1500 && <span className="text-right text-[13px] text-muted">{inputText.length}/2000</span>}
         </form>
       )}
     </div>
   );
 
   return (
-    <div className="h-[100dvh] w-full flex bg-[#070812] text-[#f8fafc] overflow-hidden">
+    <div className="h-[100dvh] w-full flex bg-base text-primary overflow-hidden">
       <WorkbenchSidebar
         uid={uid}
         displayName={displayName}
@@ -605,7 +603,7 @@ export function WorkbenchPage({
         profiles={effectiveProfiles}
         selectedProfileIds={selectedProfileIds}
         onSetSidebarOpen={setSidebarOpen}
-        onNewSession={() => { setActiveSubpage(null); onSelectSession(null); }}
+        onNewSession={() => { cancelStream(); setMessages([]); setActiveSubpage(null); onSelectSession(null); }}
         onOpenHistorySearch={() => setHistorySearchOpen(true)}
         onOpenPortrait={() => setPortraitOpen(true)}
         onOpenProfileManager={openProfileManager}
@@ -616,6 +614,7 @@ export function WorkbenchPage({
       />
 
       <main className="flex-1 min-w-0 flex flex-col h-full relative overflow-hidden isolate">
+        {chartError && <div role="alert" className="px-4 py-2 text-danger">{chartError}<button type="button" onClick={() => setChartRetry((n) => n + 1)} className="ml-2 underline">重试星盘</button></div>}
         {isStreaming && <SoftAurora />}
         <header className="no-print relative z-10 shrink-0 h-[64px] px-2.5 lg:px-5 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
@@ -624,12 +623,12 @@ export function WorkbenchPage({
               onClick={() => setSidebarOpen(true)}
               title="打开侧栏与档案"
               aria-label="打开侧栏与档案"
-              className="lg:hidden flex items-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-[#101527] cursor-pointer shrink-0"
+              className="lg:hidden flex items-center bg-transparent border-0 p-1 rounded-[12px] hover:bg-panel cursor-pointer shrink-0"
             >
               <img src="/assets/logo-small.webp" alt="Vela" className="brand-logo" />
             </button>
             {activeSession && (
-              <span className="hidden sm:inline text-[13px] text-[#a3b0c5] truncate">
+              <span className="hidden sm:inline text-[13px] text-muted truncate">
                 {activeSession.title}
               </span>
             )}
@@ -640,13 +639,13 @@ export function WorkbenchPage({
               onClick={() => setShareModalOpen(true)}
               title="每日分享领额度"
               aria-label="每日分享领额度"
-              className="relative min-h-[38px] min-w-[38px] flex items-center justify-center rounded-[10px] border-0 bg-transparent text-[#c3cde0] hover:text-[#f7d57f] hover:bg-[#101527] cursor-pointer transition-colors"
+              className="relative min-h-[38px] min-w-[38px] flex items-center justify-center rounded-[10px] border-0 bg-transparent text-secondary hover:text-accent-bright hover:bg-panel cursor-pointer transition-colors"
             >
               <IconGift size={18} />
               {(tier === 'free' || quotaNearLimit || quotaExhausted) &&
                 (effectiveUsage.shareCount ?? 0) < 3 &&
                 effectiveUsage.lastShareDate !== new Date().toISOString().slice(0, 10) && (
-                  <span aria-hidden="true" className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#e0b64a]" />
+                  <span aria-hidden="true" className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-accent" />
                 )}
             </button>
           )}
@@ -654,22 +653,24 @@ export function WorkbenchPage({
 
         {activeSubpage ? (
           <div className="flex-1 min-h-0 flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1e2740]">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-divider">
               <button
                 type="button"
                 onClick={() => setActiveSubpage(null)}
                 data-testid="subpage-back"
-                className="rounded-[8px] px-2.5 py-1 border-0 bg-transparent text-[12.5px] text-[#a3b0c5] hover:bg-[#101527] hover:text-[#f8fafc] cursor-pointer"
+                className="rounded-[8px] px-2.5 py-1 border-0 bg-transparent text-[13px] text-muted hover:bg-panel hover:text-primary cursor-pointer"
               >
                 ← 返回对话
               </button>
-              <span className="text-[14px] font-semibold text-[#f8fafc]">
+              <span className="text-[14px] font-semibold text-primary">
                 {activeSubpage === 'profiles' ? '✦ 档案管理' : '✦ 订阅与额度'}
               </span>
               <span className="w-16" />
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-6">
               {activeSubpage === 'profiles' ? (
+                <>
+                {activeSession && <p role="note" className="mx-auto max-w-3xl mb-4 text-[14px] text-secondary">本咨询对象固定为 {consultationLabel}；切换档案将开启新咨询，原对话保留在历史记录中。</p>}
                 <ProfileManagerSubpage
                   uid={uid}
                   tier={tier}
@@ -682,28 +683,38 @@ export function WorkbenchPage({
                   onDeleteProfile={handleDeleteSidebarProfile}
                   onOpenSubscription={() => setActiveSubpage('subscription')}
                 />
+                </>
               ) : (
-                <SubscriptionSubpage
+                <Suspense fallback={<p role="status">正在加载订阅信息…</p>}><SubscriptionSubpage
                   uid={uid}
                   tier={tier}
                   usage={effectiveUsage}
                   profileCount={effectiveProfiles.length}
                   onRequestAuth={() => requestAuthWithDrafts()}
                   onOpenShare={() => setShareModalOpen(true)}
-                />
+                /></Suspense>
               )}
             </div>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center px-4 pb-10">
-            <h1 className="m-0 mb-6 font-serif-sc text-[28px] sm:text-[34px] font-bold text-[#f8fafc] text-center">
+            <h1 className="m-0 mb-6 font-serif-sc text-[28px] sm:text-[34px] font-bold text-primary text-center">
               此刻你最在意什么？
             </h1>
-            {renderComposer()}
+            {needsMoreProfiles ? <div className="flex flex-col items-center gap-4 text-center">
+              <p className="m-0 text-[15px] text-secondary">填写出生时间和地点，先看看你的星盘，再开始咨询。</p>
+              <button type="button" onClick={() => openProfileManager({ startAdd: true })} className="rounded-[14px] border-0 bg-accent px-6 py-3 text-[15px] font-semibold text-on-accent cursor-pointer hover:bg-accent-bright">添加出生信息，查看星盘</button>
+            </div> : renderComposer()}
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto px-4 py-4">
+            <div className="relative flex-1 min-h-0">
+            <div className="h-full overflow-y-auto px-4 py-4" onScroll={(e) => {
+              const el = e.currentTarget;
+              const nearEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 64;
+              followEndRef.current = nearEnd;
+              setAwayFromEnd(!nearEnd);
+            }}>
               <div className="mx-auto w-full max-w-[760px] flex flex-col gap-6">
                 {(() => {
                   const lastUserIdx = messages.map((m) => m.role).lastIndexOf('user');
@@ -718,8 +729,9 @@ export function WorkbenchPage({
                       if (editingMsgId === msg.id) {
                         return (
                           <div key={msg.id} className="flex justify-end">
-                            <div className="w-full max-w-[600px] rounded-[16px] border border-[#3a4668] bg-[#161d33] p-3 flex flex-col gap-2">
-                              <textarea
+                            <div className="w-full max-w-[600px] rounded-[16px] border border-border-strong bg-panel-2 p-3 flex flex-col gap-2">
+                              <label htmlFor="edit-question" className="sr-only">编辑咨询问题</label>
+                              <textarea id="edit-question"
                                 autoFocus
                                 rows={2}
                                 maxLength={2000}
@@ -732,13 +744,13 @@ export function WorkbenchPage({
                                     void handleSend(editingText, true);
                                   }
                                 }}
-                                className="w-full resize-none rounded-[10px] border border-[#26304d] bg-[#0b1020] px-3 py-2 text-[15px] leading-[1.6] text-[#f8fafc] focus:outline-none focus:border-[#e0b64a]"
+                                className="w-full resize-none rounded-[10px] border border-border bg-[#0b1020] px-3 py-2 text-[15px] leading-[1.6] text-primary focus:outline-none focus:border-accent"
                               />
                               <div className="flex justify-end gap-2">
-                                <button type="button" onClick={() => setEditingMsgId(null)} className="px-3 py-1.5 rounded-[8px] border border-[#3a4668] bg-transparent text-[12.5px] text-[#c3cde0] hover:text-[#f8fafc] cursor-pointer">
+                                <button type="button" onClick={() => setEditingMsgId(null)} className="px-3 py-1.5 rounded-[8px] border border-border-strong bg-transparent text-[13px] text-secondary hover:text-primary cursor-pointer">
                                   取消
                                 </button>
-                                <button type="button" disabled={!editingText.trim() || isStreaming} onClick={() => void handleSend(editingText, true)} className="px-3.5 py-1.5 rounded-[8px] border-0 bg-[#e0b64a] text-[#1a1405] text-[12.5px] font-bold hover:bg-[#f7d57f] disabled:opacity-40 cursor-pointer">
+                                <button type="button" disabled={!editingText.trim() || isStreaming} onClick={() => void handleSend(editingText, true)} className="px-3.5 py-1.5 rounded-[8px] border-0 bg-accent text-on-accent text-[13px] font-bold hover:bg-accent-bright disabled:opacity-40 cursor-pointer">
                                   更新并发送
                                 </button>
                               </div>
@@ -754,12 +766,12 @@ export function WorkbenchPage({
                               title="编辑并重新发送"
                               aria-label="编辑并重新发送"
                               onClick={() => { setEditingMsgId(msg.id); setEditingText(textContent); }}
-                              className="no-print w-8 h-8 rounded-full border-0 bg-transparent text-[#9aa8c7] hover:text-[#f7d57f] hover:bg-[#161d33] flex items-center justify-center cursor-pointer opacity-70 lg:opacity-0 lg:group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0"
+                              className="no-print w-8 h-8 rounded-full border-0 bg-transparent text-muted hover:text-accent-bright hover:bg-panel-2 flex items-center justify-center cursor-pointer opacity-70 lg:opacity-0 lg:group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0"
                             >
                               <IconPencil size={15} />
                             </button>
                           )}
-                          <div className="max-w-[82%] px-4 py-3 rounded-[18px] bg-[#1d2540] text-[15.5px] leading-[1.7] text-[#f8fafc] whitespace-pre-wrap">
+                          <div className="max-w-[82%] px-4 py-3 rounded-[18px] bg-bubble text-[15.5px] leading-[1.7] text-primary whitespace-pre-wrap [overflow-wrap:anywhere]">
                             {textContent}
                           </div>
                         </div>
@@ -773,7 +785,7 @@ export function WorkbenchPage({
                             {toolCalls.map((t, tIdx) => (
                               <span
                                 key={tIdx}
-                                className="px-2.5 py-1 rounded-[12px] border border-[#26304d] bg-[#101527] text-[12px] text-[#a8c0f0]"
+                                className="px-2.5 py-1 rounded-[12px] border border-border bg-panel text-[13px] text-info"
                               >
                                 ✓ {t.label}
                               </span>
@@ -781,9 +793,9 @@ export function WorkbenchPage({
                           </div>
                         )}
 
-                        {chart && (idx === 1 || toolCalls.length > 0) && (
+                        {visibleChart && (idx === 1 || toolCalls.length > 0) && (
                           <ChartFactCard
-                            chart={chart}
+                            chart={visibleChart}
                             profileName={activeProfiles[0]?.name ?? activeSession?.profileName ?? '本命盘'}
                             birthSummary={
                               activeProfiles[0]
@@ -794,8 +806,8 @@ export function WorkbenchPage({
                         )}
 
                         {isLastAssistant && isStreaming && !textContent ? (
-                          <div className="flex items-center gap-2.5 py-2 text-[14px] text-[#c3cde0]">
-                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#e0b64a] vela-thinking-dot" />
+                          <div className="flex items-center gap-2.5 py-2 text-[14px] text-secondary">
+                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-accent vela-thinking-dot" />
                             <span>
                               {toolCalls.length > 0
                                 ? `已排盘（${toolCalls.map((t) => t.label.replace(/^已排盘：/, '')).join(' · ')}），正在推演解读…`
@@ -803,7 +815,7 @@ export function WorkbenchPage({
                             </span>
                           </div>
                         ) : (
-                          <div className="py-1">{renderFormattedText(textContent)}</div>
+                          <div className="py-1 min-w-0"><Suspense fallback={<p className="text-body whitespace-pre-wrap [overflow-wrap:anywhere]">{textContent}</p>}><MarkdownMessage text={textContent} /></Suspense></div>
                         )}
 
                         <AstroUiRenderer
@@ -817,7 +829,7 @@ export function WorkbenchPage({
                             <button
                               type="button"
                               onClick={() => void handleCopyMessage(msg.id, textContent)}
-                              className="px-2.5 py-1 rounded-[8px] border border-[#26304d] bg-transparent text-[11.5px] text-[#a3b0c5] hover:text-[#f8fafc] hover:border-[#3a4668] cursor-pointer"
+                              className="px-2.5 py-1 rounded-[8px] border border-border bg-transparent text-[13px] text-muted hover:text-primary hover:border-border-strong cursor-pointer"
                             >
                               {copiedMsgId === msg.id ? '已复制' : '复制'}
                             </button>
@@ -832,7 +844,7 @@ export function WorkbenchPage({
                                 type="button"
                                 disabled={quotaExhausted}
                                 onClick={() => void handleSend(sug)}
-                                className="min-h-[36px] px-3.5 py-1.5 rounded-[18px] border border-[#26304d] bg-[#101527] hover:border-[#e0b64a] text-[13px] text-[#c3cde0] hover:text-[#f8fafc] cursor-pointer text-left disabled:opacity-45 disabled:cursor-not-allowed"
+                                className="min-h-[36px] px-3.5 py-1.5 rounded-[18px] border border-border bg-panel hover:border-accent text-[13px] text-secondary hover:text-primary cursor-pointer text-left disabled:opacity-45 disabled:cursor-not-allowed"
                               >
                                 {sug}
                               </button>
@@ -846,12 +858,15 @@ export function WorkbenchPage({
                 <div ref={endRef} />
               </div>
             </div>
+            {awayFromEnd && <button type="button" onClick={() => { followEndRef.current = true; endRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' }); setAwayFromEnd(false); textareaRef.current?.focus({ preventScroll: true }); }}
+              className="no-print absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-border-strong bg-panel px-4 text-[13px] text-primary hover:border-accent">回到最新回复 ↓</button>}
+            </div>
 
             <div className="no-print shrink-0 px-4 pb-2 pt-2">{renderComposer()}</div>
           </>
         )}
 
-        <footer className="no-print shrink-0 px-4 py-2 text-center text-[11px] text-[#a3b0c5]">
+        <footer className="no-print shrink-0 px-4 py-2 text-center text-[13px] text-muted">
           AI 生成内容仅供自我探索，不构成医疗、法律或财务建议 ·{' '}
           <a href="/privacy" onClick={(e) => { e.preventDefault(); navigate('/privacy'); }}>隐私政策</a>{' '}·{' '}
           <a href="/terms" onClick={(e) => { e.preventDefault(); navigate('/terms'); }}>服务条款</a>
@@ -862,31 +877,33 @@ export function WorkbenchPage({
         open={historySearchOpen}
         sessions={sessions}
         activeSessionId={activeSession?.id ?? null}
-        onSelectSession={(sid) => { setActiveSubpage(null); onSelectSession(sid); setSidebarOpen(false); }}
+        onSelectSession={(sid) => { cancelStream(); setActiveSubpage(null); onSelectSession(sid); setSidebarOpen(false); }}
         onClose={() => setHistorySearchOpen(false)}
       />
 
-      <NatalPortraitModal
+      <Suspense fallback={<p role="status" className="sr-only">正在加载界面</p>}>
+      {portraitOpen && <NatalPortraitModal
         open={portraitOpen}
         profile={primaryProfile}
-        chart={chart}
+        chart={visibleChart}
         onClose={() => setPortraitOpen(false)}
         onOpenShare={() => (uid ? setShareModalOpen(true) : requestAuthWithDrafts())}
-      />
+      />}
 
-      {uid && (
+      {uid && shareModalOpen && (
         <ShareBonusModal
           open={shareModalOpen}
           uid={uid}
           tier={tier}
           usage={effectiveUsage}
           profile={primaryProfile}
-          chart={chart}
+          chart={visibleChart}
           onClose={() => setShareModalOpen(false)}
           onClaimed={(next) => setUsageOverride(next)}
           onOpenUpgrade={() => { setShareModalOpen(false); setActiveSubpage('subscription'); }}
         />
       )}
+      </Suspense>
     </div>
   );
 }
