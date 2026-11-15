@@ -17,7 +17,7 @@ const save=()=>writeFileSync('artifacts/vertex-live.json',JSON.stringify(evidenc
 for(const [name,tier,bundle] of [['current','free',defaultBundle('free')],['frozen-legacy','go',legacy]]) {
   assert.equal(bundle.modelName,'vertexai/gemini-4-hydrogen');
   const result=await generateReading(ai,{tier,bundle,profiles,message:'请简要解读性格与职业倾向，给出一条具体建议。',signal:AbortSignal.timeout(120_000)});
-  const record={case:name,model:bundle.modelName,characters:result.text.length,rawCharacters:result.rawText.length,usage:result.usage,parameters:result.diagnostics.parameters};
+  const record={case:name,model:bundle.modelName,characters:result.text.length,rawCharacters:result.rawText.length,finishReason:result.diagnostics.finishReason,usage:result.usage,parameters:result.diagnostics.parameters};
   evidence.push(record);save();
   console.log('Candidate diagnostics',JSON.stringify(record));
   assert(result.text.trim().length>=30,`${name}: missing useful final answer`);

@@ -267,6 +267,7 @@ export async function generateReading(
       parameters: config,
       sampling,
       usage: final.usage,
+      finishReason: final.finishReason,
       elapsedMs: Date.now() - start,
       droppedCount: filtered.droppedCount,
       mismatches: verified.mismatches,
