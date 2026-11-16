@@ -6,6 +6,7 @@ const compiled=await build({entryPoints:['apps/web/src/lib/apiClient.ts'],bundle
   b.onResolve({filter:/^firebase\/app-check$/},()=>({path:'app-check',namespace:'test'}));
   b.onLoad({filter:/.*/,namespace:'test'},args=>({contents:args.path==='firebase'?'export const auth=globalThis.testAuth;export const appCheck=undefined;':'export const getToken=async()=>({token:"app"});'}));
 }}]});
+globalThis.__VELA_CONFIG__={projectId:'demo-vela-ci',apiKey:'fake',appId:'test',authDomain:'demo-vela-ci.firebaseapp.com',firestoreDatabaseId:'(default)'};
 globalThis.testAuth={currentUser:{uid:'owner',getIdToken:async()=> 'id-token'}};
 const api=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 const stream=(chunks)=>new ReadableStream({start(c){for(const s of chunks)c.enqueue(new TextEncoder().encode(s));c.close();}});

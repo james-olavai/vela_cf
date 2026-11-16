@@ -1,3 +1,5 @@
+import { withBillingLock } from './stripe-payments.js';
+import { deleteUserPats } from './pat.js';
 import type { Auth } from 'firebase-admin/auth';
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -65,6 +67,7 @@ export async function deleteAccountWithRetry(params: {
     stripeClient,
     now = new Date(),
   } = params;
+  return withBillingLock(db,uid,async()=>{
   const nowIso = now.toISOString();
   const userRef = db.collection('users').doc(uid);
   const customerRef = db.collection('customers').doc(uid);
@@ -77,9 +80,10 @@ export async function deleteAccountWithRetry(params: {
       : [],
   );
 
+  await userRef.set({deletionState:{status:'in_progress',pendingSubscriptionIds:existingState?.pendingSubscriptionIds || [],canceledSubscriptionIds:Array.from(canceledSet),updatedAt:nowIso} satisfies AccountDeletionState},{merge:true});
   const subsSnap = await customerRef
     .collection('subscriptions')
-    .where('status', 'in', ['active', 'trialing', 'past_due'])
+    .where('status', 'in', ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused'])
     .get();
 
   const pendingDocs = subsSnap.docs.filter((doc) => !canceledSet.has(doc.id));
@@ -151,6 +155,7 @@ export async function deleteAccountWithRetry(params: {
     { merge: true },
   );
 
+  await deleteUserPats(db,uid);
   try {
     await auth.deleteUser(uid);
   } catch (err) {
@@ -180,4 +185,5 @@ export async function deleteAccountWithRetry(params: {
     deleted: true,
     canceledSubscriptionIds: Array.from(canceledSet),
   };
+  });
 }

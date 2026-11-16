@@ -58,6 +58,14 @@ test('Real Rules engine denies direct business writes while preserving owner rea
     assert.equal((await request(a.idToken, `users/${uid}/sessions/s/private/prompt`)).status,403);
     assert.equal((await request(a.idToken, `users/${uid}/sessions/new`, {mode:'personal'})).status,403);
     assert.equal((await request(a.idToken, 'locations_cache/private')).status,403);
+    const patPath=`apiTokens/rules_${uid}`;
+    await db.doc(patPath).set({uid,secretHash:'synthetic-hash',name:'Synthetic private token'});
+    for(const token of [a.idToken,b.idToken,'']) {
+      assert.equal((await request(token,patPath)).status,403,'PAT metadata and hashes are server-only, even for the owner');
+      assert.equal((await request(token,'apiTokens')).status,403,'PAT collection cannot be listed directly');
+    }
+    assert.equal((await request(a.idToken,patPath,{uid,revokedAt:''})).status,403);
+    assert.equal((await request(a.idToken,patPath,undefined,'DELETE')).status,403);
     assert.equal((await request(a.idToken, `users/${uid}/sessions/s`,undefined,'DELETE')).status,403);
     const checkout={price:'price_test',success_url:'https://example.test/success',cancel_url:'https://example.test/cancel'};
     assert.equal((await request(a.idToken, `customers/${uid}/checkout_sessions/c`,checkout)).status,403);
@@ -66,7 +74,7 @@ test('Real Rules engine denies direct business writes while preserving owner rea
     assert.equal((await request(b.idToken, `customers/${uid}/checkout_sessions/c`)).status,403);
     assert.equal((await request(a.idToken, `customers/${uid}/checkout_sessions/c`,{...checkout,price:'price_free'})).status,403);
     assert.equal((await request(a.idToken, `customers/${uid}/checkout_sessions/c`,undefined,'DELETE')).status,403);
-  } finally { await db.recursiveDelete(db.doc(`users/${uid}`)); await db.doc(`usage/${uid}`).delete(); await db.recursiveDelete(db.doc(`customers/${uid}`)); await Promise.all([getAuth(app).deleteUser(uid),getAuth(app).deleteUser(b.localId)]); }
+  } finally { await db.doc(`apiTokens/rules_${uid}`).delete(); await db.recursiveDelete(db.doc(`users/${uid}`)); await db.doc(`usage/${uid}`).delete(); await db.recursiveDelete(db.doc(`customers/${uid}`)); await Promise.all([getAuth(app).deleteUser(uid),getAuth(app).deleteUser(b.localId)]); }
 });
 test('Real Firestore transactions reserve atomically and retain unlimited overrides across rollover', async () => {
   const uid='quota_real', periodStart='2026-11-01T00:00:00Z', now=new Date('2026-11-15T10:00:00Z');

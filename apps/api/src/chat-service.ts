@@ -1,14 +1,18 @@
 import { createHash } from 'node:crypto';
 import { beginTurn, failTurn, turnRef } from './turns.js';
-import type { Firestore } from 'firebase-admin/firestore';
+import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { ChatRequestSchema, computeTokenCostMicroUsd, TIER_META } from '@vela-cf/shared';
+import { ChatRequestSchema, computeTokenCostMicroUsd, TIER_META, type Tier } from '@vela-cf/shared';
 import type { generateReading } from './generate-reading.js';
 import { defaultBundle } from './prompt-bundle.js';
 import { resolveSubjects } from './subjects.js';
 import { acquireSessionTurn, commitSessionTurn, releaseSessionTurn } from './session.js';
 import { resolveUserPeriodAndTier, reserveQuota, releaseQuota } from './quota.js';
-export function createChatRunner(db: Firestore, generate: (input: Parameters<typeof generateReading>[1], emit: (chunk: any)=>void) => ReturnType<typeof generateReading>) {
+function assertTierSubjects(profiles: any[], tier: Tier) {
+  if(profiles.some(p=>p.entityType && p.entityType!=='person') && !TIER_META[tier].allowsEntityCharts)throw new HttpsError('permission-denied','ENTITY_CHART_REQUIRES_PRO');
+  if(profiles.length>1 && profiles.length>TIER_META[tier].maxSynastryProfiles)throw new HttpsError('permission-denied','INVALID_SYNASTRY_PROFILE_COUNT');
+}
+export function createChatRunner(db: Firestore, generate: (input: Parameters<typeof generateReading>[1], emit: (chunk: any)=>void) => ReturnType<typeof generateReading>, authorize?: (context: any, sessionId: string) => Promise<void>, authorizeCommit?: (tx:Transaction, context:any) => Promise<void>) {
 return async (rawInput: unknown, context: any, sendChunk: (chunk: any) => void, signal?: AbortSignal) => {
     signal = signal ? AbortSignal.any([signal,AbortSignal.timeout(150_000)]) : AbortSignal.timeout(150_000);
     const turnId = context?.turnId || `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -37,7 +41,10 @@ return async (rawInput: unknown, context: any, sendChunk: (chunk: any) => void, 
         }
         durableStarted=true;
         const cancel=new AbortController();signal=AbortSignal.any([signal,cancel.signal]);
-        unwatch=turnRef(db,uid,input.sessionId,turnId).onSnapshot(snap=>{if(snap.data()?.status==='cancelled'||snap.data()?.status==='failed')cancel.abort();},()=>cancel.abort());
+        unwatch=turnRef(db,uid,input.sessionId,turnId).onSnapshot(snap=>{
+          if(snap.data()?.status==='cancelled')cancel.abort(new HttpsError('aborted','TURN_CANCELLED'));
+          if(snap.data()?.status==='failed')cancel.abort(new HttpsError('aborted','TURN_INTERRUPTED'));
+        },()=>cancel.abort(new HttpsError('unavailable','TURN_OBSERVER_FAILED')));
         sendChunk({type:'started',turnId});
         signal.throwIfAborted();
       }
@@ -65,8 +72,7 @@ return async (rawInput: unknown, context: any, sendChunk: (chunk: any) => void, 
         uid,
         context?.auth?.token?.stripeRole,
       );
-      if(profiles.some(p=>p.entityType && p.entityType!=='person') && !TIER_META[tier].allowsEntityCharts)throw new HttpsError('permission-denied','ENTITY_CHART_REQUIRES_PRO');
-      if(profiles.length>1 && profiles.length>TIER_META[tier].maxSynastryProfiles)throw new HttpsError('permission-denied','INVALID_SYNASTRY_PROFILE_COUNT');
+      assertTierSubjects(profiles,tier);
       await reserveQuota(db, {
         uid,
         tier,
@@ -103,7 +109,13 @@ return async (rawInput: unknown, context: any, sendChunk: (chunk: any) => void, 
         ...uiBlocks,
       ];
 
+      // authorize and auth are supplied by the server, never by the request body.
+      await authorize?.(context,input.sessionId);
+      if(authorize)assertTierSubjects(profiles,(await resolveUserPeriodAndTier(db,uid,context?.auth?.token?.stripeRole)).tier);
+      signal.throwIfAborted();
       await commitSessionTurn(db, {
+        signal,
+        authorize: authorizeCommit ? tx=>authorizeCommit(tx,context) : undefined,
         uid,
         sessionId: input.sessionId,
         turnId,
@@ -127,14 +139,17 @@ return async (rawInput: unknown, context: any, sendChunk: (chunk: any) => void, 
       sendChunk({ type: 'done', suggestions });
       return { text: cleanText, suggestions, uiBlocks };
     } catch (err) {
-      if(durableStarted && uid && sessionId)await failTurn(db,uid,sessionId,turnId,signal.aborted).catch(()=>undefined);
+      const reason=signal.aborted ? signal.reason : err;
+      const error=reason?.name==='TimeoutError' ? new HttpsError('deadline-exceeded','MODEL_TIMEOUT')
+        : signal.aborted && !(reason instanceof HttpsError) ? new HttpsError('aborted','TURN_DISCONNECTED') : reason;
+      if(durableStarted && uid && sessionId)await failTurn(db,uid,sessionId,turnId,error instanceof HttpsError && ['MODEL_TIMEOUT','TURN_CANCELLED','TURN_DISCONNECTED','TURN_INTERRUPTED','TURN_OBSERVER_FAILED'].includes(error.message) ? error.message : 'TURN_FAILED').catch(()=>undefined);
       if (uid && quotaReserved) {
         await releaseQuota(db, { uid, requestId: quotaRequestId }).catch(() => undefined);
       }
       if (uid && sessionId && sessionLockAcquired) {
         await releaseSessionTurn(db, { uid, sessionId, turnId }).catch(() => undefined);
       }
-      throw err;
+      throw error;
     } finally { unwatch?.(); }
 }
 

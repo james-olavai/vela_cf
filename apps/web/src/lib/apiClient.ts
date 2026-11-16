@@ -1,6 +1,6 @@
 import { getToken } from 'firebase/app-check';
 import { auth, appCheck } from './firebase';
-import config from '../../../../firebase-applet-config.json';
+import { firebaseConfig as config } from './runtimeConfig';
 
 const baseUrl = import.meta.env.DEV && import.meta.env.VITE_API_BASE_URL || `https://asia-southeast1-${config.projectId}.cloudfunctions.net/businessApi`;
 const updates = new EventTarget();

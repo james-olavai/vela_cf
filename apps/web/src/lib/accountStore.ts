@@ -72,6 +72,9 @@ export function formatAppError(err: unknown, fallback: string): string {
   if (code === 'functions/unauthenticated' || msg.includes('AUTH_REQUIRED')) {
     return '登录状态已失效，请重新登录后重试';
   }
+  if (rawCode === 'MODEL_TIMEOUT' || msg === 'MODEL_TIMEOUT' || code === 'functions/deadline-exceeded') return '生成超过时间限制，本轮未完成；请缩小问题范围后重试';
+  if (rawCode === 'TURN_DISCONNECTED' || msg === 'TURN_DISCONNECTED') return '连接已中断，请先查询本轮状态，再决定是否重新发送';
+  if (rawCode === 'TURN_OBSERVER_FAILED' || msg === 'TURN_OBSERVER_FAILED') return '无法确认本轮状态，已停止生成；请稍后查看会话状态';
   if (msg === 'PROFILE_LIMIT_REACHED') return '已达到当前套餐的档案数量上限，请删除不再使用的档案或升级套餐';
   if (['TURN_FAILED','TURN_INTERRUPTED'].includes(msg)) return '上一条请求未完成，请重试';
   if (msg === 'TURN_CANCELLED') return '上一条请求已取消，可重新发送';

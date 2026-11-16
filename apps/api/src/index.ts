@@ -1,7 +1,9 @@
+import { handleStripeWebhook } from './stripe-payments.js';
+import { readPatConfig, verifyPat, authorizePatRequest, assertPatTransaction, dispatchPatApi, patRoutes } from './pat.js';
 import { countryRoutes, dispatchCountryApi } from './country-charts.js';
 import { dispatchTurnApi } from './turns.js';
 import { createChatRunner } from './chat-service.js';
-import { dispatchActionApi, actionRoutes, searchLocations } from './action-api.js';
+import { dispatchActionApi, actionRoutes, searchLocations, webOrigins } from './action-api.js';
 import { getAppCheck } from 'firebase-admin/app-check';
 import { createHttpApi, verifyApiIdentity } from './http-api.js';
 import { dispatchBusinessApi } from './business-api.js';
@@ -74,7 +76,12 @@ function toHttpsError(err: unknown): HttpsError {
   return new HttpsError('internal', msg.slice(0, 400) || 'INTERNAL_ERROR');
 }
 
-const runChat = createChatRunner(db, (input,emit)=>generateReading(ai,input,emit));
+const patConfig = readPatConfig();
+const runChat = createChatRunner(db, (input,emit)=>generateReading(ai,input,emit), async (context,sessionId) => {
+  if (context.auth?.credentialKind === 'pat') context.auth = await authorizePatRequest(db,auth,context.auth,{method:'POST',path:`/v1/sessions/${sessionId}/turns`},patConfig,false);
+}, async (tx,context) => {
+  if (context.auth?.credentialKind === 'pat') await assertPatTransaction(db,tx,context.auth,patConfig);
+});
 
 const chatFlow = ai.defineFlow(
   {
@@ -165,7 +172,7 @@ export const exportUserData = onCall(
 );
 
 export const deleteAccount = onCall(
-  { region: REGION, enforceAppCheck: ENFORCE_APP_CHECK },
+  { region: REGION, enforceAppCheck: ENFORCE_APP_CHECK, secrets:process.env.STRIPE_BILLING_ENABLED==='true'?['STRIPE_SECRET_KEY']:[] },
   async (req) => {
     try {
       const uid = req.auth?.uid;
@@ -181,11 +188,15 @@ const matchesRoute=(route:{method:string;path:string},method:string,path:string)
 // HTTP migration entry; legacy Callable clients remain supported.
 export const businessApi = onRequest({
   region: REGION, timeoutSeconds: 180, invoker: 'public',
-  cors: [`https://${process.env.GCLOUD_PROJECT || 'yhvhchen-387212'}.web.app`, `https://${process.env.GCLOUD_PROJECT || 'yhvhchen-387212'}.firebaseapp.com`, ...(process.env.FUNCTIONS_EMULATOR === 'true' ? [/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/] : [])],
+  secrets: process.env.STRIPE_BILLING_ENABLED === 'true' ? ['STRIPE_SECRET_KEY','STRIPE_WEBHOOK_SECRET'] : [],
+  cors: [...webOrigins(), ...(process.env.FUNCTIONS_EMULATOR === 'true' ? [/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/] : [])],
 }, createHttpApi({
+  stripeWebhook: (rawBody,signature) => handleStripeWebhook(db,auth,rawBody,signature),
   verifyToken: token => verifyApiIdentity(auth, token),
+  verifyPat: raw => verifyPat(db,auth,raw,patConfig),
+  authorizePat: (identity,request) => authorizePatRequest(db,auth,identity,request,patConfig),
   publicRoute: (method,path) => [...actionRoutes,...countryRoutes].some(r=>'public' in r && r.public && matchesRoute(r,method,path)),
   stream: (body,identity,emit,signal) => runChat(body,{auth:identity,turnId:identity.turnId},emit,signal).catch(error=>{throw toHttpsError(error);}),
   ...(ENFORCE_APP_CHECK ? {verifyAppCheck: (token: string) => getAppCheck().verifyToken(token)} : {}),
-  dispatch: input => countryRoutes.some(r=>matchesRoute(r,input.method,input.path)) ? dispatchCountryApi(db,input) : /\/turns\//.test(input.path) ? dispatchTurnApi(db,input) : input.path.startsWith('/v1/tuning/') ? dispatchTuningApi(input) : actionRoutes.some(r=>matchesRoute(r,input.method,input.path)) ? dispatchActionApi(db, auth, input) : dispatchBusinessApi(db, input),
+  dispatch: input => patRoutes.some(r=>matchesRoute(r,input.method,input.path)) ? dispatchPatApi(db,auth,input.auth,input,patConfig) : countryRoutes.some(r=>matchesRoute(r,input.method,input.path)) ? dispatchCountryApi(db,input) : /\/turns\//.test(input.path) ? dispatchTurnApi(db,input) : input.path.startsWith('/v1/tuning/') ? dispatchTuningApi(input) : actionRoutes.some(r=>matchesRoute(r,input.method,input.path)) ? dispatchActionApi(db, auth, input) : dispatchBusinessApi(db, input),
 }));

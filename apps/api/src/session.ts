@@ -2,7 +2,7 @@ import { settleQuotaInTransaction } from './quota.js';
 import { turnRef } from './turns.js';
 import { resolveSubjects } from './subjects.js';
 import { defaultBundle } from './prompt-bundle.js';
-import type { Firestore } from 'firebase-admin/firestore';
+import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
   CreateSessionRequestSchema,
@@ -114,6 +114,8 @@ export async function acquireSessionTurn(
 export async function commitSessionTurn(
   db: Firestore,
   params: {
+    signal?: AbortSignal;
+    authorize?: (tx:Transaction) => Promise<void>;
     settlement?: {periodStart:string;costMicroUsd:number;requestId:string};
     durableResult?: unknown;
     uid: string;
@@ -158,8 +160,14 @@ export async function commitSessionTurn(
     }
 
     const durable = params.durableResult === undefined ? null : turnRef(db,uid,sessionId,turnId);
-    if (durable && (await tx.get(durable)).data()?.status !== 'running') throw new HttpsError('aborted','TURN_CANCELLED');
+    const state = durable ? (await tx.get(durable)).data() : null;
+    if (durable && state?.status !== 'running') {
+      const failure = state?.status === 'cancelled' ? 'TURN_CANCELLED' : ['MODEL_TIMEOUT','TURN_INTERRUPTED','TURN_DISCONNECTED','TURN_OBSERVER_FAILED'].includes(state?.error) ? state?.error : 'TURN_INTERRUPTED';
+      throw new HttpsError(failure === 'MODEL_TIMEOUT' ? 'deadline-exceeded' : 'aborted', failure);
+    }
+    await params.authorize?.(tx);
     if (params.settlement) await settleQuotaInTransaction(db,tx,{uid,...params.settlement});
+    params.signal?.throwIfAborted();
     if (durable) tx.update(durable,{status:'completed',result:params.durableResult});
 
     for (const msgId of replacedMessageIds) {

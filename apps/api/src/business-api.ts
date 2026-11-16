@@ -36,7 +36,7 @@ export const businessRoutes = [
 ];
 export interface BusinessRequest {
   method: string; path: string; query?: unknown; body?: unknown;
-  // Only the HTTP adapter may populate this after verifying a Firebase ID token.
+  // Only the HTTP adapter may populate this after verifying the credential and authorizing its route.
   auth?: { uid: string; token: Record<string, unknown> };
 }
 export async function dispatchBusinessApi(db: Firestore, request: BusinessRequest): Promise<{ status: number; body: unknown }> {

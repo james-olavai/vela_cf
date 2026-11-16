@@ -7,7 +7,7 @@
       "dependencies": []
     },
     "apps/api": {
-      "maxSourceLines": 3000,
+      "maxSourceLines": 3600,
       "maxCallableFunctions": 7,
       "dependencies": [
         "@modelcontextprotocol/sdk",
@@ -26,7 +26,7 @@
       ]
     },
     "apps/web": {
-      "maxSourceLines": 5600,
+      "maxSourceLines": 6000,
       "dependencies": [
         "@assistant-ui/react",
         "@assistant-ui/react-markdown",

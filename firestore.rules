@@ -25,6 +25,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 个人访问令牌含摘要，只能通过已鉴权服务端管理；用户本人也不能直接读取。
+    match /apiTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
     // 城市缓存：仅服务端读写
     match /locations_cache/{queryKey} {
       allow read, write: if false;

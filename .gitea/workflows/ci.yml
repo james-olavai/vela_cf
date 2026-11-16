@@ -11,6 +11,10 @@ on:
         description: 'Release this main commit after all checks and real Vertex smoke'
         type: boolean
         default: false
+      bootstrap_staging:
+        description: 'First staging deployment only; refuses existing users/data/functions/releases'
+        type: boolean
+        default: false
 concurrency:
   group: vela-ci-and-release
   cancel-in-progress: false
@@ -49,7 +53,7 @@ jobs:
       - run: npm test
       - run: npm run test:prompts
       - name: Real Firestore Rules and quota transaction emulator tests
-        run: npx --yes firebase-tools@15.36.0 emulators:exec --only auth,firestore --project demo-vela-ci --config firebase.ci.json "npm run test:rules && npm run test:api-emulator"
+        run: npx --yes firebase-tools@15.36.0 emulators:exec --only auth,firestore --project demo-vela-ci --config firebase.ci.json "npm run test:rules && npm run test:api-emulator && npm run test:pat-emulator && npm run test:stripe-emulator"
       - name: Install isolated browser tooling
         run: |
           npm install --prefix "$RUNNER_TEMP/vela-browser" --no-package-lock --ignore-scripts playwright-core@1.62.1
@@ -57,6 +61,8 @@ jobs:
       - name: Browser regressions (mocked data, no paid calls)
         run: PLAYWRIGHT_CORE_PATH="$RUNNER_TEMP/vela-browser/node_modules/playwright-core" ARTIFACT_DIR=artifacts/browser npm run test:ci-ui
       - run: npm run build && npm --workspace apps/api run build
+      - name: Token settings browser regressions
+        run: PLAYWRIGHT_CORE_PATH="$RUNNER_TEMP/vela-browser/node_modules/playwright-core" npm run test:pat-ui
       - name: Real Functions and browser API integration
         run: |
           FIRESTORE_DATABASE_ID='(default)' OTEL_SDK_DISABLED=true METADATA_SERVER_DETECTION=none PLAYWRIGHT_CORE_PATH="$RUNNER_TEMP/vela-browser/node_modules/playwright-core" npx --yes firebase-tools@15.36.0 emulators:exec --only functions,auth,firestore --project demo-vela-ci --config firebase.api-ci.json "npm run test:api-functions && npm run test:api-browser"
@@ -73,7 +79,7 @@ jobs:
           path: artifacts/
           if-no-files-found: ignore
           retention-days: 14
-  deploy-firebase:
+  deploy-staging:
     needs: ci
     if: >-
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
@@ -86,24 +92,91 @@ jobs:
         with:
           node-version: '22.23.2'
       - run: npm ci
+      - name: Validate staging project configuration
+        run: node scripts/ci/environments.mjs staging
       - uses: actions/download-artifact@v3
         with:
           name: release-${{ github.sha }}
-      - name: Use the exact artifact tested by CI
+      - name: Use the exact code artifact tested by CI
         run: mkdir -p .release && tar -xzf release.tar.gz -C .release
-      - name: Candidate Vertex check, deploy, verify and automatically roll back on failure
+      - name: Install isolated staging browser tooling
+        run: |
+          npm install --prefix "$RUNNER_TEMP/vela-browser" --no-package-lock --ignore-scripts playwright-core@1.62.1
+          node "$RUNNER_TEMP/vela-browser/node_modules/playwright-core/cli.js" install --with-deps chromium
+      - name: Bind staging configuration without rebuilding code
         env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+        run: node scripts/ci/bind-artifact.mjs staging
+      - name: Candidate Vertex, deploy staging, verify and roll back on failure
+        env:
+          VELA_ENVIRONMENT: staging
+          VELA_BOOTSTRAP_STAGING: ${{ inputs.bootstrap_staging || 'false' }}
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_STAGING_SERVICE_ACCOUNT_B64 }}
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI: 'true'
+        run: |
+          set -eu
+          test -n "$FIREBASE_SERVICE_ACCOUNT_B64" || { echo 'Missing mandatory staging release credentials'; exit 1; }
+          umask 077
+          CREDENTIAL_FILE="$RUNNER_TEMP/vela-staging-credentials.json"
+          trap 'rm -f "$CREDENTIAL_FILE"' EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_B64" | base64 --decode > "$CREDENTIAL_FILE"
+          export GOOGLE_APPLICATION_CREDENTIALS="$CREDENTIAL_FILE"
+          export PLAYWRIGHT_CORE_PATH="$RUNNER_TEMP/vela-browser/node_modules/playwright-core"
+          node scripts/ci/release-preflight.mjs
+          node --import ./scripts/register-ts.mjs scripts/ci/vertex-live.mjs
+          npm run release
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: staging-evidence-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+  deploy-production:
+    needs: [ci, deploy-staging]
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && (inputs.deploy_firebase == true || inputs.deploy_firebase == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - run: npm ci
+      - name: Validate production project configuration
+        run: node scripts/ci/environments.mjs production
+      - uses: actions/download-artifact@v3
+        with:
+          name: release-${{ github.sha }}
+      - name: Use the exact code artifact tested by CI
+        run: mkdir -p .release && tar -xzf release.tar.gz -C .release
+      - uses: actions/download-artifact@v3
+        with:
+          name: staging-evidence-${{ github.sha }}
+          path: staging-evidence
+      - name: Bind production configuration without rebuilding code
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+        run: node scripts/ci/bind-artifact.mjs production
+      - name: Candidate Vertex, deploy production, verify and roll back on failure
+        env:
+          VELA_ENVIRONMENT: production
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           CI_COMMIT_SHA: ${{ github.sha }}
           CI: 'true'
         run: |
           set -eu
-          test -n "$FIREBASE_SERVICE_ACCOUNT_B64" || { echo 'Missing mandatory release credentials'; exit 1; }
+          test -n "$FIREBASE_SERVICE_ACCOUNT_B64" || { echo 'Missing mandatory production release credentials'; exit 1; }
           umask 077
-          CREDENTIAL_FILE="$RUNNER_TEMP/vela-release-credentials.json"
+          CREDENTIAL_FILE="$RUNNER_TEMP/vela-production-credentials.json"
           trap 'rm -f "$CREDENTIAL_FILE"' EXIT
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_B64" | base64 --decode > "$CREDENTIAL_FILE"
           export GOOGLE_APPLICATION_CREDENTIALS="$CREDENTIAL_FILE"
+          export PLAYWRIGHT_CORE_PATH="$RUNNER_TEMP/vela-browser/node_modules/playwright-core"
+          node scripts/ci/release-preflight.mjs
           node --import ./scripts/register-ts.mjs scripts/ci/vertex-live.mjs
           npm run release
       - uses: actions/upload-artifact@v3

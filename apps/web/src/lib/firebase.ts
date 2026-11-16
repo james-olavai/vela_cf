@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import firebaseConfig from '../../../../firebase-applet-config.json';
+import { firebaseConfig } from './runtimeConfig';
 
 const app = initializeApp(firebaseConfig);
 

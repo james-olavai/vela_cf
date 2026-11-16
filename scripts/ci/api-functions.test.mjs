@@ -37,6 +37,11 @@ test('compiled Functions API enforces bearer identity, CORS and current tuning r
     const call = apiClient(base, user.idToken);
     assert.equal((await apiClient(base, uid)('GET', '/v1/me')).status, 401);
     await profileSmoke(call);
+    const tokenCapability=await call('GET','/v1/me/api-token-capabilities');assert.equal(tokenCapability.status,200);assert.deepEqual(tokenCapability.body,{canCreate:false,canManage:false});
+    const tokenList=await call('GET','/v1/me/api-tokens');assert.equal(tokenList.status,200);assert.deepEqual(tokenList.body.items,[]);
+    const tokenCreate=await call('POST','/v1/me/api-tokens',{name:'Hidden feature',scopes:['profiles:read']});assert.equal(tokenCreate.status,403);assert.equal(tokenCreate.body.error.code,'PAT_DISABLED');
+    assert.equal((await apiClient(base,'vela_pat_invalid')('GET','/v1/profiles')).status,401);
+    assert.equal((await call('DELETE','/v1/me/api-tokens/missing')).status,404);
     const me=await call('PATCH','/v1/me',{acceptedTerms:true,confirmedAdult:true,displayName:'API Synthetic'});assert.equal(me.status,200);
     const profile=await call('POST','/v1/profiles',{...birth,name:'Original profile',locationName:'Shanghai',gender:'female'});assert.equal(profile.status,201);
     const session=await call('POST','/v1/sessions',{mode:'personal',subjects:[{ref:'saved-person',profile_id:profile.body.id}]});assert.equal(session.status,201);

@@ -424,6 +424,9 @@ A/B 固定资料、问题、历史、参考时间、运行时、模型及工具�
 
 | 项 | 触发条件 | 做法 |
 | --- | --- | --- |
+| Stripe 扩展替代接入（已批准，实施中） | 用户要求线上安装；已发布 0.3.12 固定 Node.js 20 与默认 Firestore，无法满足当前运行时及命名数据库 | 建议在现有 Node.js 22 businessApi 内使用已安装 Stripe SDK，实现 Checkout、Portal 与签名 Webhook；保留现有数据库、区域与函数数量。具体范围见 §11.13，用户已要求派子代理实施；复用原扩展逻辑迁移至二代函数，保留上游许可，不再依赖旧扩展管理服务。部署前仍须通过测试与发布门禁 |
+| Token 自助管理前端 5600 → 6000（已批准） | 用户要求现有登录态内申请，避免手工复制 Firebase Token；完整重认证、一次性 secret、权限与撤销界面超出现有约 81 行余量 | 按 §11.11.9 实施；负责人已批准并同步 boundaries.json，不扩大依赖、平台或函数 |
+| 隐藏 PAT 与 API 行数预算 3000 → 3600（已批准） | 用户要求实施 §11.11；短期 Firebase ID Token 不替代可撤销、限定权限的用户 API 凭据；当前 API 预算接近用尽 | 保留默认禁用；完整认证、管理及权限检查预计增加 320–440 行，不能压缩安全校验或规避计数。负责人已明确批准，现同步 boundaries.json；依赖、平台、函数数不变；环境发布与常规 Firebase 身份测试先行 |
 | 内置地点目录与国家事件盘（2026-11-16 设计确认，待实施） | 用户要求输入地点即时匹配、外部搜索兜底，并从档案自动关联国家盘，避免手填国家成立资料 | 按 §11.10 扩展现有 `businessApi`；不新增函数、平台、依赖或放宽代码预算。仅设计已确认，目录来源审核、接口、前端及验收仍待实施 |
 | 统一业务与 Prompt 调优 OpenAPI（2026-11-16 设计确认，待实施） | 真实用户 Token 的业务 E2E 与统一调优调用需求已明确；现有直连 Firestore、Callable 与本地 MCP 不能提供统一业务契约 | 按 §11 分阶段迁移；负责人已允许突破六个函数上限，实施时调整实际函数清单与机器边界；该授权不自动扩大其他依赖、平台和行数预算 |
 | 定制化运营后台 UI | Firebase Console + Stripe Dashboard 无法满足非技术运营的日常操作 | 优先接 Rowy / Retool 直连 Firestore；或新增受 `admin: true` Claim 保护的轻量管理页 |
@@ -602,6 +605,8 @@ CI 登录专用合成账号取得短期 Firebase ID Token；测试客户端与�
 普通用户仅访问本人业务数据；调优人员可编辑草稿、执行评估、查看授权范围内结果；发布人员另有发布与回滚权限。建议以受信任管理流程设置的 Custom Claims 表达 `tuningEditor`、`tuningPublisher`，客户端不可自行授予。发布等敏感动作重新核验当前权限与账号状态，不能仅依赖客户端缓存或长期有效的旧权限。审计记录验证后的 UID、动作、目标版本、时间、请求 ID 和结果，不记录 Token。
 
 档案等操作迁到 Admin SDK 后会绕过 Firestore Rules，必须在 API 显式校验输入、资源归属和允许修改的字段；套餐、额度与冻结配置由服务端推导。迁移结束后收紧已废弃的客户端写路径。若暂保留只读实时订阅，必须列为过渡例外，并测试其 Rules；不能宣称已全部收敛。
+
+个人访问令牌、CI 测试身份及未来 MCP OAuth 的扩展设计见 §11.11；本地实施与部署状态见该节，当前已部署接口仍只接受原有 Firebase 用户鉴权。
 
 ### 11.3 业务接口与部署分组
 
@@ -883,3 +888,175 @@ CI 增加契约漂移检查、基于 PR 基线的保守兼容检查及真实 Aut
 主功能本地验收：默认测试 114 项中 112 通过、2 个真实 Firestore 专用用例在默认命令中显式跳过并在模拟器组运行通过；Prompt 12/12；真实 Rules 2/2、业务 HTTP/Firestore 11/11、Functions/聊天 4/4。真实 Chromium 流程通过地点键盘/IME选择、改字清除选择、保存规范引用、国家推荐/明确选入及会话冻结；既有 API 浏览器回归及完整视觉 UI 回归通过。最后的契约/目录/发布/前端缓存专项 26/26 通过，事件内容哈希额外验证属性顺序不影响版本标识。边界/类型、OpenAPI 生成与旧基线兼容、前后端构建、目录来源/版本检查及本地发布产物哈希验证通过。预算 API 2980/3000、Web 5506/5600、Shared 375/380，未扩大边界。上述为本地证据；没有推送远端、运行生产国家盘模型验收或部署新功能。
 
 读兼容准备版本已在独立工作树 `/tmp/vela-location-read-compat`、分支 `fix/location-read-compat` 完成，本地提交 `9aa5d74bd9ef8c824c898cef597174412e06b0f4`（未推送）：默认 88 项通过、2 项模拟器专用跳过，Prompt 12 项、真实 Functions/聊天 4 项通过，类型/构建/旧基线契约及产物验证通过。主功能已同时通过原线上与准备版 OpenAPI 基线检查；会话响应保留 countryCode/locationSource，档案国家码沿用两位大写约束。契约门禁仅在响应方向允许无约束对象细化为具体对象，带字段名/值约束的对象及请求方向均不放行，已有回归测试覆盖。部署仍须先发布并线上核验准备版，再发布主功能。
+
+
+### 11.11 个人访问令牌、在线测试与未来 MCP 授权（2026-11-16，部分本地实施）
+
+本节记录用户提出的“先隐藏令牌能力，未来用户自行申请用于 MCP”方向，并承接测试/正式环境发布方案。用户已要求子代理实施；本地实现状态见 §11.11.8，以下目标契约不代表全部已交付。没有创建长期凭据或云端环境，不开放申请入口，按已批准的 3600 行 API 预算实施并更新 OpenAPI，不新增依赖或平台。Remote MCP 仍是后续范围；实现需要另行验收，不因预留认证字段提前建设 OAuth 服务或 MCP 平台。
+
+#### 11.11.1 身份与凭据边界
+
+| 凭据 | 使用方与目的 | 生命周期与边界 |
+| --- | --- | --- |
+| Firebase ID Token | 网页、现有 API、CI 的常规用户权限 E2E | 保持短期有效，CI 每次运行自动登录获得新 Token；不持久保存个人账户 ID Token 或 refresh token 来维持测试 |
+| Vela personal access token（PAT） | 将来的用户脚本、直接 API、支持手动凭据的客户端/本地 MCP 适配器 | 服务端签发、有限期限、限定权限和环境，可逐个撤销；不是 Firebase ID Token 的永久版本 |
+| MCP OAuth access token | 未来通用远程 HTTP MCP 客户端 | 经用户授权产生，绑定客户端、scope 和 MCP resource/audience；OAuth 与 PAT 采用不同凭据类型，不能假设所有 MCP 客户端支持手工粘贴 PAT |
+
+UID 始终只是身份标识，不能作为凭证。认证成功后才由服务端形成 `{uid, credentialKind, credentialId?, scopes?, environment}` 上下文；路由继续校验当前账号状态、资源归属、有效套餐和额度，不能信任请求正文、工具参数或自定义 Header 中的 UID/权限。PAT 不携带可长期冻结的管理员或 Pro 权益，降档和账号禁用在后续请求生效。不同凭据汇入现有业务逻辑，不复制档案、生成与结算实现。
+
+#### 11.11.2 隐藏与渐进开放
+
+服务端受控配置采用 `disabled / internal / public` 三种状态，并按环境分别配置。默认 `disabled`：不签发或接受 PAT；网页无创建入口。`internal` 仅允许受控测试 UID 名单签发和使用，生产个人账户不自动进入名单；前端隐藏、查询参数、构建变量或知道接口地址都不能越过服务端开关。`public` 才开放已验收的用户自助申请。状态和名单不能由普通用户写入。
+
+后续关闭能力时，已签发 PAT 也必须停止通过认证；持有效 Firebase 登录的所有者仍能列出和撤销自己的既有令牌。创建入口可隐藏，但已有凭据的撤销能力不能随入口开关丢失。灰度状态下移出名单同样使后续 PAT 请求失效。初期内部测试可通过受控 API 申请，无需先制作公开设置页面。
+
+#### 11.11.3 管理 API 与存储契约
+
+以下为目标接口，复用 `businessApi`，实际实现后才进入生成 OpenAPI：
+
+| 接口 | 请求与响应 | 认证 |
+| --- | --- | --- |
+| `POST /v1/me/api-tokens` | 输入名称、明确 scopes、期限及可选档案限制；返回令牌元数据及仅此一次的完整 secret，`Cache-Control: no-store` | 仅本人 Firebase ID Token；校验近期认证（建议 5 分钟内）和开放状态，不接受 PAT 创建/续期其他令牌 |
+| `GET /v1/me/api-tokens` | 有界分页返回 id、名称、遮罩前缀、权限、期限、状态与近似最近使用时间 | 仅本人 Firebase ID Token；不返回 secret 或摘要 |
+| `DELETE /v1/me/api-tokens/{id}` | 幂等撤销；无论是否正在灰度，都保留所有者撤销能力 | 仅本人 Firebase ID Token；不提供 PAT 管理自身之外凭据的旁路 |
+
+建议令牌形如 `vela_pat_<env>_<id>_<secret>`，secret 至少 256 位加密安全随机数；前缀只用于识别，不代表认证成功。Firestore 私有 `apiTokens/{id}` 保存 `uid / environment / audience / name / secretHash / scopes / profileIds / createdAt / expiresAt / revokedAt / lastUsedAt`；只保存强随机 secret 的 SHA-256 摘要，按 id 定位并恒定时间比较摘要。明文只在成功创建时返回，不进入日志、URL、分析埋点、Git、错误详情、导出文件或测试产物；丢失时重新创建并撤销旧凭据，不提供找回。
+
+建议默认 30 天、最长 90 天、每个用户最多 5 个有效 PAT；这些是待实施的默认策略，不是现行产品权益。不签发永久令牌，不自动续期；轮换为创建新令牌、更新客户端、撤销旧令牌，每个令牌独立追踪。管理写入和数量限制使用事务，拒绝未知/重复/空 scope、非法期限、外人或不存在的 profileIds。Firestore 客户端 Rules 拒绝直接读写该集合；账户删除清理其所有 PAT，导出不包含摘要。
+
+PAT 的 audience 由服务端受控资源清单确定，首版仅业务 API；本地 MCP 适配器用该凭据访问业务 API，未来远程 MCP 如支持 PAT，须另行签发面向 MCP 资源的凭据，不能忽略 audience 复用。每次 PAT 请求检查环境、audience、摘要、期限、撤销状态及 Firebase 当前账号存在/禁用状态；账户级撤销需关联统一凭据撤销时间（包括 Firebase `tokensValidAfterTime`），避免只撤销网页登录却遗留 PAT。撤销后的新请求不使用长时间缓存放行；已开始的生成不能承诺瞬时撤回，取消与提交前授权复核复用现有 turn 机制，边界需单独验收。`lastUsedAt` 可合并写入，不作为授权依据。
+
+#### 11.11.4 权限、费用与 API 兼容
+
+建议第一版 scopes 为 `profiles:read`、`charts:compute`、`sessions:read`、`sessions:create`、`turns:write`、`usage:read`。创建令牌时明确勾选，默认最小只读权限；生成能力不默认授予。档案写入/删除、账户导出/删除、支付、分享领额度、Token 管理、Prompt 调优和发布均不在 PAT 首版范围。每条可调用路由声明要求的 scope，未列入允许清单的路由默认拒绝；scope 不能提升用户套餐或访问其他用户数据。
+
+允许限制 `profileIds` 时，它是权限收缩：档案读取、排盘、创建会话、读取已有会话及继续生成均验证涉及的档案；不能通过引用已冻结会话绕过限制。第一版受限令牌不接受直接生辰输入或仅含无 profile_id 对象的会话，国家事件引用也须满足所属请求上下文的限制；若无法完整证明约束，拒绝而非忽略。未来增加更细对象授权须同步契约和测试。
+
+PAT 与网页登录共用用户配额、并发锁、幂等键和用量结算；不得借“API 接入”默认获得无限额度。令牌级限流作为附加限制，免费/付费调用仍受同一用户总额度约束；上线前需确定具体限流值与成本上限。审计仅记录 credentialId、验证后 UID、操作、请求 ID、结果及用量；不得记录认证 Header。
+
+API 使用同一 `Authorization: Bearer` 入口，按显式令牌类型校验；疑似 PAT 格式验证失败不得尝试其他认证分支。现有 Firebase 验证、撤销状态和项目校验不减弱。App Check 按凭据类型和明确路由策略处理：保留网页原有要求，PAT 客户端不假装浏览器；为机器凭据开放的路由仍要求有效 PAT、scope 和服务端限流，不得全局关闭 App Check。OpenAPI 对每个操作如实列出支持的认证类型；管理接口只列 Firebase，不能因顶层声明而自动对所有路由开放 PAT。
+
+#### 11.11.5 MCP 接入预留
+
+未来用户设置提供“开发者接入”入口：命名客户端、选择权限/档案范围、设置期限、一次性复制、查看最近使用和撤销。对支持手工凭据的客户端提供 PAT 配置说明，不能宣传为所有 MCP 客户端通用。
+
+远程 HTTP MCP 单独按当时适用的 MCP 授权规范实现 OAuth 2.1、PKCE、授权与受保护资源发现、scope 授权及 resource/audience 验证；沿用 Firebase 作为用户登录身份源不等于 Firebase 已具备 MCP 所需 OAuth 授权服务。授权服务选型、客户端注册、刷新和撤销机制留待 MCP 实施阶段确定，不在本批自建身份平台。
+
+MCP 接受面向自身资源签发的凭据，验证后通过受信任服务端上下文复用业务能力；若 MCP 与业务 API 分开部署，必须设计验证过的内部委托或令牌交换，不把客户端的 MCP OAuth Token、Google Token 或 Firebase Token 盲目透传到其他 audience 的服务。PAT 不能当作 Firebase Custom Token 使用；也不预留匿名、原始 UID 或任意用户 impersonation 的 MCP 接口。
+
+#### 11.11.6 在线测试与两环境发布衔接
+
+staging / production 采用独立 Firebase 项目及受限部署身份；凭据、Auth 用户、数据库和环境 audience 分开。测试环境不默认复制生产档案。CI 的基础 E2E 继续自动登录合成账户获取 Firebase ID Token，不依赖尚未实现的 PAT，也不要求人工复制个人 Token。PAT 实现后单独增加认证等价性及权限拒绝测试，用仅测试环境、运行结束撤销的令牌验收真实 API；管理员权限只用于 fixtures 准备与清理，不代替业务 API 调用。
+
+发布顺序为固定代码/Prompt/目录产物 → 注入经过校验的 staging 配置 → 部署与真实浏览器/模型矩阵 → 所有必需用例通过 → 同一代码产物绑定 production 配置并校验哈希 → 正式部署后小规模冒烟与失败回滚。环境配置与业务代码分离，保持两个环境的模型版本、关键参数和 API 契约一致；不将测试数据库覆盖生产，也不承诺跨 Hosting/Functions/Rules 原子切换。保留 §11.9 后端先行、前端随后和回滚数据读兼容门禁。
+
+必须覆盖单人、双人、四人、公司、国家盘、额度用尽/无限额度、取消、超时、幂等和结果持久化；保存失败的阶段、脱敏错误码、requestId、耗时及清理结果，不自动重跑模型来覆盖第一次失败。2026-11-16 的验收已暴露双人生成达到 150 秒后误归类为取消/INTERNAL_ERROR，以及国家盘流失败触发回滚；错误分类修复及对应真实验收是后续正式发布的前置条件，不能以新增环境或 Token 能力代替修复。
+
+#### 11.11.7 分阶段验收
+
+1. **环境与常规 CI 身份**：拆分环境配置与固定产物，完成 staging 的自动登录、fixtures 和真实矩阵；正式发布保持原有回滚门禁。
+2. **内部 PAT**：实现管理 API、私有存储、principal 与路由 scope 检查；生产默认 disabled，staging 仅 internal 名单。测试跨 UID/环境拒绝、到期/撤销/禁用/降档、管理接口不接受 PAT、不开门时直接请求仍拒绝、无明文泄露、并发创建上限和档案范围不能绕过。
+3. **公开接入与 MCP**：明确成本/限流策略、客户端兼容矩阵和 OAuth 服务方案；验收通过后才开放用户申请入口及 MCP，不能只切换 UI 可见性当作完成。新增平台、依赖或代码预算仍遵守仓库边界审批流程。
+
+参考：[Firebase 用户会话与 Token 生命周期](https://firebase.google.com/docs/auth/admin/manage-sessions)、[Firebase 环境隔离建议](https://firebase.google.com/docs/projects/dev-workflows/general-best-practices)、[MCP 2026-07-28 授权规范](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)。
+
+#### 11.11.8 本地实施与部署前置条件
+
+本批由三个子代理分别负责环境发布、超时与真实测试矩阵、PAT 可行性及独立审查。环境配置和发布脚本已实施：构建一次固定代码产物，分别绑定 staging/production 配置；校验代码清单、哈希以及由可信目标配置产生的五个绑定文件内容。Vertex 证据绑定 SHA、codeHash、环境、项目及 configHash；生产要求同一代码产物的完整 staging 证据，不接受旧结果或被修改的绑定内容。网页从同源 runtime-config.js 载入目标配置，生产构建没有开发配置兜底。
+
+真实模型验收脚本固化 staging 八类与 production 四类用例，检查正文、工具、对象覆盖、终态、持久化、结算、锁释放及档案未修改；失败保留脱敏证据并清理，不自动重试。staging 增加真实 Firebase 登录和部署网页浏览器流程。成本门限基于应用已结算用量，不代表上游账单的硬上限。超时、主动取消、断连和观察失败分别返回安全错误码；生成后提交前重新核实授权与当前套餐。本地 Auth/Firestore HTTP 测试覆盖超时、取消、授权撤销及在途降档。尚未执行新环境的真实模型或浏览器验收。
+
+实际 `config/environments/staging.json` 和 staging 部署凭据尚缺，流水线会明确阻断，不回退到生产。首次部署前须建立独立 Firebase 项目、Web App、Auth、数据库、必要 API 与受限部署身份，按 `staging.example.json` 填入真实配置并运行 `npm run environment:check -- staging`。首次手动运行 workflow 使用 `deploy_firebase=true`、`bootstrap_staging=true`；脚本确认独立 staging 无既有 Functions、Hosting 发布、Auth 用户及 Firestore 集合，读取失败不视为空。生产不允许 bootstrap，后续 staging 发布关闭该开关。
+
+首次 bootstrap 失败时不存在旧版本可恢复：仅清理本次创建的函数、停用 Hosting 并恢复/移除本次 Rules release。停用 Hosting 会留下 disabled release 历史，再次 bootstrap 将被空项目门禁拒绝；应调查残留后规划受控恢复基线，或使用新的独立空 staging 项目，不能删除检查绕过。常规发布失败则恢复已有版本和受管环境变量，保留无关配置。
+
+独立审查发现并修复两处问题：绑定产物不能通过刷新外层 hashes 隐藏代码或配置改动；提交事务在所有异步读取后、每次重试中检查终止信号，避免在途超时仍写入消息和费用，并保留 durable turn 的安全失败分类。事务回归包括最后一次读取时终止、重试期间终止、失败原因与取消区别，以及成功提交后断线不撤销结果。
+
+本地验收：默认 136 项中 134 通过，2 个专用用例在默认组显式跳过并在模拟器通过；真实 Rules 2 项、业务 API 11 项、Functions/聊天 4 项以及 API 浏览器与视觉 UI 回归通过。类型/边界检查、前后端构建、OpenAPI 检查通过；实际构建产物分别使用本地 staging fixture 与 production 配置绑定，验证代码哈希不变及配置内容一致，没有据此部署。
+
+负责人已批准 API 行数预算 3000 → 3600，并同步 boundaries.json。PAT 管理三接口和路由认证已在本地实现，OpenAPI 合计 35 个操作：管理仅接受 Firebase 身份，创建要求 5 分钟内登录；业务入口对明确白名单允许 Firebase 或 PAT，公共目录继续允许匿名。疑似 PAT 不回退到其他验证分支，App Check 的机器例外只适用于验证成功且通过路由授权的 PAT，不改变网页策略。发布绑定仍固定 `PAT_MODE=disabled` 和空名单，默认隐藏网页入口；内部自助管理的后续实现见 §11.11.9。
+
+实际策略为默认 30 天、最长 90 天、每人最多 5 个有效凭据；256 位随机 secret 只在创建响应返回，数据库保存完整令牌的 SHA-256 摘要。用户私有锁通过事务限制并发创建数量；每令牌每分钟 60 次许可请求、其中最多 6 次生成尝试，不替代用户额度和并发锁。权限依据单一 PAT_ROUTE_SCOPES 表生成契约与运行时检查。每次请求及生成提交前重新检查记录、环境/audience、当前 Auth 状态、账户撤销时间、删除状态和当前权限；提交复核不重复消耗令牌请求计数。账户删除在查询订阅及 Stripe 调用前写入 in_progress，再清理所有令牌，防止并发创建漏删。消息/结算事务还读取令牌和账户状态，撤销、删除状态或权限范围修改造成冲突时重试并拒绝；Auth 禁用和全账户撤销属于跨服务状态，由提交前实时复核覆盖，不承诺与 Firestore 原子同步。审计记录服务端身份、credentialId、操作、请求 ID 与结果，不记录令牌明文。
+
+首版受限 profileIds 凭据拒绝档案与会话的集合列表，避免分页过滤遗漏权限；允许读取明确授权的单条资源。请求与冻结会话均检查全部对象，拒绝直接生辰、非授权档案及无法证明来源的国家事件对象；自动国家盘要求 source_ref 指向同一请求中的授权档案。无需范围限制的 PAT 仍支持有界列表。关闭能力后所有者仍可用 Firebase 登录列举及撤销自己的凭据。发布配置目前不自动启用内部 PAT；线上 internal 名单及生命周期验收仍须在独立 staging 配置就绪后受控开展。
+
+PAT 整合后的默认测试 153 项中 150 通过，3 项模拟器专用检查显式跳过并由实际模拟器组运行。真实 PAT HTTP/Auth/Firestore 14 项通过，包含 SDK 事务重试期间撤销、生成期间删除账户、消息与费用不落库、锁与临时身份清理；生成器使用受控结果以确定性触发竞态，不冒充真实模型验收。`test:pat-emulator` 已加入 CI 的 Auth/Firestore 步骤；编译 Functions 回归同时检查默认禁用签发、列表可用与无效 PAT 拒绝。类型/边界、API 构建、OpenAPI 漂移和旧契约兼容检查通过，API 为 3235/3600 行。
+
+无新增依赖、平台或 Cloud Functions。MCP 与公开申请界面仍未实施。本批未提交、推送或部署。
+
+#### 11.11.9 账户内 Token 自助管理与第三方连接边界（本批实施范围）
+
+用户使用现有 Google/Firebase 登录进入「账号与合规设置」中的「开发者接入」。后端由已验证的登录态取得 UID 并自动关联凭据；不要求用户输入 UID、邮箱或 Firebase ID Token，不以客户端提交的邮箱决定归属。Google 登录证明身份，创建 PAT 是用户对脚本/API 的授权；未来第三方远程 MCP 的「连接 Vela → 登录 → 确认权限 → 返回客户端」另走 OAuth 流程，不把个人 PAT 页面宣传为 MCP OAuth。
+
+新增 `GET /v1/me/api-token-capabilities`，仅接受 Firebase，返回 `canCreate / canManage` 布尔值；按当前服务端模式、内部 UID 名单及账户删除状态判定是否可创建，并以至多一条本人令牌记录判断是否保留管理入口。不返回名单或其他用户信息。普通未开放且无令牌的用户不显示入口；允许内部用户显示创建入口；关闭能力或移出名单后，持有既有凭据的用户仍可列表和撤销。接口失败不猜测可创建、不自动重试写操作。所有签发与路由鉴权仍在服务端执行，显示能力不能代替授权。
+
+管理区域复用现有设置弹窗，无新增路由/设置中心。展开后用现有 API 读取本人令牌分页及档案，显示名称、权限、档案范围、有效期、最近使用时间与撤销状态。创建表单提供名称、有效期（7/30/90 天）、明确权限及全部/指定档案；默认仅 `profiles:read`，生成权限不预选。指定档案使用名称选择，说明受限凭据不支持集合列表及直接生辰输入。档案加载失败时不允许悄悄退回全部档案权限；提交期间禁止重复操作。
+
+创建需要近期认证时，由用户点击「验证身份」触发 Firebase 重新认证，Google 账户使用 `reauthenticateWithPopup`，密码账户使用相应 credential；其他登录方式明确提示重新登录。成功后强制刷新 ID Token，确认仍是同一 UID，再由用户明确提交创建。取消弹窗、弹窗被阻止、账户不匹配、切换账户、退出、设置关闭均不得继续签发或展示前一账户结果。不得要求用户复制网页登录凭据。
+
+完整 PAT 仅在成功创建后展示一次，并提供复制和「已保存，关闭」操作；只保存在当前组件内存，不进 localStorage/sessionStorage、URL、日志或统计。关闭设置、切换账户或离开页面即丢弃；复制失败保留可手动选择的只读文本并明确提示失败。创建响应丢失时提示检查列表，无法找回 secret，只能撤销再建；不自动重发 POST。撤销使用当前条目的明确二次确认，完成后刷新列表；失败可显式重试。界面不显示 Token 摘要。
+
+验收覆盖：服务端 capability 与申请开关一致、普通用户隐藏、内部用户创建、关闭后可撤销、过期认证触发重新验证、取消验证不签发、一次性 secret 清理、账户切换/迟到响应隔离、重复点击、复制失败、分页、档案加载失败、撤销及键盘/窄屏交互。真实模拟器覆盖账户与 API 权限；浏览器中 Google 弹窗的取消/成功由受控适配模拟，真实 Google OAuth 仍需在线人工验收，不将模拟结果冒充线上授权通过。
+
+前端当前余量约 81 行，不足容纳完整安全交互，负责人已批准 `apps/web` 5600 → 6000 行；不新增依赖、平台或函数。能力 API、契约和测试已完成，本批接入正式界面，不通过压行或移出 src 绕过边界。默认发布配置保持 PAT disabled，实际 staging 和生产内部名单开启属于后续受控部署。
+
+本节实施验收：capability API、入口路由及生成契约已完成，本地 OpenAPI 共 36 个操作；仅 Firebase 可访问，响应无 UID 名单和令牌内容。负责人批准前端 6000 行预算后，已将 ApiTokensPanel、apiTokens 认证适配与 SettingsModal 接入正式源码，设置关闭或 UID 更换时卸载管理组件。正式页面使用当前登录身份，不需要输入邮箱、UID 或 Firebase Token；默认发布配置仍为 disabled。
+
+默认测试 155 项中 152 通过、3 项专用跳过；既有 PAT 真实 Auth/Firestore/HTTP 16 项及编译 Functions 4 项通过。正式 Settings/Modal 浏览器专项使用正式组件、真实 apiTokens.ts 与 apiClient.ts、最新构建 CSS，仅替换 Firebase SDK 的弹窗及用户状态：覆盖 Google/密码重新认证、getIdToken(true)、取消或认证中切换 UID、不自动 POST、能力与创建响应迟到、折叠/关闭后的密钥清理、Secret 不进入 Storage/URL/console、复制失败、分页、撤销与档案加载失败。首次列表未完成时，按钮和提交处理均阻止创建，避免旧快照覆盖新条目。
+
+实际 Settings 集成发现并修复原删除账号、账号信息及导出区的窄屏 flex 溢出；320px 完整创建表单及指定档案提交、360px 管理视图全部容器无横溢，Tab 焦点约束、Escape 关闭和返回触发控件通过。既有全套视觉 UI 回归通过；停止生成测试改为保持模型 fixture 打开直到点击停止，消除原固定 1 秒完成导致的测试时序竞争，没有放宽业务断言。类型/边界、OpenAPI 漂移、前后端构建和差异检查通过，API 3245/3600、Web 5756/6000。
+
+`npm run test:pat-ui` 已加入 CI，安排在 Web 构建后，使用正式源码和本次构建 CSS；不再支持临时草稿替代。真实 Google OAuth、独立 staging 在线验收仍待部署后执行，不能以受控 SDK 模拟替代。未提交、推送或部署，也未开启生产 PAT 或建立真实账户凭据。
+
+
+### 11.12 正式域名 velaastro.com
+
+用户已购买 `velaastro.com`，正式网站入口为 `https://velaastro.com`，浏览器 tab 与 Open Graph 页面标题统一为 `VelaAstro`。代码在 shared 中维护正式站点 origin 与对应 Firebase 项目，生产 API CORS 和支付 Checkout/Portal 返回 URL 共用精确 origin 允许列表；保留当前项目的 Firebase 默认 Hosting 域名，staging 不接受生产自定义域名。拒绝 HTTP 降级、任意端口、用户名伪装及相似后缀域名；www 不自动加入允许列表，若启用则先在 Hosting 配置跳转到根域。
+
+正式构建的分享链接和海报二维码使用新主域名；开发及独立 staging 继续使用当前站点 origin，防止测试分享误入生产。API 地址与 PAT audience 仍为当前 Cloud Functions 资源，不因网页换域名改变凭据受众。发布版本检测与回滚仍访问项目的 Firebase 默认 Hosting URL，以便自定义 DNS 未就绪时保留既有发布校验链路。
+
+本批只更新代码，不代表 DNS、HTTPS 或登录授权已生效。上线前在 Firebase Hosting 为当前生产站点连接根域名，按控制台给出的实际记录完成 DNS 验证并等待证书就绪；在 Firebase Authentication 添加 `velaastro.com` 为 Authorized Domain。若启用 reCAPTCHA/App Check，也须为对应 key 配置域名。当前 authDomain 保持已工作的项目 firebaseapp.com；如将来更换登录处理域，还须配置 Google OAuth redirect URI `https://velaastro.com/__/auth/handler` 并同步环境配置和校验，不能只替换字符串。完成后验证 Google 登录/重新认证、邮件登录回跳、支付返回和分享二维码。参见 [Firebase 自定义域名配置](https://firebase.google.com/docs/hosting/custom-domain)。
+
+
+### 11.13 Stripe 安装预检与付费验收（2026-11-16）
+
+**当前状态：尚未安装支付扩展，不能宣称 Vela 线上支付闭环已完成。** 用户提供的根目录 `.env` 中 `stripe_token` 经 Stripe API 验证为测试模式密钥。Go / Pro 商品 metadata `firebaseRole` 正确，默认价格分别为 USD 9.90 / 24.90 每月。当前项目只有 Delete User Data 扩展；Stripe 测试账户尚无 Webhook endpoint。根目录密钥不会自动成为 Functions 的生产配置，不写入源码、前端变量或日志。
+
+安装预检从 Firebase Extensions 注册表及发布源码核实 `invertase/firestore-stripe-payments@0.3.12` 的六个函数均为 Node.js 20、Firestore 触发器和 Admin SDK 固定 `(default)`，没有命名数据库参数。实际业务数据库为新加坡命名数据库，默认数据库位于悉尼。Google [运行时支持表](https://docs.cloud.google.com/functions/docs/runtime-support) 列出 Node.js 20 在 2026-10-30 退役，此后不能创建或重新部署；[Extensions FAQ](https://firebase.google.com/docs/extensions/faq-and-troubleshooting) 公告管理服务于 2027-03-31 关闭，已部署函数不因管理服务关闭而自动停止。此次在预检阶段阻止安装，未发起有部分资源落地风险的部署，未创建支付 secrets 或 Webhook。
+
+**已批准实施方向（用户要求派子代理执行）：** 优先复用原扩展源码与支付行为，迁移为二代函数；参考 Firebase [官方迁移指南](https://firebase.google.com/docs/extensions/users/migrate)及[自建 Function Kit 指南](https://firebase.google.com/docs/extensions/users/migrate-self-created)。官方替代包登记中 Stripe payments 当前为 PENDING_PUBLISHER，不能假定已有 npm 替代包可用。当前项目已将支付行为 API 化，优先将所需逻辑放入现有函数；这属于按现有架构适配原扩展，不宣称六个原函数全部原样迁移。 复用现有 `businessApi`、Node.js 22 和 Stripe SDK，保留新加坡命名数据库与现有付款 API；不增加依赖、函数或其他平台。Checkout 由服务器固定 Go / Pro 价格，客户身份仅取已验证 UID，Customer 创建与 Checkout 创建均持久化幂等键；禁止同一用户重复创建有效订阅。已有订阅通过 Customer Portal 升降级及取消。价格 ID 属于环境配置；API key 和 Webhook secret 存 Secret Manager 并显式绑定函数，不在发布产物中保存明文。
+
+Webhook 是单独的服务器到服务器路径：使用原始请求体验证 Stripe 签名及时间窗，不使用浏览器 Firebase Token 或 PAT；只豁免该精确路径的用户认证。校验环境 mode、已登记 customer→UID、允许的 price/product；不以客户端 metadata 或成功回跳授予权限。处理 Checkout 和订阅/发票相关事件，按事件 ID 幂等，处理重复、乱序和重试；读取 Stripe 当前状态，在用户级同步锁下更新 `customers/{uid}/subscriptions` 及 Auth `stripeRole`，保留其他 Custom Claims。Firestore 与 Auth 非原子，失败返回可重试状态，全部同步成功后才标记事件完成；有效订阅期末取消前保留档位，实际结束后撤回付费档位，拖欠状态按明确策略处理。删除账号保留先取消订阅、后删除 Auth 的现有顺序。具体竞态、同步失败恢复及超时语义须在实施测试中验收，不能用事件时间戳简单覆盖当前状态。
+
+**本次已完成的测试：**
+
+- `apps/api/src/action-api.test.ts` 新增五项支付安全回归；该文件 11/11 通过。覆盖各支付入口未登录拒绝、UID/price/role 注入拒绝、Go/Pro 服务端定价、回跳域名校验且拒绝前不写入、跨用户隔离、pending/completed/failed 状态与错误脱敏、订阅 Timestamp/数值归一化、Portal 缺配置/缺本人 customer 拒绝。默认 `npm test` 和现有 CI 自动执行，不依赖 Stripe 密钥。
+- `npm run test:stripe` 新增显式真实 Stripe 测试模式脚本；从环境 `STRIPE_SECRET_KEY` / `stripe_token` 或本地 `.env` 取密钥，拒绝 live key。独立测试客户、不填写真实用户邮箱、不更改真实用户档位；使用 Test Clock、官方测试 PaymentMethod 和实际 Go/Pro 价格，10 项检查通过：商品角色与价格、Checkout session 创建、Go 首次发票 paid、Pro 升级 paid、跨账期新发票 paid、期末取消前 active、期末 canceled。finally 删除测试时钟及关联客户/订阅；本次 cleanup 成功。Checkout 仅验证创建并过期，不冒充浏览器填卡完成。
+- 现有删号回归覆盖密钥缺失、取消失败、保留重试状态、仅重试剩余订阅及先取消后删除；它属于模拟测试，不替代真实支付事件回调。
+
+**仍待验收：** Webhook 验签、重复/乱序事件、续费失败、真实 Firebase `stripeRole`/额度同步、Portal 实际操作、真实网页 Checkout、税务与条款配置、线上删号取消订阅、独立 staging 全链路和正式发布。本次 provider 测试只验证 Stripe 自身生命周期，不作为 Vela E2E 或发布通过证据。PR 默认 CI 不注入支付密钥；当前 provider 脚本需显式运行，尚未绑定远端 CI secret。替代接入实施后，受信任 staging 发布必须运行完整支付闭环并保存脱敏证据，失败阻止生产晋级。
+
+**实施与验收更新：** 用户已授权子代理执行。已新增 `stripe-payments.ts`，从原扩展支付处理逻辑改编并在 `third_party/stripe-firebase-extensions/LICENSE` 保留完整上游许可；接入现有 `businessApi`，未新增依赖或 Cloud Function。固定服务端价格，Checkout 开启 automatic_tax、地址更新及条款勾选；Portal 管理已有订阅。精确 `POST /v1/billing/stripe-webhook` 使用原始 Buffer 验签，其他路由保留身份认证。Webhook 读取 Stripe 当前订阅而非采用旧事件 payload，事件成功后才记录完成；共享 `billingLocks/{uid}` 串行化付款、权限同步与删号，进程中断最多等待 15 分钟租约恢复。active/trialing 授予档位，past_due/unpaid/incomplete 撤回付费权限，期末取消前保持 active；保留其他 Auth Claims。删号同时取消 unpaid/incomplete/paused 等仍可恢复的订阅。
+
+默认支付关闭；独立环境配置支持非敏感 `billing.enabled/mode/goPriceId/proPriceId`，staging 拒绝 live；启用时绑定 Secret Manager 中的 `STRIPE_SECRET_KEY` 与 `STRIPE_WEBHOOK_SECRET`。发布回滚恢复原来的 Secret 版本引用以及支付环境变量。该实现是迁移所需支付行为，不包含原扩展的全部商品/价格/单次付款镜像功能。无完整可安装 npm Function Kit 的声明。
+
+本轮默认测试 169 项：166 通过、3 个环境专用测试跳过；新增真实 Auth/Firestore 支付模拟器 10 项通过，覆盖真实 Stripe SDK 签名、锁竞争、实际 Auth Claims、Timestamp 账期、重放/乱序、Auth 失败重试、降档及期末取消，Stripe 查询使用受控 provider fixture，不能代替线上 Stripe Webhook 传送。模拟器命令 `npm run test:stripe-emulator` 已纳入 CI。类型检查、边界检查、API 构建与差异检查通过，API 3394/3600、函数 7/7。
+
+**真实 Stripe 配置阻塞：** 扩展 provider 测试先通过 12 项（含续费失败 past_due）；随后使用核心相同的税务及条款参数测试 Checkout，Stripe 返回 400，明确提示尚未配置公开服务条款 URL。当前 `npm run test:stripe` 保留该失败并强制 finally 清理，不降低参数或跳过断言。故前述旧参数的生命周期通过不能作为实际 Checkout 可用证据。需在 Stripe Dashboard 设置经验证可公开访问的 Terms URL，并验证税务与 Customer Portal 配置，再重跑；尚未修改账户全局条款配置。当前缺实际 staging 环境配置与发布身份，未创建云端支付 secrets、Webhook 或部署；不能以本地测试通过替代 staging/生产闭环。
+
+另提供 `npm run test:stripe-lifecycle`，显式跳过 Checkout、输出 `checkout:not-run` 与 `scope:stripe-provider-only`，最后真实测试 11/11 通过、cleanup 成功；该命令用于独立验证订阅生命周期，不替代默认 Checkout 配置验收或 Vela 支付 E2E。
+
+### 11.14 Firebase 在线配置执行记录
+
+2026-11-16 用户授权通过 CLI 开始配置。已创建并启用 Firebase 独立项目 `velaastro-staging`（项目号 `313389777560`），关联与生产相同结算账户；Firestore `(default)` 位于 `asia-southeast1`，开启删除保护并已成功部署现有安全规则。已注册 Staging Web App、初始化 Auth、启用邮箱密码登录，仅授权 localhost 与 staging 默认 Hosting 域名；Google OAuth 独立 client 尚未配置。公共环境配置保存于 `config/environments/staging.json`，价格使用真实 Stripe test ID，支付 disabled，未复制生产用户数据。
+
+已启用 Functions/Cloud Run/Cloud Build/Artifact Registry/Secret Manager/Vertex AI/Remote Config 等所需 API。在 staging Secret Manager 创建 `STRIPE_SECRET_KEY` 并写入用户提供的测试密钥，未写日志、前端或环境配置；未创建虚假 Webhook secret。创建独立发布身份 `vela-release@velaastro-staging.iam.gserviceaccount.com`，尚未授予完整部署角色或接入 CI 身份，未生成长期私钥。尚未部署 staging Functions、前端或完成在线支付 E2E。
+
+生产 Hosting 已创建 `velaastro.com` 自定义域资源，Auth authorizedDomains 已精确追加根域且保留已有列表。当前状态 OWNERSHIP_MISSING / HOST_UNHOSTED / CERT_VALIDATING，生产前端版本未更换。Firebase 返回根域 A `199.36.158.100`、根域 TXT `hosting-site=yhvhchen-387212`，另有当前证书 `_acme-challenge` TXT；证书挑战值须以实际 API 查询结果为准。待用户提供 DNS 服务商信息或自行添加记录后继续验证。Stripe Tax 缺少真实 head_office，已向用户请求经营地址或自行填写；条款 URL 需公开可访问后配置。
+
+**用户配置后的复测：** Stripe Tax 已变为 active；使用税务及 required 条款参数的 `npm run test:stripe` 12/12 通过，含 Checkout 创建、付款、升级、续订、期末取消、失败续费及拖欠取消，cleanup:true。测试脚本已改为固定读取 staging 配置生成回跳 origin，随后单独用该 staging origin 创建同参数 Checkout 并验证成功/取消地址、tax enabled、terms required，成功且已清理。仅创建并过期 Checkout，不代表浏览器付款或真实 Webhook 同步完成。
+
+在线探测 staging `/terms`、`/privacy` 和 `/businessApi/v1/plans` 仍为 404，应用未部署；现有默认 Portal 配置支持取消，但 subscription_update disabled、默认返回与门户条款 URL 尚未设置。不能以 Stripe provider 通过宣布完整支付上线。
+
+
+**首次 staging 本地引导例外：** 为实际创建的新 staging 项目提供显式 `VELA_BOOTSTRAP_STAGING=true` 本地执行路径，仅允许 `environment=staging` 且使用明确指定、同项目的 impersonated service account / 带 SA impersonation 的 WIF ADC；记录 `releaseOrigin: local-staging-bootstrap`，不设置虚假的 `CI=true`。生产及非 bootstrap 本地发布继续拒绝。该入口只放宽执行地点，保留干净源码与固定产物校验、环境绑定、真实 Vertex 候选证据、空项目检查、失败回滚、浏览器与真实模型矩阵等全部检查；空项目检查失败即拒绝，不能用于二次发布。CI 正常发布记录 `releaseOrigin: ci`，生产晋级仍要求独立 staging 证据。

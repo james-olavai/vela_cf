@@ -1,0 +1,15 @@
+{
+  "environment": "production",
+  "firebase": {
+    "projectId": "yhvhchen-387212",
+    "appId": "1:541206690668:web:e26ffcd4b1f8d07d649149",
+    "apiKey": "AIzaSyBRaXkbOAgsLJbbacKFOIu_UUMn7-uhqoU",
+    "authDomain": "yhvhchen-387212.firebaseapp.com",
+    "firestoreDatabaseId": "ai-studio-velacf-811abd0a-45c7-449f-a973-2e2998b2ac79",
+    "storageBucket": "yhvhchen-387212.appspot.com",
+    "messagingSenderId": "541206690668",
+    "measurementId": "",
+    "oAuthClientId": "541206690668-60fd4uf28q3hru3bhqq6sk85g5goee7d.apps.googleusercontent.com",
+    "recaptchaSiteKey": ""
+  }
+}

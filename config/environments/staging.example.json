@@ -1,0 +1,15 @@
+{
+  "environment": "staging",
+  "firebase": {
+    "projectId": "REPLACE_WITH_STAGING_PROJECT",
+    "appId": "REPLACE_WITH_WEB_APP_ID",
+    "apiKey": "REPLACE_WITH_PUBLIC_FIREBASE_API_KEY",
+    "authDomain": "REPLACE_WITH_STAGING_PROJECT.firebaseapp.com",
+    "firestoreDatabaseId": "(default)",
+    "storageBucket": "",
+    "messagingSenderId": "REPLACE_WITH_PROJECT_NUMBER",
+    "measurementId": "",
+    "oAuthClientId": "",
+    "recaptchaSiteKey": ""
+  }
+}

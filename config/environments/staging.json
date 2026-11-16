@@ -1,0 +1,21 @@
+{
+  "environment": "staging",
+  "firebase": {
+    "projectId": "velaastro-staging",
+    "appId": "1:313389777560:web:2267c83bf6a570029646ed",
+    "apiKey": "AIzaSyAQhnTSwqdTphAiWG22QPbMxKn-B2lnK7Y",
+    "authDomain": "velaastro-staging.firebaseapp.com",
+    "firestoreDatabaseId": "(default)",
+    "storageBucket": "velaastro-staging.firebasestorage.app",
+    "messagingSenderId": "313389777560",
+    "measurementId": "",
+    "oAuthClientId": "",
+    "recaptchaSiteKey": ""
+  },
+  "billing": {
+    "enabled": true,
+    "mode": "test",
+    "goPriceId": "price_1UcNNvGqQiK4oDLRjQVzXq7L",
+    "proPriceId": "price_1UcNOSGqQiK4oDLRm7kFNt2X"
+  }
+}

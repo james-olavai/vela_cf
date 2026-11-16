@@ -1,4 +1,5 @@
 import { Modal } from './Modal';
+import { ApiTokensPanel } from './ApiTokensPanel';
 import { useEffect, useState, type FormEvent } from 'react';
 import { auth, updateAnalyticsConsent } from '../lib/firebase';
 import { navigate } from '../lib/router';
@@ -203,9 +204,9 @@ export function SettingsModal({
               </label>
             </div>
           ) : (
-            <div className="p-4 rounded-[12px] border border-border bg-panel-2 flex items-center justify-between gap-4">
+            <div className="p-4 rounded-[12px] border border-border bg-panel-2 flex flex-col items-stretch sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <p className="m-0 text-[14px] font-bold text-primary">{email}</p>
+                <p className="m-0 text-[14px] font-bold text-primary break-all">{email}</p>
                 <p className="m-0 mt-0.5 text-[13px] text-muted">
                   {auth.currentUser?.providerData.some((p) => p.providerId === 'google.com') ? 'Google 账号登录' : '邮箱账号登录'}
                 </p>
@@ -244,9 +245,10 @@ export function SettingsModal({
             </div>
           </div>
 
+          {open && uid && <ApiTokensPanel key={uid} uid={uid} />}
           {uid && (
             <>
-              <div className="p-4 rounded-[12px] border border-border bg-base flex items-center justify-between gap-4">
+              <div className="p-4 rounded-[12px] border border-border bg-base flex flex-col items-stretch sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <p className="m-0 text-[14px] font-bold text-primary">导出个人数据</p>
                   <p className="m-0 text-[13px] text-muted">导出本人全部出生档案、咨询会话与消息为 JSON。</p>
@@ -271,12 +273,12 @@ export function SettingsModal({
                 <p className="m-0 text-[14px] font-bold text-danger">删除账号（不可恢复）</p>
                 <p className="m-0 text-[13px] text-secondary">输入「删除」二字确认注销账号、取消订阅并永久清除所有档案与对话。</p>
                 <label htmlFor="delete-account">输入「删除」确认</label>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input id="delete-account"
                     placeholder="请输入：删除"
                     value={deleteText}
                     onChange={(e) => setDeleteText(e.target.value)}
-                    className="flex-1 min-h-[38px] px-3 rounded-[8px] border border-border-strong bg-panel text-primary text-[13px]"
+                    className="flex-1 min-w-0 min-h-[38px] px-3 rounded-[8px] border border-border-strong bg-panel text-primary text-[13px]"
                   />
                   <button
                     type="button"
@@ -287,7 +289,7 @@ export function SettingsModal({
                       catch (err) { setNotice(formatAppError(err, '删除失败，请重新登录后重试')); }
                       finally { setDeleteBusy(false); }
                     }}
-                    className="min-h-[38px] px-4 rounded-[8px] border border-danger bg-transparent text-[13px] font-bold text-danger cursor-pointer disabled:opacity-40"
+                    className="shrink-0 min-h-[38px] px-4 rounded-[8px] border border-danger bg-transparent text-[13px] font-bold text-danger cursor-pointer disabled:opacity-40"
                   >
                     {deleteBusy ? '删除中…' : '确认删除'}
                   </button>

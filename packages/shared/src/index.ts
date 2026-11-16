@@ -1,4 +1,6 @@
 import { z } from 'zod';
+export const PRODUCTION_WEB_ORIGIN = 'https://velaastro.com';
+export const PRODUCTION_FIREBASE_PROJECT = 'yhvhchen-387212';
 
 export const TierSchema = z.enum(['free', 'go', 'pro']);
 export type Tier = z.infer<typeof TierSchema>;

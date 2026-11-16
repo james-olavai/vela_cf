@@ -1,11 +1,11 @@
 // Builds a standalone, precompiled Functions package with the dependency versions tested by CI.
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { config } from './google.mjs';
+import { artifactHashes, codeIdentity, assertCleanSource } from './artifact.mjs';
+const sha=assertCleanSource();
 const out=resolve('.release');rmSync(out,{recursive:true,force:true});mkdirSync(out,{recursive:true});
 const read=path=>JSON.parse(readFileSync(path,'utf8'));
 const pkg=read('apps/api/package.json'), lock=read('package-lock.json');
@@ -31,23 +31,14 @@ cpSync('docs/openapi.json',resolve(out,'openapi.json'));
 cpSync('apps/api/data',resolve(out,'catalog-data'),{recursive:true});
 cpSync('firestore.rules',resolve(out,'firestore.rules'));
 const fb=read('firebase.json');
-writeFileSync(resolve(out,'firebase.json'),JSON.stringify({functions:[{source:'api',codebase:'default',runtime:'nodejs22'}],hosting:{...fb.hosting,public:'web'},firestore:{database:config.firestoreDatabaseId,rules:'firestore.rules'}},null,2));
+writeFileSync(resolve(out,'firebase.template.json'),JSON.stringify({functions:[{source:'api',codebase:'default',runtime:'nodejs22'}],hosting:{...fb.hosting,public:'web'},firestore:{rules:'firestore.rules'}},null,2));
 const functionInventory=read('scripts/ci/functions.json');
 const declared=[...readFileSync('apps/api/src/index.ts','utf8').matchAll(/export const (\w+) = (?:onCall|onCallGenkit|onRequest)\(/g)].map(m=>m[1]).sort();
 assert.deepEqual([...functionInventory.existing,...functionInventory.introduced].sort(),declared,'Function inventory does not match source exports');
-const sha=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 const rollbackCapabilities=['profile-location-metadata'];
 const requiredRollbackCapabilities=['profile-location-metadata'];
 writeFileSync(resolve(out,'web/version.json'),JSON.stringify({sha,rollbackCapabilities}));
-const hashes={};
-function hashFiles(dir='') {
-  for(const entry of readdirSync(resolve(out,dir),{withFileTypes:true})) {
-    const path=dir?`${dir}/${entry.name}`:entry.name;
-    if(entry.isDirectory()) hashFiles(path);
-    else { assert(entry.isFile(),`Unexpected release file: ${path}`); hashes[path]=createHash('sha256').update(readFileSync(resolve(out,path))).digest('hex'); }
-  }
-}
-hashFiles();
-writeFileSync(resolve(out,'manifest.json'),JSON.stringify({sha,rollbackCapabilities,requiredRollbackCapabilities,node:process.version,functionInventory,openApiHash:hashes['openapi.json'],runtimeDependencies:pkg.dependencies,hashes},null,2));
+const hashes=artifactHashes(out);
+writeFileSync(resolve(out,'manifest.json'),JSON.stringify({sha,rollbackCapabilities,requiredRollbackCapabilities,node:process.version,functionInventory,openApiHash:hashes['openapi.json'],runtimeDependencies:pkg.dependencies,...codeIdentity(hashes),hashes},null,2));
 execFileSync('tar',['-czf','release.tar.gz','-C',out,'.']);
 console.log(`Prepared immutable release ${sha}`);

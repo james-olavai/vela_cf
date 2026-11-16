@@ -1,6 +1,7 @@
+import { firebaseConfig } from '../lib/runtimeConfig';
 import { Modal } from './Modal';
 import { useEffect, useRef, useState } from 'react';
-import { MAX_MONTHLY_SHARE_BONUSES, type ProfileRecord, type Tier, type UsageRecord } from '@vela-cf/shared';
+import { PRODUCTION_WEB_ORIGIN, PRODUCTION_FIREBASE_PROJECT, MAX_MONTHLY_SHARE_BONUSES, type ProfileRecord, type Tier, type UsageRecord } from '@vela-cf/shared';
 import { renderVelaSharePoster } from '../lib/portrait';
 import { claimDailyShareBonus, formatAppError, type ChartSnapshot, type ShareClaimMethod } from '../lib/store';
 import { IconGift } from './Icons';
@@ -25,7 +26,7 @@ export function ShareBonusModal({ open, uid, tier, usage, profile, chart, onClos
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const summary = chart?.portrait ?? null;
-  const shareUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const shareUrl = !import.meta.env.DEV && firebaseConfig.projectId===PRODUCTION_FIREBASE_PROJECT ? PRODUCTION_WEB_ORIGIN : typeof window !== 'undefined' ? window.location.origin : '';
   const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   useEffect(() => {

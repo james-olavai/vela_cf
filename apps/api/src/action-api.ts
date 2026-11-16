@@ -3,8 +3,8 @@ import { z } from 'zod';
 import type { Firestore } from 'firebase-admin/firestore';
 import type { Auth } from 'firebase-admin/auth';
 import { HttpsError } from 'firebase-functions/v2/https';
-import Stripe from 'stripe';
-import { TIER_META, TierSchema, SubjectSchema, PortraitSummarySchema } from '@vela-cf/shared';
+import { createStripeCheckout, createStripePortal } from './stripe-payments.js';
+import { PRODUCTION_WEB_ORIGIN, PRODUCTION_FIREBASE_PROJECT, TIER_META, TierSchema, SubjectSchema, PortraitSummarySchema } from '@vela-cf/shared';
 import { NatalWheelInputSchema, TransitSnapshotInputSchema, natalWheel, transitSnapshot } from '@vela-cf/astrology';
 import { claimShareBonus, resolveUserPeriodAndTier } from './quota.js';
 import { exportAccountData, deleteAccountWithRetry } from './account.js';
@@ -36,14 +36,16 @@ export const actionRoutes = [
   { method:'GET',path:'/v1/billing/checkout-sessions/{id}',operationId:'getCheckout',params:z.object({id:Id}),response:Checkout,status:200 },
   { method:'POST',path:'/v1/billing/portal-sessions',operationId:'createPortal',body:z.object({returnUrl:ReturnUrl}).strict(),response:z.object({url:ReturnUrl}),status:200 },
 ];
+export function webOrigins(project=process.env.GCLOUD_PROJECT||PRODUCTION_FIREBASE_PROJECT) {
+  return [`https://${project}.web.app`,`https://${project}.firebaseapp.com`,...(project===PRODUCTION_FIREBASE_PROJECT && process.env.VELA_ENVIRONMENT!=='staging' ? [PRODUCTION_WEB_ORIGIN] : [])];
+}
 export function validateReturnUrl(raw:string) {
-  const url=new URL(raw), project=process.env.GCLOUD_PROJECT||'yhvhchen-387212';
-  const allowed=[`https://${project}.web.app`,`https://${project}.firebaseapp.com`];
+  const url=new URL(raw), allowed=webOrigins();
   const local=process.env.FUNCTIONS_EMULATOR==='true'&&url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname);
   if(url.username||url.password||(!allowed.includes(url.origin)&&!local)) throw new HttpsError('invalid-argument','INVALID_RETURN_URL');
   return url.href;
 }
-export async function dispatchActionApi(db:Firestore,auth:Pick<Auth,'deleteUser'>,request:BusinessRequest) {
+export async function dispatchActionApi(db:Firestore,auth:Pick<Auth,'deleteUser'>,request:BusinessRequest,billing={checkout:createStripeCheckout,portal:createStripePortal}) {
   const segments=request.path.split('/');
   const route=actionRoutes.find(r=>r.method===request.method&&r.path.split('/').length===segments.length&&r.path.split('/').every((s,i)=>s==='{id}'||s===segments[i]));
   if(!route) throw new HttpsError('not-found','ROUTE_NOT_FOUND');
@@ -82,11 +84,8 @@ export async function dispatchActionApi(db:Firestore,auth:Pick<Auth,'deleteUser'
       result={items:snap.docs.map(doc=>{const d=doc.data();return {id:doc.id,status:String(d.status||'unknown'),...(typeof d.role==='string'?{role:d.role}:{}),...(typeof d.current_period_end==='number'?{currentPeriodEnd:d.current_period_end}:d.current_period_end?.seconds?{currentPeriodEnd:d.current_period_end.seconds}:{})};})}; break;
     }
     case 'createCheckout': {
-      const price=process.env[input.tier==='go'?'STRIPE_PRICE_GO':'STRIPE_PRICE_PRO'];
-      if(!price) throw new HttpsError('failed-precondition','BILLING_NOT_CONFIGURED');
-      const data={price,success_url:validateReturnUrl(input.successUrl),cancel_url:validateReturnUrl(input.cancelUrl)};
-      const ref=await db.collection('customers').doc(uid!).collection('checkout_sessions').add(data);
-      result={id:ref.id,status:'pending'}; break;
+      validateReturnUrl(input.successUrl);validateReturnUrl(input.cancelUrl);
+      result=await billing.checkout(db,uid!,input); break;
     }
     case 'getCheckout': {
       const id=Id.parse(segments[4]),doc=await db.collection('customers').doc(uid!).collection('checkout_sessions').doc(id).get();
@@ -94,11 +93,7 @@ export async function dispatchActionApi(db:Firestore,auth:Pick<Auth,'deleteUser'
       const d=doc.data()!; result=d.error?{id,status:'failed',error:'CHECKOUT_FAILED'}:d.url?{id,status:'completed',url:String(d.url)}:{id,status:'pending'}; break;
     }
     case 'createPortal': {
-      const return_url=validateReturnUrl(input.returnUrl),key=process.env.STRIPE_SECRET_KEY;
-      if(!key) throw new HttpsError('failed-precondition','BILLING_NOT_CONFIGURED');
-      const customer=(await db.collection('customers').doc(uid!).get()).data()?.stripeId;
-      if(typeof customer!=='string'||!customer) throw new HttpsError('failed-precondition','BILLING_CUSTOMER_NOT_FOUND');
-      result={url:(await new Stripe(key).billingPortal.sessions.create({customer,return_url})).url}; break;
+      result=await billing.portal(db,uid!,validateReturnUrl(input.returnUrl)); break;
     }
   }
   const parsed=route.response.safeParse(result);

@@ -19,9 +19,9 @@ export async function beginTurn(db:Firestore,uid:string,session:string,id:string
     return null;
   });
 }
-export async function failTurn(db:Firestore,uid:string,session:string,id:string,cancelled:boolean) {
+export async function failTurn(db:Firestore,uid:string,session:string,id:string,error:string) {
   const ref=turnRef(db,uid,session,id);
-  await db.runTransaction(async tx=>{const snap=await tx.get(ref);if(snap.data()?.status==='running')tx.update(ref,{status:cancelled?'cancelled':'failed',error:cancelled?'TURN_CANCELLED':'TURN_FAILED'});});
+  await db.runTransaction(async tx=>{const snap=await tx.get(ref);if(snap.data()?.status==='running')tx.update(ref,{status:error==='TURN_CANCELLED'?'cancelled':'failed',error});});
 }
 export async function dispatchTurnApi(db:Firestore,input:{method:string;path:string;body:unknown;auth:{uid:string}}) {
   const match=/^\/v1\/sessions\/([A-Za-z0-9_-]{1,128})\/turns\/([A-Za-z0-9_-]{1,128})(\/cancel)?$/.exec(input.path);

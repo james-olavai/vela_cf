@@ -14,9 +14,9 @@ const {initializeApp,deleteApp}=require('firebase-admin/app'),{getAuth}=require(
 const authHost=process.env.FIREBASE_AUTH_EMULATOR_HOST;
 if(!/^127\.0\.0\.1:\d+$/.test(authHost||'')||!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||''))throw new Error('Chat integration requires local emulators');
 
-test('real HTTP chat runner persists messages and usage, uses frozen subject and cleans failed turns',async()=>{
+test('real HTTP chat runner persists messages and usage, uses frozen subject and cleans failed turns',async(t)=>{
   const app=initializeApp({projectId:'demo-vela-ci'},'api-chat-test'),db=getFirestore(app),auth=getAuth(app);
-  let uid,fail=false,observed,sessionId,hold=false,empty=false,invalid=false,generations=0,waiting,unblock,dropCompletedResponse=false,modelFailure,expectedSessionId;
+  let uid,fail=false,observed,sessionId,hold=false,empty=false,invalid=false,generations=0,waiting,unblock,dropCompletedResponse=false,modelFailure,expectedSessionId,authorizationFailure=false;
   const runner=createChatRunner(db,async(input,emit)=>{
     try {
     observed=input;++generations;
@@ -31,7 +31,7 @@ test('real HTTP chat runner persists messages and usage, uses frozen subject and
     if(fail)throw new HttpsError('unavailable','MODEL_BUSY');
     return {text:empty?'   ':'A useful synthetic reading for the API integration test.',uiBlocks:[],suggestions:[],toolParts:invalid?[undefined]:[],chart:{},usage:{inputTokens:10,outputTokens:10}};
     } catch(error) { modelFailure=error; throw error; }
-  });
+  },async()=>{if(authorizationFailure)throw new HttpsError('permission-denied','TOKEN_REVOKED');});
   const handler=createHttpApi({verifyToken:t=>verifyApiIdentity(auth,t),dispatch:i=>i.path.includes('/turns/')?dispatchTurnApi(db,i):dispatchBusinessApi(db,i),stream:(body,identity,emit,signal)=>runner(body,{auth:identity,turnId:identity.turnId},emit,signal)});
   const server=createServer(async(req,res)=>{
     const url=new URL(req.url,'http://localhost');let body='';for await(const chunk of req)body+=chunk;
@@ -92,6 +92,31 @@ test('real HTTP chat runner persists messages and usage, uses frozen subject and
     assert.equal((await call('POST',`/v1/sessions/${sessionId}/turns/cancel-me/cancel`,{})).body.status,'cancelled');
     assert.equal((await cancelled).at(-1).type,'error');hold=false;
     assert.equal((await call('GET',`/v1/sessions/${sessionId}/messages`)).body.items.length,2);
+    assert.equal((await call('GET','/v1/me/usage')).body.used,before);
+    // Fire the server's actual deadline signal without waiting 150 wall-clock seconds.
+    const originalTimeout=AbortSignal.timeout.bind(AbortSignal),deadline=new AbortController();
+    const timeoutMock=t.mock.method(AbortSignal,'timeout',ms=>ms===150000?deadline.signal:originalTimeout(ms));
+    try {
+      hold=true;const {pending:timedOut}=await startHeld('server deadline','server-timeout');
+      deadline.abort(new DOMException('Deadline reached','TimeoutError'));
+      assert.equal((await timedOut).at(-1).error.code,'MODEL_TIMEOUT');
+      const timedState=(await call('GET',`/v1/sessions/${sessionId}/turns/server-timeout`)).body;
+      assert.equal(timedState.status,'failed');assert.equal(timedState.error,'MODEL_TIMEOUT');
+      assert.equal((await call('GET',`/v1/sessions/${sessionId}/messages`)).body.items.length,2);
+      assert.equal((await call('GET','/v1/me/usage')).body.used,before);
+    } finally {hold=false;timeoutMock.mock.restore();}
+    // Revocation after generation cannot commit messages or charge application quota.
+    authorizationFailure=true;
+    const revoked=await send('revoked-before-commit');assert.equal(revoked.at(-1).error.code,'TOKEN_REVOKED');authorizationFailure=false;
+    assert.equal((await call('GET',`/v1/sessions/${sessionId}/messages`)).body.items.length,2);
+    assert.equal((await call('GET','/v1/me/usage')).body.used,before);
+    // A tier downgrade while generation is in flight is checked again before commit.
+    await db.doc(`usage/${uid}`).update({overrideTier:'pro'});
+    const pair=await call('POST','/v1/sessions',{mode:'synastry',subjects:[{ref:'self',profile_id:profile.body.id},{ref:'peer',birth:{datetime:'1990-04-12T10:30',latitude:31.23,longitude:121.47,timezone:'Asia/Shanghai',name:'Synthetic peer'}}]});assert.equal(pair.status,201);
+    hold=true;const {pending:downgraded,release:finishDowngraded}=await startHeld('tier revoked before commit','downgraded-before-commit',pair.body.id);
+    await db.doc(`usage/${uid}`).update({overrideTier:'free'});finishDowngraded();
+    assert.equal((await downgraded).at(-1).error.code,'INVALID_SYNASTRY_PROFILE_COUNT');hold=false;
+    assert.equal((await call('GET',`/v1/sessions/${pair.body.id}/messages`)).body.items.length,0);
     assert.equal((await call('GET','/v1/me/usage')).body.used,before);
     // A serialization failure at commit cannot leave messages saved but quota unsettled.
     invalid=true;assert.equal((await send('invalid-commit')).at(-1).type,'error');invalid=false;

@@ -150,6 +150,7 @@ try {
  await page.keyboard.press('Escape');
  console.log('PASS changing city requires reselection; edited birth parameters invalidate cache');
  const input=page.getByLabel('咨询问题',{exact:true});
+ await page.evaluate(()=>{window.__chatMode='held'}); // Keep the fixture open until Stop, independent of machine load.
  await input.fill('第一问'); await page.getByRole('button',{name:'发送',exact:true}).click();
  await page.getByText('第一问的回复',{exact:true}).waitFor();
  await page.getByRole('button',{name:'停止生成',exact:true}).click();
@@ -157,6 +158,7 @@ try {
  assert((await page.locator('main').innerText()).includes('第一问的回复'),'stop preserves received response even if another chunk arrived before the click');
  await page.getByRole('status').filter({hasText:'已请求停止，最终结果以同步后的消息为准'}).waitFor();
  console.log('PASS stop preserves partial response and exposes stopped status');
+ await page.evaluate(()=>{window.__chatMode='slow'});
  await input.fill('第二问'); await page.getByRole('button',{name:'发送',exact:true}).click();
  await page.getByText('第二问的回复',{exact:true}).waitFor();
  await page.locator('[data-testid="sidebar-nav-new"]').click();

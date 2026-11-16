@@ -60,6 +60,18 @@ class MockFirestoreEmulator {
     this.store.delete(path);
   }
 
+  doc(path: string) {
+    return this.createDocRef(path);
+  }
+
+  batch() {
+    const paths: string[] = [];
+    return {
+      delete: (ref: {path:string}) => { paths.push(ref.path); },
+      commit: async () => { paths.forEach(path => this.deleteInternal(path)); },
+    };
+  }
+
   collection(name: string) {
     return this.createCollectionRef(name);
   }

@@ -4,8 +4,10 @@ import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {codeIdentity,assertCleanSource} from './artifact.mjs';
 import { parseChat, parseHttpChat } from './live-smoke.mjs';
-import { rollback, validateArtifact, configureGateway, verifyRollbackCapabilities } from './release.mjs';
+import { rollback, validateArtifact, configureGateway, verifyRollbackCapabilities, verifyReleaseOrigin } from './release.mjs';
 const sse=data=>`data: ${JSON.stringify(data)}\n\n`;
 test('HTTP 200 is insufficient: smoke requires text, done, final, and rejects stream errors',()=>{
   const text=sse({message:{type:'text',text:'reply'}}), done=sse({message:{type:'done'}}), final=sse({result:{text:'verified response '.repeat(4)}});
@@ -43,7 +45,7 @@ test('Release refuses a wrong SHA, modified file, or untracked artifact file',()
   const dir=mkdtempSync(join(tmpdir(),'vela-artifact-'));
   try {
     writeFileSync(join(dir,'asset.js'),'tested');
-    writeFileSync(join(dir,'manifest.json'),JSON.stringify({sha:'abc',hashes:{'asset.js':createHash('sha256').update('tested').digest('hex')}}));
+    writeFileSync(join(dir,'manifest.json'),JSON.stringify({sha:'abc',hashes:{'asset.js':createHash('sha256').update('tested').digest('hex')},...codeIdentity({'asset.js':createHash('sha256').update('tested').digest('hex')})}));
     assert.equal(validateArtifact(dir,'abc').sha,'abc');
     assert.throws(()=>validateArtifact(dir,'wrong'),/commit/);
     writeFileSync(join(dir,'asset.js'),'changed');assert.throws(()=>validateArtifact(dir,'abc'),/modified/);
@@ -171,4 +173,75 @@ test('Rollback capability gate fails closed on unavailable, malformed, or incomp
   await assert.rejects(verifyRollbackCapabilities(manifest,async()=>{throw new Error('network unavailable');}),/network unavailable/);
   await assert.rejects(verifyRollbackCapabilities({},async()=>{assert.fail('Malformed manifest must fail before network');}),/Invalid required/);
   await verifyRollbackCapabilities({requiredRollbackCapabilities:[]},async()=>{assert.fail('Read-only preparation release has no new write capability requirement');});
+});
+
+test('Rollback restores owned environment variables and preserves unrelated live configuration',async()=>{
+  let restored;
+  await rollback({...saved,functions:saved.functions.map(f=>({...f,environmentVariables:{FIRESTORE_DATABASE_ID:'previous-db'}}))},{request:async(url,options)=>{
+    if(url.includes('/functions/chat')){
+      if(!options)return {serviceConfig:{environmentVariables:{FIRESTORE_DATABASE_ID:'new-db',PAT_MODE:'internal',UNRELATED:'preserved'}}};
+      restored=options.body.serviceConfig.environmentVariables;return {done:true};
+    }
+    if(url.endsWith('/releases?pageSize=1'))return {releases:[{version:{name:saved.hosting}}]};
+    return {done:true};
+  }});
+  assert.deepEqual(restored,{FIRESTORE_DATABASE_ID:'previous-db',UNRELATED:'preserved'});
+});
+
+test('Empty staging bootstrap failure disables only its site and removes only owned created resources',async()=>{
+  const calls=[],site=[];
+  const initial={firstDeployment:true,environment:'staging',projectId:'vela-test-stage',functions:[],hosting:null,rules:[],createdFunctions:['projects/vela-test-stage/locations/asia-southeast1/functions/chat'],createdRuleReleases:['projects/vela-test-stage/releases/cloud.firestore']};
+  await rollback(initial,{disableHosting:async saved=>site.push(saved.projectId),request:async(url,options)=>{
+    calls.push({url,options});
+    if(url.endsWith('/functions'))return {functions:[{name:initial.createdFunctions[0]},{name:'unrelated'}]};
+    if(url.includes('firebaserules')&&!options)return {releases:[{name:initial.createdRuleReleases[0]},{name:'unrelated'}]};
+    if(options?.method==='DELETE')return {name:'projects/vela-test-stage/locations/asia-southeast1/operations/delete'};
+    return {done:true};
+  }});
+  assert.deepEqual(site,['vela-test-stage']);
+  assert.deepEqual(calls.filter(c=>c.options?.method==='DELETE').map(c=>c.url),[`https://cloudfunctions.googleapis.com/v2/${initial.createdFunctions[0]}`,`https://firebaserules.googleapis.com/v1/${initial.createdRuleReleases[0]}`]);
+  assert(!calls.some(c=>c.url.includes('firebasehosting.googleapis.com')));
+  await assert.rejects(rollback({...initial,environment:'production'},{request:async()=>assert.fail('No request allowed')}),/Invalid bootstrap/);
+});
+
+test('Rollback restores previous secret versions and removes newly introduced bindings without logging secret values',async()=>{
+  const previous=[{key:'STRIPE_SECRET_KEY',projectId:'project',secret:'STRIPE_SECRET_KEY',version:'3'}];
+  for(const secretEnvironmentVariables of [previous,[]]) {
+    let patch,urlMask;
+    await rollback({...saved,functions:saved.functions.map(f=>({...f,secretEnvironmentVariables}))},{request:async(url,options)=>{
+      if(url.includes('/functions/chat')) {patch=options.body.serviceConfig;urlMask=url;return {done:true};}
+      if(url.endsWith('/releases?pageSize=1'))return {releases:[{version:{name:saved.hosting}}]};
+      return {done:true};
+    }});
+    assert.deepEqual(patch.secretEnvironmentVariables,secretEnvironmentVariables);
+    assert(urlMask.includes('serviceConfig.secretEnvironmentVariables'));
+  }
+});
+
+
+test('Release preparation rejects tracked, staged and untracked source while ignoring local secrets',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'vela-clean-source-'));
+  const git=(...args)=>execFileSync('git',args,{cwd:dir,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+  try {
+    git('init');git('config','user.email','ci@example.invalid');git('config','user.name','CI');
+    writeFileSync(join(dir,'.gitignore'),'.env\n');writeFileSync(join(dir,'source.ts'),'reviewed');
+    git('add','.');git('commit','-m','fixture');
+    const sha=git('rev-parse','HEAD');assert.equal(assertCleanSource(dir),sha);
+    writeFileSync(join(dir,'.env'),'local secret fixture');assert.equal(assertCleanSource(dir),sha);
+    writeFileSync(join(dir,'source.ts'),'modified');assert.throws(()=>assertCleanSource(dir),/clean Git worktree/);
+    git('add','source.ts');assert.throws(()=>assertCleanSource(dir),/clean Git worktree/);
+    git('reset','--hard','HEAD');writeFileSync(join(dir,'new.ts'),'unreviewed');assert.throws(()=>assertCleanSource(dir),/clean Git worktree/);
+  } finally {rmSync(dir,{recursive:true,force:true});}
+});
+
+
+test('Local release is allowed only for initial staging bootstrap with explicit impersonated identity',()=>{
+  const target={environment:'staging',firebase:{projectId:'velaastro-staging'}};
+  const serviceAccount='vela-release@velaastro-staging.iam.gserviceaccount.com';
+  const credentials={type:'impersonated_service_account',source_credentials:{type:'authorized_user'},service_account_impersonation_url:`https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccount}:generateAccessToken`};
+  const input={target,credentials,serviceAccount,bootstrap:true,useGcloud:true};
+  assert.equal(verifyReleaseOrigin(input),'local-staging-bootstrap');
+  assert.equal(verifyReleaseOrigin({...input,ci:'true'}),'ci');
+  for(const patch of [{bootstrap:false},{target:{...target,environment:'production'}},{serviceAccount:undefined},{credentials:{type:'authorized_user'}},{credentials:{type:'service_account',project_id:target.firebase.projectId,client_email:serviceAccount}},{credentials:{...credentials,service_account_impersonation_url:credentials.service_account_impersonation_url.replace('vela-release@','other-release@')}}])assert.throws(()=>verifyReleaseOrigin({...input,...patch}));
+  assert.throws(()=>verifyReleaseOrigin({...input,ci:'true',target:{...target,environment:'production'}}),/Production bootstrap/);
 });
