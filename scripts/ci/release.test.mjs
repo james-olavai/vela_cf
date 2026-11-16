@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import { parseChat, parseHttpChat } from './live-smoke.mjs';
-import { rollback, validateArtifact } from './release.mjs';
+import { rollback, validateArtifact, configureGateway } from './release.mjs';
 const sse=data=>`data: ${JSON.stringify(data)}\n\n`;
 test('HTTP 200 is insufficient: smoke requires text, done, final, and rejects stream errors',()=>{
   const text=sse({message:{type:'text',text:'reply'}}), done=sse({message:{type:'done'}}), final=sse({result:{text:'verified response '.repeat(4)}});
@@ -119,4 +119,29 @@ test('Gateway readiness tolerates IAM propagation but never accepts missing appl
   for (const response of [Response.json({items:[]}),Response.json({error:{message:'INVALID_TOKEN'}},{status:401})]) {
     await assert.rejects(waitForApiGateway('https://example.test', {fetchImpl:async()=>response,sleep:async()=>{}}), /did not enforce/);
   }
+});
+
+
+test('Gateway configuration changes only invoker checking, waits, and verifies the effective value',async()=>{
+  let applied=false;const calls=[];
+  const request=async(url,options)=>{calls.push({url,options});if(options?.method==='PATCH'){assert.deepEqual(Object.keys(options.body).sort(),['etag','invokerIamDisabled','name','template']);assert.equal(options.body.invokerIamDisabled,true);assert.deepEqual(options.body.template,{revision:''});return {name:'projects/test/locations/test/operations/update'};}if(url.includes('/operations/')){applied=true;return {done:true};}return {etag:'etag',invokerIamDisabled:applied};};
+  await configureGateway(true,{request,sleep:async()=>{}});
+  assert(calls.some(c=>c.url.endsWith('?updateMask=invokerIamDisabled,template.revision')));
+  const before=calls.length;await configureGateway(true,{request});assert.equal(calls.length,before+1);
+  await assert.rejects(configureGateway(true,{request:async(url,options)=>options?{done:true,error:{message:'denied'}}:{},sleep:async()=>{}}),/failed/);
+});
+
+test('Rollback restores the prior gateway setting for a pre-existing business API',async()=>{
+  let restored=false;
+  await rollback({...saved,gateway:{invokerIamDisabled:false}},{sleep:async()=>{},request:async(url,options)=>{
+    if(url.includes('run.googleapis.com')){
+      if(options?.method==='PATCH'){assert.equal(options.body.invokerIamDisabled,false);restored=true;return {done:true};}
+      return {invokerIamDisabled:!restored};
+    }
+    if(url.includes('/functions/chat'))return {name:'projects/test/locations/test/operations/restore'};
+    if(url.includes('/operations/'))return {done:true};
+    if(url.endsWith('/releases?pageSize=1'))return {releases:[{version:{name:saved.hosting}}]};
+    return {};
+  }});
+  assert(restored);
 });
