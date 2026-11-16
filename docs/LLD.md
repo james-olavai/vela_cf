@@ -1082,3 +1082,11 @@ Firebase CLI 会优先使用本机缓存登录，因此仅设置 ADC 不足以�
 另以实际 Chromium 提交 Stripe 测试卡、测试账单信息与 required 条款，Stripe 确认 Checkout complete 和首张发票 paid；随后真实 Webhook Go → Pro → canceled/free、Portal API 均通过，共 7 项检查，cleanup:true。浏览器脚本修正 Stripe iframe 新控件（邮箱为 type=text、autocomplete=email）、提交前必填字段校验和键盘勾选条款，依真实截图/DOM 定位问题，不绕过验证。升级及取消通过 Stripe SDK 驱动并验证真实回调；未将其冒充 Portal 内点击操作测试。条款与隐私页已用真实浏览器验证标题和正文路由可渲染。
 
 本轮部署在隔离工作树中使用已提交、保留自动计税的版本；主工作区出现的关闭自动计税及条款文案编辑未纳入该部署。生产账单配置仍未在本轮启用或发布，Google OAuth 独立 staging client 尚待配置。脱敏证据保存在本地 `artifacts/staging-62462c6/`：release-result、stripe-release-evidence、stripe-browser-live、staging-browser、live-smoke、vertex-live；不得提交凭据和支付会话 URL。
+
+### 11.16 公司合盘补充验收
+
+在已部署的 staging 上新增独立补充测试，不改原有 8 场景及生产晋级契约。`npm run test:company-synastry-live` 要求显式 `VELA_ENVIRONMENT=staging`，包含个人＋公司与公司＋公司两个组合，最多 2 次场景、8 分钟、应用结算预算 USD 0.30；Pro 覆盖在公司档案创建前设置。两项真实 Firebase/API/Vertex 测试均通过，真实调用 synastryAspects，校验冻结对象类型及称呼、双名字、turn 完成、消息落库、额度结算和锁释放、档案未被分析修改，cleanup passed；本轮结算 USD 0.121701。用例及生产误调用拒绝等本地契约 6/6 通过。
+
+`npm run test:company-synastry-browser` 使用真实已部署页面、Firebase SDK 登录、左侧主档案与合盘多选、输入框提交、真实 API/Vertex SSE，业务请求不 mock。个人＋公司及公司＋公司两项均通过，准确执行 2 次生成，验证请求对象与冻结类型、双方完整名称、实际 synastryAspects 和消息持久化；公司＋公司另实际调用双方 companyTenthHouse。无浏览器异常，结算 USD 0.090486，cleanup:true，独立 Auth 用户及其档案/会话/用量已删除。
+
+报告分别为 `artifacts/company-synastry-live.json`、`artifacts/company-synastry-browser.json`。补充的是测试脚本，本次没有修改或部署应用业务代码；原工作区的税务与正式价格配置编辑未纳入该测试提交。前端用例首次等待水合超时发生在生成前，已根据真实页面修正等待条件并保留真实请求和断言，不使用 mock 或自动重试掩盖模型失败。

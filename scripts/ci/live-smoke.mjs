@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { apiClient, profileSmoke } from './api-smoke.mjs';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { google, config, project, documentRoot, fields, writeDocument, deleteTree } from './google.mjs';
+import { google, config, project, environment, documentRoot, fields, writeDocument, deleteTree } from './google.mjs';
 export function parseChat(body) {
   const events=[];let final;
   for(const line of body.split('\n')) if(line.startsWith('data:')) {
@@ -37,7 +37,7 @@ async function authCall(action,data) {
   const res=await fetch(`${identity}${action}?key=${config.apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(30_000)});
   const out=await res.json();if(!res.ok)throw smokeFailure('SYNTHETIC_AUTH_FAILED','auth');return out;
 }
-async function smoke(name,{unlimited=false,exhausted=false,legacy=false,apiOnly=false,country=false,pro=false,profileCount=1,company=false}={},record={}) {
+async function smoke(name,{unlimited=false,exhausted=false,legacy=false,apiOnly=false,country=false,pro=false,profileCount=1,company=false,entityTypes}={},record={}) {
   record.phase='auth';
   const auth=await authCall('signUp',{email:`vela-ci-${randomUUID()}@vela.local`,password:randomUUID()+randomUUID(),returnSecureToken:true});
   const uid=auth.localId, idToken=auth.idToken;
@@ -61,7 +61,11 @@ async function smoke(name,{unlimited=false,exhausted=false,legacy=false,apiOnly=
       const city=locations.body.results.find(item=>item.id==='geonames-1816670');assert(city,'Missing built-in Beijing');
       location={latitude:city.latitude,longitude:city.longitude,timezone:city.timezone,locationName:city.displayName,locationRef:{id:city.id,version:city.version}};
     }
-    const profile=await api('POST','/v1/profiles',{name:'CI Subject 1',entityType:company?'company':'person',birthDateTime:'1994-06-03T08:20',latitude:31.23,longitude:121.47,timezone:'Asia/Shanghai',locationName:'上海',gender:'female',...location});
+    if(pro)await writeDocument(`usage/${uid}`,{unlimited,overrideTier:'pro',used:0,periodStart});
+    const kinds=entityTypes||Array.from({length:profileCount},(_,index)=>company&&index===0?'company':'person');
+    assert.equal(kinds.length,profileCount);
+    const subjectName=index=>entityTypes?`CI ${kinds[index]==='company'?'Company':'Person'} ${index+1}`:`CI Subject ${index+1}`;
+    const profile=await api('POST','/v1/profiles',{name:subjectName(0),entityType:kinds[0],birthDateTime:'1994-06-03T08:20',latitude:31.23,longitude:121.47,timezone:'Asia/Shanghai',locationName:'上海',gender:'female',...location});
     assert.equal(profile.status,201);
     if(country) {
       const recommendation=await api('GET',`/v1/profiles/${profile.body.id}/country-chart`);
@@ -71,7 +75,7 @@ async function smoke(name,{unlimited=false,exhausted=false,legacy=false,apiOnly=
     await writeDocument(`usage/${uid}`,{unlimited,overrideTier:unlimited||country||pro?'pro':'free',used:unlimited||exhausted?999999999:0,periodStart});
     const profiles=[profile.body];
     for(let index=1;index<profileCount;index++){
-      const added=await api('POST','/v1/profiles',{name:`CI Subject ${index+1}`,entityType:'person',birthDateTime:`199${index}-0${index+1}-12T10:30`,latitude:31.23,longitude:121.47,timezone:'Asia/Shanghai',locationName:'上海',gender:'unset'});
+      const added=await api('POST','/v1/profiles',{name:subjectName(index),entityType:kinds[index],birthDateTime:`199${index}-0${index+1}-12T10:30`,latitude:31.23,longitude:121.47,timezone:'Asia/Shanghai',locationName:'上海',gender:'unset'});
       assert.equal(added.status,201);profiles.push(added.body);
     }
     record.phase='session';
@@ -80,6 +84,7 @@ async function smoke(name,{unlimited=false,exhausted=false,legacy=false,apiOnly=
     assert.equal(created.status,201,'User API session creation failed');
     assert(session?.id,'Session ID missing');
     assert.equal(session.subjects.length,country?1:profileCount,'Wrong number of frozen analysis objects');
+    if(entityTypes)verifyFrozenEntities(session,profiles,entityTypes);
     if(country) {assert.equal(session.subjects[0].countryChart.contentHash,countryChart.contentHash);assert.equal(session.subjects[0].profile.birthDateTime,`${countryChart.localDate}T${countryChart.localTime}`);}
 
     if(legacy) {
@@ -102,6 +107,7 @@ async function smoke(name,{unlimited=false,exhausted=false,legacy=false,apiOnly=
       assert.equal(reply.res.status,200);result=legacy?parseChat(reply.body):parseHttpChat(reply.body,profileCount>1?profiles.map(p=>p.name):[]);
       assert(result.tools.length>0,'No astrology tool execution');
       if(profileCount>1)assert(result.tools.includes('synastryAspects'),'No synastry tool execution');
+      if(entityTypes)result.entityTypes=[...entityTypes];
       if(company)assert(result.tools.includes('transitEvents'),'Company outlook did not use transit events');
       if(legacy) assert(result.tools.includes('transitEvents'),'No live transit tool execution');
       if(country) {assert(result.tools.includes('natalWheel'),'No country chart tool execution');result.countryChart={id:countryChart.id,version:countryChart.version,contentHash:countryChart.contentHash};}
@@ -132,14 +138,24 @@ async function smoke(name,{unlimited=false,exhausted=false,legacy=false,apiOnly=
     delete record.failure;
   }
 }
+export function verifyFrozenEntities(session,profiles,entityTypes) {
+  assert.equal(session.subjects.length,entityTypes.length,'Wrong frozen entity count');
+  session.subjects.forEach((subject,index)=>{
+    assert.equal(subject.profile.name,profiles[index].name,'Frozen entity name mismatch');
+    assert.equal(subject.profile.entityType||'person',entityTypes[index],'Frozen entity type mismatch');
+  });
+}
 export const liveApiSmoke=()=>smoke('api-ready',{apiOnly:true});
 export const LIVE_CASES = {
+  'company-synastry-staging':[['person-company-pro',{pro:true,profileCount:2,entityTypes:['person','company']}],['company-company-pro',{pro:true,profileCount:2,entityTypes:['company','company']}]],
   production:[['current-free',{}],['frozen-unlimited',{unlimited:true,legacy:true}],['exhausted-free',{exhausted:true}],['country-chart-pro',{country:true}]],
   staging:[['current-free',{}],['single-pro',{pro:true}],['pair-pro',{pro:true,profileCount:2}],['four-person-pro',{pro:true,profileCount:4}],['company-pro',{pro:true,company:true}],['country-chart-pro',{country:true}],['frozen-unlimited',{unlimited:true,legacy:true}],['exhausted-free',{exhausted:true}]],
 };
 export async function liveSmoke({mode='production',evidencePath='artifacts/live-smoke.json',execute=smoke,now=Date.now}={}) {
   assert(Object.hasOwn(LIVE_CASES,mode),'Unknown live verification mode');
-  const started=now(),report={mode,startedAt:new Date(started).toISOString(),limits:{maxCases:8,maxElapsedMs:20*60_000,maxSettledMicroUsd:1_000_000,accounting:'application-settlement; not an upstream invoice cap'},cases:[]};
+  const supplemental=mode==='company-synastry-staging';
+  if(supplemental&&execute===smoke)assert.equal(environment,'staging','Supplemental company cases require staging');
+  const started=now(),report={mode,startedAt:new Date(started).toISOString(),limits:{maxCases:supplemental?2:8,maxElapsedMs:(supplemental?8:20)*60_000,maxSettledMicroUsd:supplemental?300_000:1_000_000,accounting:'application-settlement; not an upstream invoice cap'},cases:[]};
   assert(LIVE_CASES[mode].length<=report.limits.maxCases,'Live verification case budget exceeded');
   mkdirSync('artifacts',{recursive:true});
   const persist=()=>writeFileSync(evidencePath,JSON.stringify(report,null,2));
@@ -159,4 +175,7 @@ export async function liveSmoke({mode='production',evidencePath='artifacts/live-
     return report.cases;
   } catch(error){const safe=smokeFailure(error.code,error.phase||'budget',error.requestId);report.failure={code:safe.code,phase:safe.phase};throw safe;} finally {report.finishedAt=new Date(now()).toISOString();persist();}
 }
-if(process.argv[1]&&import.meta.url===new URL(process.argv[1],'file:').href) await liveSmoke({mode:process.env.VELA_LIVE_MODE||'production'});
+if(process.argv[1]&&import.meta.url===new URL(process.argv[1],'file:').href) {
+  const mode=process.env.VELA_LIVE_MODE||'production';
+  await liveSmoke({mode,...(mode==='company-synastry-staging'?{evidencePath:'artifacts/company-synastry-live.json'}:{})});
+}

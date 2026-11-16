@@ -43,6 +43,8 @@
     "test:stripe-emulator": "node --import ./scripts/register-ts.mjs --test scripts/ci/stripe-emulator.test.mjs",
     "test:stripe-live": "node scripts/ci/stripe-live.mjs",
     "test:stripe": "node scripts/ci/stripe-test.mjs",
-    "test:stripe-lifecycle": "node scripts/ci/stripe-test.mjs --lifecycle-only"
+    "test:company-synastry-live": "VELA_LIVE_MODE=company-synastry-staging node scripts/ci/live-smoke.mjs",
+    "test:stripe-lifecycle": "node scripts/ci/stripe-test.mjs --lifecycle-only",
+    "test:company-synastry-browser": "node scripts/ci/company-synastry-browser.mjs"
   }
 }

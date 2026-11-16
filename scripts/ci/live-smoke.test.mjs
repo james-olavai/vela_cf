@@ -1,9 +1,10 @@
 import test from 'node:test';
+import {spawnSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {liveSmoke,LIVE_CASES,parseHttpChat,smokeFailure} from './live-smoke.mjs';
+import {liveSmoke,LIVE_CASES,verifyFrozenEntities,parseHttpChat,smokeFailure} from './live-smoke.mjs';
 const frame=value=>'data: '+JSON.stringify(value)+'\n\n';
 test('stream failure evidence keeps machine code/request ID without provider secrets',()=>{
   const secret='Bearer sensitive-user-token';
@@ -38,4 +39,25 @@ test('settlement budget stops before any following generation and preserves the 
     await assert.rejects(liveSmoke({mode:'staging',evidencePath:path,execute:async(name,opts,record)=>{calls++;record.settledMicroUsd=1000001;return {case:name};}}),{code:'LIVE_BUDGET_EXCEEDED'});
     assert.equal(calls,1);assert.equal(JSON.parse(await readFile(path,'utf8')).failure.phase,'budget');
   }finally{await rm(directory,{recursive:true});}
+});
+
+
+test('supplemental company synastry runs two Pro cases independently of promotion matrix and budget',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'vela-company-live-'));
+  try{
+    const path=join(directory,'evidence.json'),calls=[];
+    await liveSmoke({mode:'company-synastry-staging',evidencePath:path,execute:async(name,options,record)=>{calls.push([name,options]);record.cleanup='passed';record.settledMicroUsd=1000;return {case:name};}});
+    assert.deepEqual(calls,[['person-company-pro',{pro:true,profileCount:2,entityTypes:['person','company']}],['company-company-pro',{pro:true,profileCount:2,entityTypes:['company','company']}]]);
+    const report=JSON.parse(await readFile(path,'utf8'));assert.equal(report.limits.maxCases,2);assert.equal(report.limits.maxSettledMicroUsd,300000);assert.equal(LIVE_CASES.staging.length,8);
+    const profiles=[{name:'CI Person 1'},{name:'CI Company 2'}],session={subjects:[{profile:{name:'CI Person 1',entityType:'person'}},{profile:{name:'CI Company 2',entityType:'company'}}]};
+    verifyFrozenEntities(session,profiles,['person','company']);
+    assert.throws(()=>verifyFrozenEntities(session,profiles,['company','company']),/type mismatch/);
+    assert.throws(()=>verifyFrozenEntities(session,[{name:'Wrong'},profiles[1]],['person','company']),/name mismatch/);
+  }finally{await rm(directory,{recursive:true});}
+});
+
+
+test('company synastry CLI refuses a production target before creating users or calling models',()=>{
+  const result=spawnSync(process.execPath,['scripts/ci/live-smoke.mjs'],{encoding:'utf8',env:{...process.env,VELA_ENVIRONMENT:'production',VELA_LIVE_MODE:'company-synastry-staging'}});
+  assert.notEqual(result.status,0);assert.match(result.stderr,/Supplemental company cases require staging/);
 });
