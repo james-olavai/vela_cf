@@ -202,7 +202,7 @@ export const deleteAccount = onCall(
 
 // HTTP migration entry; legacy Callable clients remain supported.
 export const businessApi = onRequest({
-  region: REGION, timeoutSeconds: 180,
+  region: REGION, timeoutSeconds: 180, invoker: 'public',
   cors: [`https://${process.env.GCLOUD_PROJECT || 'yhvhchen-387212'}.web.app`, `https://${process.env.GCLOUD_PROJECT || 'yhvhchen-387212'}.firebaseapp.com`, ...(process.env.FUNCTIONS_EMULATOR === 'true' ? [/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/] : [])],
 }, createHttpApi({
   verifyToken: token => verifyApiIdentity(auth, token),

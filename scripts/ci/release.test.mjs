@@ -107,3 +107,16 @@ test('Hosting lookup and restore failures remain fatal while Function operations
     assert.equal(calls.some(c=>c.options?.method==='POST'),failure==='publish');
   }
 });
+
+
+test('Gateway readiness tolerates IAM propagation but never accepts missing application auth', async () => {
+  const { waitForApiGateway } = await import('./api-smoke.mjs');
+  const ready = () => Response.json({error:{message:'AUTH_REQUIRED'}}, {status:401});
+  let calls = 0;
+  await waitForApiGateway('https://example.test', {fetchImpl:async()=>++calls === 1 ? new Response('<html>IAM denied</html>', {status:401}) : ready(), sleep:async()=>{}});
+  assert.equal(calls,2);
+  await assert.rejects(waitForApiGateway('https://example.test', {fetchImpl:async()=>new Response('denied',{status:403}),sleep:async()=>{},attempts:2}), /not ready after 2/);
+  for (const response of [Response.json({items:[]}),Response.json({error:{message:'INVALID_TOKEN'}},{status:401})]) {
+    await assert.rejects(waitForApiGateway('https://example.test', {fetchImpl:async()=>response,sleep:async()=>{}}), /did not enforce/);
+  }
+});

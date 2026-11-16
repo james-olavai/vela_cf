@@ -84,6 +84,7 @@ test('compiled onRequest wrapper retains production CORS allowlist without emula
   process.env.OTEL_SDK_DISABLED = 'true';
   process.env.METADATA_SERVER_DETECTION = 'none';
   const { businessApi } = require('../../apps/api/dist/index.cjs');
+  assert.deepEqual(businessApi.__endpoint.httpsTrigger.invoker, ['public'], 'Cloud Run must pass Firebase tokens through to application authentication');
   const server = createServer((req, res) => {
     res.status = code => { res.statusCode = code; return res; };
     res.json = value => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(value)); };
