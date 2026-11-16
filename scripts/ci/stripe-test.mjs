@@ -52,7 +52,7 @@ try {
   console.log(`TEST_CLOCK ${clock.id}`); // Recovery identifier, never a credential.
   const customer = await stripe.customers.create({ name: run, test_clock: clock.id, metadata, payment_method: 'pm_card_visa', invoice_settings: { default_payment_method: 'pm_card_visa' } });
   if(!lifecycleOnly){
-  checkout = await stripe.checkout.sessions.create({ customer: customer.id, mode: 'subscription', automatic_tax: {enabled:true}, customer_update: {address:'auto'}, consent_collection: {terms_of_service:'required'}, line_items: [{ price: prices.go, quantity: 1 }], success_url: `${testOrigin}/?test=success`, cancel_url: `${testOrigin}/?test=cancel`, metadata });
+  checkout = await stripe.checkout.sessions.create({ customer: customer.id, mode: 'subscription', consent_collection: {terms_of_service:'required'}, line_items: [{ price: prices.go, quantity: 1 }], success_url: `${testOrigin}/?test=success`, cancel_url: `${testOrigin}/?test=cancel`, metadata });
   check('checkout session created in test mode', checkout.livemode === false && checkout.status === 'open' && Boolean(checkout.url));
   await stripe.checkout.sessions.expire(checkout.id); checkout = undefined;
     report.checkout='creation-passed';

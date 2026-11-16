@@ -1107,3 +1107,13 @@ Firebase CLI 会优先使用本机缓存登录，因此仅设置 ADC 不足以�
 本次本地完整测试 185 项：182 通过、3 项环境专用跳过；发布/环境/阶段组 37/37，通过 YAML 实际解析与四阶段依赖图检查、真实 staging Firestore 锁竞争与清理验证。部署与验收分段的顺序、失败阻断回归均通过。未触发远端 Gitea Actions、未发布生产；线上仍运行前一轮已验证 staging 版本。首轮远端执行需要已配置的 `FIREBASE_STAGING_SERVICE_ACCOUNT_B64`、`FIREBASE_SERVICE_ACCOUNT_B64`，若用 ADC 模拟则还需对应 `FIREBASE_STAGING_RELEASE_SERVICE_ACCOUNT` / `FIREBASE_RELEASE_SERVICE_ACCOUNT` 变量。
 
 保护分支 required status context 为 `Vela CI/CD / ci (pull_request)`；本地测试 job 保留 `ci` 名称以兼容该规则，不降低或跳过保护分支检查。
+
+### 11.18 正式收款启用
+
+用户确认正式 Stripe 配置已完成并将 live key 与 Webhook secret 存入生产 Secret Manager，授权接入。核实生产域名 velaastro.com 的 Hosting/所有权/证书均 ACTIVE，Stripe 账户可收款和提现；Go/Pro 正式价格为 USD 9.90/24.90 每月，商品 firebaseRole 正确，生产 Webhook 已启用全部必要事件。补齐默认 live Customer Portal 的正式返回地址、条款/隐私链接、固定 Go/Pro 切换、到期取消、发票和付款方式管理。运行账户与 CI 发布账户在两项指定支付 Secret 上获得所需读取权限，密钥不落盘或输出。
+
+本次纳入用户已在工作区设置的生产 billing.enabled=true、mode=live 及正式 price IDs；Checkout 与测试配置按现有编辑关闭 automatic_tax，条款不再宣称自动计税，保留 required 服务条款确认。此实现不会由 Stripe 自动计算或代收税费；如以后启用，须配置真实税务设置并同步 Checkout 和条款。生产与 staging 继续使用独立 Secret 和商品价格。
+
+新增 `billing:production-check`：默认仅审查 live 凭据、账户、价格、角色、公开政策页、Webhook 事件和 Portal 配置；`--apply-portal` 明确修改门户配置。CI 在启用正式收款时必须先通过该检查。生产部署后的 `--probe` 使用独立临时 Firebase 账号，经实际生产 API 创建未付款 Checkout 并立即过期，创建 Portal；临时订阅 customer.created 非财务事件，等待真实 Stripe Webhook 送达确认，以验证生产端签名密钥匹配。完成后恢复事件集合、删除临时客户/Auth/Firestore 数据。探测不提交卡片、不创建订阅、PaymentIntent 或扣款；失败进入既有生产回滚。脱敏证据绑定当前 SHA/codeHash/configHash 保存为 production-billing.json。
+
+本地 187 项测试中 184 通过、3 项环境专用跳过；类型/边界/OpenAPI/API 构建通过。正式价格模式/币种/金额/周期/角色校验及导入不访问凭据测试通过。上述为发布前结果，实际生产启用与非扣款探测结果以本次流水线证据为准。

@@ -94,7 +94,7 @@ export function LegalPage({ kind }: LegalPageProps) {
                 3. 订阅、税费与取消
               </h2>
               <p className="m-0 text-[15px] text-secondary">
-                Go 与 Pro 档位按月自动续订，结账时由 Stripe Tax 按所在地区计算适用税费。你可随时通过账单管理取消续订，当期剩余额度在账期结束前继续有效。
+                Go 与 Pro 档位按月自动续订，适用税费以结账页面显示为准。你可随时通过账单管理取消续订，当期剩余额度在账期结束前继续有效。
               </p>
             </section>
           </>

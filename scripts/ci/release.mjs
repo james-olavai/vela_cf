@@ -209,6 +209,12 @@ async function release() {
     },verify:async()=>{
     await lease('check');
     await verifyHosting(manifest); // Fail closed if the deployed site changed between jobs.
+    let liveBilling;
+    if(environment==='production'&&environmentConfig.billing?.enabled){
+      const {productionBillingPreflight}=await import('./stripe-production.mjs');
+      liveBilling=await productionBillingPreflight({probe:true});
+      writeFileSync('artifacts/production-billing.json',JSON.stringify({...liveBilling,sha:manifest.sha,codeHash:manifest.codeHash,configHash:environmentConfig.configHash}));
+    }
     const billing=await verifyStagingBilling(environmentConfig,manifest);
     if(billing.billingVerified)writeFileSync('artifacts/stripe-release-evidence.json',JSON.stringify(billing.billingEvidence,null,2));
     if(environment==='staging')await stagingBrowser();
@@ -222,7 +228,7 @@ async function release() {
     }
     await liveApiSmoke();
     await lease('check');
-    writeFileSync('artifacts/release-result.json',JSON.stringify({sha:manifest.sha,codeHash:manifest.codeHash,configHash:environmentConfig.configHash,environment,projectId:project,firstDeployment:bootstrap,releaseOrigin,...billing,...(companySynastry?{companySynastry}:{}),status:'verified',checks:environment==='staging'?['candidate-vertex','deployed-browser','live-matrix','api-ready']:['candidate-vertex','live-matrix','api-ready'],cases,at:new Date().toISOString()}));
+    writeFileSync('artifacts/release-result.json',JSON.stringify({sha:manifest.sha,codeHash:manifest.codeHash,configHash:environmentConfig.configHash,environment,projectId:project,firstDeployment:bootstrap,releaseOrigin,...billing,...(liveBilling?{liveBilling}:{}),...(companySynastry?{companySynastry}:{}),status:'verified',checks:environment==='staging'?['candidate-vertex','deployed-browser','live-matrix','api-ready']:['candidate-vertex','live-matrix','api-ready'],cases,at:new Date().toISOString()}));
     releaseSafe=true;
     }});
   } catch(error) {

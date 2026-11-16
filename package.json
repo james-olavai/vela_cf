@@ -13,7 +13,7 @@
     "dev:api": "npm --workspace=apps/api run dev",
     "lint": "npm run check && npm run typecheck",
     "preview": "npm --workspace=apps/web run preview",
-    "test": "node --import ./scripts/register-ts.mjs --test packages/astrology/src/astrology.test.ts apps/api/src/api.test.ts apps/api/playground-fixtures/fixtures.test.mjs apps/api/src/prompt-bundle.test.ts apps/api/src/gateway-model.test.ts apps/api/src/skills-routing.test.ts scripts/ci/release.test.mjs scripts/ci/release-phases.test.mjs scripts/ci/environments.test.mjs scripts/ci/live-smoke.test.mjs apps/api/src/http-api.test.ts apps/api/src/chat-service.test.ts apps/api/src/session-commit.test.ts apps/api/src/pat.test.ts scripts/chat-errors.test.mjs apps/api/src/business-api.test.ts apps/api/src/tuning-api.test.ts scripts/api-contract.test.mjs scripts/api-client.test.mjs apps/api/src/subjects.test.ts apps/api/src/locations.test.ts apps/api/src/country-charts.test.ts apps/api/src/action-api.test.ts apps/api/src/stripe-payments.test.ts apps/api/src/portrait.test.ts scripts/subscription-client.test.mjs scripts/turn-client.test.mjs scripts/plan-store.test.mjs scripts/geo-client.test.mjs scripts/catalog-check.test.mjs scripts/ci/stripe-live.test.mjs",
+    "test": "node --import ./scripts/register-ts.mjs --test packages/astrology/src/astrology.test.ts apps/api/src/api.test.ts apps/api/playground-fixtures/fixtures.test.mjs apps/api/src/prompt-bundle.test.ts apps/api/src/gateway-model.test.ts apps/api/src/skills-routing.test.ts scripts/ci/release.test.mjs scripts/ci/release-phases.test.mjs scripts/ci/environments.test.mjs scripts/ci/live-smoke.test.mjs apps/api/src/http-api.test.ts apps/api/src/chat-service.test.ts apps/api/src/session-commit.test.ts apps/api/src/pat.test.ts scripts/chat-errors.test.mjs apps/api/src/business-api.test.ts apps/api/src/tuning-api.test.ts scripts/api-contract.test.mjs scripts/api-client.test.mjs apps/api/src/subjects.test.ts apps/api/src/locations.test.ts apps/api/src/country-charts.test.ts apps/api/src/action-api.test.ts apps/api/src/stripe-payments.test.ts apps/api/src/portrait.test.ts scripts/subscription-client.test.mjs scripts/turn-client.test.mjs scripts/plan-store.test.mjs scripts/geo-client.test.mjs scripts/catalog-check.test.mjs scripts/ci/stripe-live.test.mjs scripts/ci/stripe-production.test.mjs",
     "test:frontend": "node scripts/frontend-regressions.mjs",
     "test:e2e": "node scripts/ci-smoke.mjs",
     "typecheck": "npm --workspaces --if-present run typecheck",
@@ -45,6 +45,7 @@
     "test:stripe": "node scripts/ci/stripe-test.mjs",
     "test:company-synastry-live": "VELA_LIVE_MODE=company-synastry-staging node scripts/ci/live-smoke.mjs",
     "test:stripe-lifecycle": "node scripts/ci/stripe-test.mjs --lifecycle-only",
-    "test:company-synastry-browser": "node scripts/ci/company-synastry-browser.mjs"
+    "test:company-synastry-browser": "node scripts/ci/company-synastry-browser.mjs",
+    "billing:production-check": "node scripts/ci/stripe-production.mjs"
   }
 }

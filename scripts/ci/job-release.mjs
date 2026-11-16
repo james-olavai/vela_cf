@@ -21,6 +21,10 @@ async function run(args){const child=spawn(process.execPath,args,{stdio:'inherit
 try{
   writeFileSync(file,Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_B64,'base64'),{mode:0o600});
   await run(['scripts/ci/release-preflight.mjs']);
+  if(phase==='production'){
+    const {loadEnvironment}=await import('./environments.mjs');
+    if(loadEnvironment('production').billing?.enabled)await run(['scripts/ci/stripe-production.mjs']);
+  }
   if(phase!=='verify')await run(['--import','./scripts/register-ts.mjs','scripts/ci/vertex-live.mjs']);
   await run(['scripts/ci/release.mjs']);
 }finally{clean();}

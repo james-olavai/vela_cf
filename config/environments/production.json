@@ -13,7 +13,7 @@
     "recaptchaSiteKey": ""
   },
   "billing": {
-    "enabled": false,
+    "enabled": true,
     "mode": "live",
     "goPriceId": "price_1UcOgFK3bRPDTzyHcatDH5zV",
     "proPriceId": "price_1UcOhJK3bRPDTzyHu9lhn4fy"

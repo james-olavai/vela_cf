@@ -73,7 +73,7 @@ export async function createStripeCheckout(db:Firestore,uid:string,input:{tier:'
     }
     const attempt=previous?.status==='creating'&&previous.price===price&&previous.successUrl===input.successUrl&&previous.cancelUrl===input.cancelUrl?previous.attempt:randomUUID();
     await checkout.set({status:'creating',attempt,price,successUrl:input.successUrl,cancelUrl:input.cancelUrl});
-    const session=await stripe.checkout.sessions.create({customer,mode:'subscription',line_items:[{price,quantity:1}],success_url:input.successUrl,cancel_url:input.cancelUrl,client_reference_id:uid,customer_update:{address:'auto'},automatic_tax:{enabled:true},consent_collection:{terms_of_service:'required'}},{idempotencyKey:`vela-checkout-${attempt}`});
+    const session=await stripe.checkout.sessions.create({customer,mode:'subscription',line_items:[{price,quantity:1}],success_url:input.successUrl,cancel_url:input.cancelUrl,client_reference_id:uid,consent_collection:{terms_of_service:'required'}},{idempotencyKey:`vela-checkout-${attempt}`});
     sameMode(session.livemode);if(!session.url)throw new HttpsError('internal','CHECKOUT_URL_MISSING');
     await assertOwner();
     if((await db.collection('users').doc(uid).get()).data()?.deletionState){await stripe.checkout.sessions.expire(session.id);throw new HttpsError('failed-precondition','ACCOUNT_DELETING');}
