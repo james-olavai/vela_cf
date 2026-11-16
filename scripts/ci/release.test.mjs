@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {codeIdentity,assertCleanSource} from './artifact.mjs';
 import { parseChat, parseHttpChat } from './live-smoke.mjs';
-import { rollback, validateArtifact, configureGateway, verifyRollbackCapabilities, verifyReleaseOrigin } from './release.mjs';
+import { rollback, validateArtifact, configureGateway, verifyRollbackCapabilities, verifyReleaseOrigin, verifyStagingBilling } from './release.mjs';
 const sse=data=>`data: ${JSON.stringify(data)}\n\n`;
 test('HTTP 200 is insufficient: smoke requires text, done, final, and rejects stream errors',()=>{
   const text=sse({message:{type:'text',text:'reply'}}), done=sse({message:{type:'done'}}), final=sse({result:{text:'verified response '.repeat(4)}});
@@ -256,4 +256,19 @@ test('Explicit local staging updates retain impersonated identity requirement an
   assert.equal(verifyReleaseOrigin({...input,bootstrap:true}),'local-staging-bootstrap');
   assert.equal(verifyReleaseOrigin({...input,ci:'true'}),'ci');
   for(const patch of [{localStagingRelease:false},{localStagingRelease:'true'},{target:{...target,environment:'production'}},{serviceAccount:undefined},{credentials:{type:'service_account',project_id:target.firebase.projectId,client_email:serviceAccount}},{credentials:{type:'authorized_user'}}])assert.throws(()=>verifyReleaseOrigin({...input,...patch}));
+});
+
+
+test('Enabled staging billing runs a fresh real-webhook gate and binds success to current release identity',async()=>{
+  const target={environment:'staging',firebase:{projectId:'velaastro-staging'},configHash:'current-config',billing:{enabled:true,mode:'test'}};
+  const manifest={sha:'current-sha',codeHash:'current-code'};
+  const report={result:'passed',cleanup:true,cleanupFailures:[],environment:'staging',scope:'sdk-subscription-real-webhook-real-firebase',run:'fresh-run',checks:['actual-webhook-sync'],sha:'old-sha',codeHash:'old-code',configHash:'old-config',projectId:'old-project'};
+  let runs=0;const run=async()=>{runs++;return report;};
+  const verified=await verifyStagingBilling(target,manifest,run);
+  assert.equal(runs,1);assert.equal(verified.billingVerified,true);
+  assert.equal(verified.billingEvidence.sha,manifest.sha);assert.equal(verified.billingEvidence.codeHash,manifest.codeHash);assert.equal(verified.billingEvidence.configHash,target.configHash);assert.equal(verified.billingEvidence.projectId,target.firebase.projectId);
+  for(const patch of [{result:'failed'},{cleanup:false},{cleanupFailures:['remaining-user']},{environment:'production'},{scope:'stripe-provider-only'},{run:undefined},{checks:[]}])await assert.rejects(verifyStagingBilling(target,manifest,async()=>({...report,...patch})));
+  await assert.rejects(verifyStagingBilling(target,manifest,async()=>{throw Error('Webhook timeout');}),/Webhook timeout/);
+  await assert.rejects(verifyStagingBilling({...target,billing:{enabled:true,mode:'live'}},manifest,run),/test mode/);
+  for(const patch of [{environment:'production'},{billing:{enabled:false}}])assert.deepEqual(await verifyStagingBilling({...target,...patch},manifest,async()=>assert.fail('Disabled gate must not call Stripe')),{billingVerified:false});
 });

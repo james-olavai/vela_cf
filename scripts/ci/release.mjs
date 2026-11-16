@@ -129,6 +129,16 @@ export function verifyReleaseOrigin({ci,bootstrap,localStagingRelease=false,targ
   assert(serviceAccount,'Local staging release requires explicit VELA_RELEASE_SERVICE_ACCOUNT');
   return bootstrap?'local-staging-bootstrap':'local-staging-release';
 }
+export async function verifyStagingBilling(target,manifest,run=async()=>{const {stripeLiveSmoke}=await import('./stripe-live.mjs');return stripeLiveSmoke();}) {
+  if(target.environment!=='staging' || target.billing?.enabled!==true)return {billingVerified:false};
+  assert(target.billing.mode==='test','Staging billing gate requires test mode');
+  const report=await run();
+  assert(report?.result==='passed' && report.cleanup===true && Array.isArray(report.cleanupFailures) && report.cleanupFailures.length===0,'Staging billing verification or cleanup failed');
+  assert(report.environment==='staging' && report.scope==='sdk-subscription-real-webhook-real-firebase','Staging billing verification requires real webhook and Firebase evidence');
+  assert(typeof report.run==='string' && Array.isArray(report.checks) && report.checks.length>0,'Missing staging billing evidence');
+  const billingEvidence={...report,sha:manifest.sha,codeHash:manifest.codeHash,configHash:target.configHash,projectId:target.firebase.projectId,verifiedAt:new Date().toISOString()};
+  return {billingVerified:true,billingEvidence};
+}
 async function release() {
   assert(['staging','production'].includes(process.env.VELA_ENVIRONMENT),'Release requires an explicit VELA_ENVIRONMENT');
   assert(process.env.CI_COMMIT_SHA,'CI_COMMIT_SHA is required');
@@ -159,9 +169,11 @@ async function release() {
     await deploy('hosting');
     await verifyHosting(manifest);
     await deploy('firestore:rules'); // Retire legacy direct writes only after API clients are published.
+    const billing=await verifyStagingBilling(environmentConfig,manifest);
+    if(billing.billingVerified)writeFileSync('artifacts/stripe-release-evidence.json',JSON.stringify(billing.billingEvidence,null,2));
     if(environment==='staging')await stagingBrowser();
     const cases=await liveSmoke({mode:environment});await liveApiSmoke();
-    writeFileSync('artifacts/release-result.json',JSON.stringify({sha:manifest.sha,codeHash:manifest.codeHash,configHash:environmentConfig.configHash,environment,projectId:project,firstDeployment:bootstrap,releaseOrigin,status:'verified',checks:environment==='staging'?['candidate-vertex','deployed-browser','live-matrix','api-ready']:['candidate-vertex','live-matrix','api-ready'],cases,at:new Date().toISOString()}));
+    writeFileSync('artifacts/release-result.json',JSON.stringify({sha:manifest.sha,codeHash:manifest.codeHash,configHash:environmentConfig.configHash,environment,projectId:project,firstDeployment:bootstrap,releaseOrigin,...billing,status:'verified',checks:environment==='staging'?['candidate-vertex','deployed-browser','live-matrix','api-ready']:['candidate-vertex','live-matrix','api-ready'],cases,at:new Date().toISOString()}));
   } catch(error) {
     console.error('Release failed; restoring previous Functions sources, Hosting version, and Rules releases');
     try {await rollback(saved);writeFileSync('artifacts/rollback-result.json',JSON.stringify({sha:manifest.sha,environment,firstDeployment:bootstrap,releaseOrigin,status:'restored',at:new Date().toISOString()}));console.error(bootstrap?'Failed staging bootstrap disabled and owned resources cleaned':'Previous release restored');}
