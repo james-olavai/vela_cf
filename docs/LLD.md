@@ -1072,3 +1072,13 @@ Firebase CLI 会优先使用本机缓存登录，因此仅设置 ADC 不足以�
 
 
 **受控本地 staging 更新：** 用户持续授权完成在线验证后，新增显式 `VELA_LOCAL_STAGING_RELEASE=true`，允许在已有独立 staging 上使用同项目且明确指定的 impersonated SA / SA impersonation WIF 进行正常更新，记录 `releaseOrigin: local-staging-release`。生产的所有本地发布仍拒绝；未显式设置 flag 的普通本地更新仍拒绝。bootstrap 仍须独立 `VELA_BOOTSTRAP_STAGING=true` 并通过空目标检查；正常更新继续验证既有版本的回滚能力、保存函数/Hosting/Rules/secret 引用快照，固定产物与环境绑定、真实 Vertex 候选证据、浏览器和八场景真实模型矩阵全部保留，失败按既有流程回滚。不设置虚假的 CI 状态。
+
+### 11.15 Staging 发布及真实支付验收完成
+
+已通过独立发布 SA 的短期 impersonation 部署 staging，线上版本 `62462c6bb79548a7cfa4c48ad9c62cd90c9487d6`，站点 `https://velaastro-staging.web.app`。首次发布因 Artifact Registry 未设置清理策略触发回滚，现已配置新加坡 gcf-artifacts 镜像 7 天清理；空站点 SITE_DISABLE 重试和 Firebase CLI 独立凭据目录均已补回归。最终发布 `status:verified`、`billingVerified:true`，候选 Vertex、实际网页浏览器、8 个真实模型场景与 API 复验全部通过。场景覆盖免费、单人、双人、四人、公司、国家、冻结旧配置无限额度和耗尽额度。最终候选本地 179 项中 176 通过、3 项显式跳过，类型/边界/OpenAPI/构建通过。
+
+真实 Stripe 发布门禁完成 7 项检查：API 创建 Checkout、客户 UID 映射、Go 已付订阅经真实 Webhook 同步至 Auth 及额度、Portal API、Pro 升级及取消恢复免费，cleanup:true。发布门禁只在 staging 且 billing.enabled 时执行，失败触发回滚；证据绑定实际 SHA/codeHash/configHash/projectId，不读旧成功报告。
+
+另以实际 Chromium 提交 Stripe 测试卡、测试账单信息与 required 条款，Stripe 确认 Checkout complete 和首张发票 paid；随后真实 Webhook Go → Pro → canceled/free、Portal API 均通过，共 7 项检查，cleanup:true。浏览器脚本修正 Stripe iframe 新控件（邮箱为 type=text、autocomplete=email）、提交前必填字段校验和键盘勾选条款，依真实截图/DOM 定位问题，不绕过验证。升级及取消通过 Stripe SDK 驱动并验证真实回调；未将其冒充 Portal 内点击操作测试。条款与隐私页已用真实浏览器验证标题和正文路由可渲染。
+
+本轮部署在隔离工作树中使用已提交、保留自动计税的版本；主工作区出现的关闭自动计税及条款文案编辑未纳入该部署。生产账单配置仍未在本轮启用或发布，Google OAuth 独立 staging client 尚待配置。脱敏证据保存在本地 `artifacts/staging-62462c6/`：release-result、stripe-release-evidence、stripe-browser-live、staging-browser、live-smoke、vertex-live；不得提交凭据和支付会话 URL。
