@@ -566,6 +566,35 @@
                           "consentedOther": {
                             "type": "boolean"
                           },
+                          "locationRef": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "version": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "countryCode": {
+                            "type": "string",
+                            "pattern": "^[A-Z]{2}$"
+                          },
+                          "locationSource": {
+                            "type": "string",
+                            "enum": [
+                              "builtin",
+                              "external"
+                            ]
+                          },
                           "id": {
                             "type": "string",
                             "pattern": "^[a-zA-Z0-9_-]{1,128}$"
@@ -852,6 +881,35 @@
                     "consentedOther": {
                       "type": "boolean"
                     },
+                    "locationRef": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "countryCode": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{2}$"
+                    },
+                    "locationSource": {
+                      "type": "string",
+                      "enum": [
+                        "builtin",
+                        "external"
+                      ]
+                    },
                     "id": {
                       "type": "string",
                       "pattern": "^[a-zA-Z0-9_-]{1,128}$"
@@ -1060,6 +1118,35 @@
                     },
                     "consentedOther": {
                       "type": "boolean"
+                    },
+                    "locationRef": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "countryCode": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{2}$"
+                    },
+                    "locationSource": {
+                      "type": "string",
+                      "enum": [
+                        "builtin",
+                        "external"
+                      ]
                     },
                     "id": {
                       "type": "string",
@@ -1328,6 +1415,35 @@
                     },
                     "consentedOther": {
                       "type": "boolean"
+                    },
+                    "locationRef": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "countryCode": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{2}$"
+                    },
+                    "locationSource": {
+                      "type": "string",
+                      "enum": [
+                        "builtin",
+                        "external"
+                      ]
                     },
                     "id": {
                       "type": "string",
@@ -1708,6 +1824,35 @@
                                     },
                                     "consentedOther": {
                                       "type": "boolean"
+                                    },
+                                    "locationRef": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        },
+                                        "version": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "version"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "countryCode": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{2}$"
+                                    },
+                                    "locationSource": {
+                                      "type": "string",
+                                      "enum": [
+                                        "builtin",
+                                        "external"
+                                      ]
                                     }
                                   },
                                   "required": [
@@ -1721,6 +1866,13 @@
                                     "gender"
                                   ],
                                   "additionalProperties": false
+                                },
+                                "countryChart": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {}
                                 }
                               },
                               "required": [
@@ -2144,6 +2296,35 @@
                               },
                               "consentedOther": {
                                 "type": "boolean"
+                              },
+                              "locationRef": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "countryCode": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{2}$"
+                              },
+                              "locationSource": {
+                                "type": "string",
+                                "enum": [
+                                  "builtin",
+                                  "external"
+                                ]
                               }
                             },
                             "required": [
@@ -2157,6 +2338,13 @@
                               "gender"
                             ],
                             "additionalProperties": false
+                          },
+                          "countryChart": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
@@ -2411,6 +2599,35 @@
                               },
                               "consentedOther": {
                                 "type": "boolean"
+                              },
+                              "locationRef": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "countryCode": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{2}$"
+                              },
+                              "locationSource": {
+                                "type": "string",
+                                "enum": [
+                                  "builtin",
+                                  "external"
+                                ]
                               }
                             },
                             "required": [
@@ -2424,6 +2641,13 @@
                               "gender"
                             ],
                             "additionalProperties": false
+                          },
+                          "countryChart": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
                           }
                         },
                         "required": [

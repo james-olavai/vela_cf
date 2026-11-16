@@ -170,3 +170,16 @@ test('real Firestore profile cap serializes concurrency, handles downgrade and r
     assert.equal(await count(),1);await assert.rejects(create,/PROFILE_LIMIT_REACHED/);
   }finally{await db.recursiveDelete(root);await usage.delete();await deleteApp(app);}
 });
+
+test('read compatibility accepts future stored location metadata without accepting future write input',async()=>{
+  const {db,store}=database(),created=await request(db,'POST','/v1/profiles',profile),id=(created.body as any).id;
+  const metadata={locationRef:{id:'geonames-1816670',version:'future'},countryCode:'CN',locationSource:'builtin'};
+  store.set(`users/alice/profiles/${id}`,{...store.get(`users/alice/profiles/${id}`),...metadata});
+  assert.deepEqual(((await request(db,'GET',`/v1/profiles/${id}`)).body as any).locationRef,metadata.locationRef);
+  assert.deepEqual(((await request(db,'PATCH',`/v1/profiles/${id}`,{name:'Changed name'})).body as any).locationRef,metadata.locationRef);
+  for(const body of [{...profile,locationRef:metadata.locationRef},{...profile,countryCode:'CN'}])await assert.rejects(()=>request(db,'POST','/v1/profiles',body));
+  await assert.rejects(()=>request(db,'PATCH',`/v1/profiles/${id}`,{locationRef:metadata.locationRef}));
+  await assert.rejects(()=>request(db,'POST','/v1/sessions',{subjects:[{ref:'country',country_chart:{id:'cn',version:'1'}}]}));
+  const moved=(await request(db,'PATCH',`/v1/profiles/${id}`,{locationName:'Changed place'})).body as any;
+  for(const key of Object.keys(metadata))assert(!(key in moved));
+});

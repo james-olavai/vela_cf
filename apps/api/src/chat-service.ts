@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { beginTurn, failTurn, turnRef } from './turns.js';
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { ChatRequestSchema, computeTokenCostMicroUsd } from '@vela-cf/shared';
+import { ChatRequestSchema, computeTokenCostMicroUsd, TIER_META } from '@vela-cf/shared';
 import type { generateReading } from './generate-reading.js';
 import { defaultBundle } from './prompt-bundle.js';
 import { resolveSubjects } from './subjects.js';
@@ -58,13 +58,15 @@ return async (rawInput: unknown, context: any, sendChunk: (chunk: any) => void, 
         frozenSubjects = await resolveSubjects(db, uid, ids.map((id: string) => ({ref:id,profile_id:id})));
         await sessionRef.update({frozenSubjects});
       }
-      const profiles = frozenSubjects.map((subject: any) => subject.profile);
+      const profiles = frozenSubjects.map((subject: any) => ({...subject.profile,...(subject.countryChart?{countryChart:subject.countryChart}:{})}));
 
       const { tier, periodStart, unlimited } = await resolveUserPeriodAndTier(
         db,
         uid,
         context?.auth?.token?.stripeRole,
       );
+      if(profiles.some(p=>p.entityType && p.entityType!=='person') && !TIER_META[tier].allowsEntityCharts)throw new HttpsError('permission-denied','ENTITY_CHART_REQUIRES_PRO');
+      if(profiles.length>1 && profiles.length>TIER_META[tier].maxSynastryProfiles)throw new HttpsError('permission-denied','INVALID_SYNASTRY_PROFILE_COUNT');
       await reserveQuota(db, {
         uid,
         tier,
