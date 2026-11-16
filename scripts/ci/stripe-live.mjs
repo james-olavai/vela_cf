@@ -25,11 +25,12 @@ async function claims(){const data=await google(`https://identitytoolkit.googlea
 async function observe(tier,status){phase=`observe-${tier}-${status}`;const deadline=Date.now()+150000;while(Date.now()<deadline){const [subs,usage,roles]=await Promise.all([api('GET','/v1/me/subscription'),api('GET','/v1/me/usage'),claims()]);if(subs.items.some(s=>s.id===subscription.id&&s.status===status)&&usage.tier===tier&&(roles.stripeRole||'free')===tier){assert.equal(usage.unlimited,false);pass(`Webhook subscription ${status}, Auth ${tier}, API quota ${tier}`);return;}await new Promise(r=>setTimeout(r,3000));}throw new Error('SYNC_TIMEOUT');}
 
 async function completeCheckoutInBrowser(url,sessionId){
-  phase='browser-checkout';report.browserCheckout='pending';
+  phase='browser-checkout';report.browserCheckout='pending';console.log('BROWSER checkout started');
   const {chromium}=require(process.env.PLAYWRIGHT_CORE_PATH||'playwright-core');
   const browser=await chromium.launch({...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),headless:true,args:['--no-sandbox']});
+  let page;
   try{
-    const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:1000}}),page=await context.newPage();
+    const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:1000}});page=await context.newPage();
     page.setDefaultTimeout(15000);
     await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
     async function locate(selectors,required=true){
@@ -38,25 +39,31 @@ async function completeCheckoutInBrowser(url,sessionId){
       if(required)throw new Error('CHECKOUT_FIELD_MISSING');return null;
     }
     async function fill(selectors,value,required=false){const field=await locate(selectors,required);if(field)await field.fill(value);}
-    report.browserStep='email';await fill(['#email','input[type=email]'],`${run}@vela.local`);
+    report.browserStep='email';await fill(['#email','input[type=email]','input[autocomplete*=email]','input[name=email]','input[placeholder="you@example.com"]'],`${run}@vela.local`);
     const cardButton=page.getByRole('button',{name:/^card$/i}).first();if(await cardButton.isVisible().catch(()=>false))await cardButton.click();
     report.browserStep='test-card';
     await fill(['#cardNumber','input[name=cardNumber]','input[autocomplete=cc-number]'],'4242424242424242',true);
     await fill(['#cardExpiry','input[name=cardExpiry]','input[autocomplete=cc-exp]'],'1234',true);
     await fill(['#cardCvc','input[name=cardCvc]','input[autocomplete=cc-csc]'],'123',true);
     report.browserStep='billing';await fill(['#billingName','input[name=billingName]','input[autocomplete=cc-name]'],'Vela Test Customer');
-    const country=await locate(['select#billingCountry','select[name=billingCountry]','select[autocomplete=country]'],false);if(country)await country.selectOption('US');
-    const manualAddress=page.getByText(/enter address manually/i).first();if(await manualAddress.isVisible().catch(()=>false))await manualAddress.click();
-    await fill(['#billingAddressLine1','input[name=billingAddressLine1]','input[autocomplete=address-line1]'],'123 Test Street');
+    const country=await locate(['select#billingCountry','select[name=billingCountry]','select[autocomplete=country]','select[id$=billingCountry]','select'],false);if(country)await country.selectOption('US');
+    for(const frame of page.frames()){const manualAddress=frame.getByText(/enter address manually/i).first();if(await manualAddress.isVisible().catch(()=>false))await manualAddress.click();}
+    await fill(['#billingAddressLine1','input[name=billingAddressLine1]','input[autocomplete*=address-line1]','input[placeholder="Address line 1"]','input[name=line1]'],'123 Test Street');
+    for(const frame of page.frames()){const manualAddress=frame.getByText(/enter address manually/i).first();if(await manualAddress.isVisible().catch(()=>false))await manualAddress.click();}
     await fill(['#billingAddressLine2','input[name=billingAddressLine2]'],'Test fixture');
-    await fill(['#billingLocality','input[name=billingLocality]','input[autocomplete=address-level2]'],'San Francisco');
-    const state=await locate(['#billingAdministrativeArea','[name=billingAdministrativeArea]','[autocomplete=address-level1]'],false);if(state){if(await state.evaluate(el=>el.tagName==='SELECT'))await state.selectOption('CA');else await state.fill('CA');}
-    await fill(['#billingPostalCode','input[name=billingPostalCode]','input[autocomplete=postal-code]'],'94107');
+    await fill(['#billingLocality','input[name=billingLocality]','input[autocomplete*=address-level2]','input[placeholder=City]','input[name=city]'],'San Francisco');
+    const state=await locate(['#billingAdministrativeArea','[name=billingAdministrativeArea]','[autocomplete*=address-level1]','select[name=state]'],false);if(state){if(await state.evaluate(el=>el.tagName==='SELECT'))await state.selectOption('CA');else await state.fill('CA');}
+    await fill(['#billingPostalCode','input[name=billingPostalCode]','input[autocomplete=postal-code]','input[autocomplete$=postal-code]','input[name=postalCode]','input[name=postal_code]','input[placeholder=ZIP]'],'94107');
     report.browserStep='terms';
-    const terms=await locate(['input#termsOfServiceConsentCheckbox','input[name=termsOfServiceConsent]','input[type=checkbox][required]'],false);
-    if(terms)await terms.check();else{const checkbox=page.getByRole('checkbox',{name:/terms/i}).first();await checkbox.check();}
+    const saveInfo=await locate(['input[name=linkOptIn]'],false);
+    if(saveInfo&&await saveInfo.isChecked()){await saveInfo.focus();await saveInfo.press('Space');assert.equal(await saveInfo.isChecked(),false);}
+    const terms=await locate(['input#paymentForm-termsOfServiceConsentInput','input#termsOfServiceConsentCheckbox','input[name=termsOfServiceConsent]','input[type=checkbox][required]'],true);
+    if(!await terms.isChecked()){await terms.focus();await terms.press('Space');}
+    assert.equal(await terms.isChecked(),true,'Required Stripe terms checkbox must be explicitly selected');
+    report.browserStep='contact-final';
+    const email=await locate(['#email','input[type=email]','input[autocomplete*=email]','input[name=email]','input[placeholder="you@example.com"]'],true);await email.fill(`${run}@vela.local`);assert.equal(await email.inputValue(),`${run}@vela.local`);
     report.browserStep='submit';const submit=await locate(['button[type=submit]'],true);await submit.click();
-    report.browserStep='provider-confirmation';const deadline=Date.now()+120000;
+    report.browserStep='provider-confirmation';console.log('BROWSER submitted test fixture; awaiting Stripe confirmation');const deadline=Date.now()+120000;
     while(Date.now()<deadline){
       const completed=await stripe.checkout.sessions.retrieve(sessionId,{expand:['subscription.latest_invoice']});
       if(completed.status==='complete'&&completed.payment_status==='paid'){
@@ -76,7 +83,8 @@ try{
   phase='signup';user=await authCall('signUp',{email:`${run}@vela.local`,password:randomUUID()+randomUUID(),returnSecureToken:true});assert(user.idToken&&user.localId);report.uid=user.localId;console.log(`TEST_UID ${user.localId}`);
   await api('PATCH','/v1/me',{acceptedTerms:true,confirmedAdult:true});assert.equal((await api('GET','/v1/me/usage')).tier,'free');pass('synthetic Firebase account starts free');
   phase='checkout';const checkout=await api('POST','/v1/billing/checkout-sessions',{tier:'go',successUrl:origin+'/?checkout=success',cancelUrl:origin+'/?checkout=cancel'});assert.equal(checkout.status,'completed');const checkoutUrl=new URL(checkout.url);assert.equal(checkoutUrl.hostname,'checkout.stripe.com');
-  let matches;const customerDeadline=Date.now()+120000;do{matches=await stripe.customers.search({query:`metadata['firebaseUID']:'${user.localId}'`,limit:10});if(matches.data.length)break;await new Promise(r=>setTimeout(r,3000));}while(Date.now()<customerDeadline);assert.equal(matches.data.length,1,'UID customer mapping must be unique');customer=matches.data[0];assert(!customer.livemode);assert.equal(customer.metadata.firebaseUID,user.localId);
+  const customerDoc=await google(`${documentRoot}/customers/${user.localId}`);assert(customerDoc.fields?.stripeId?.stringValue,'Customer mapping required');customer=await stripe.customers.retrieve(customerDoc.fields.stripeId.stringValue);assert(!customer.livemode&&!customer.deleted);assert.equal(customer.metadata.firebaseUID,user.localId);
+
   const pending=await stripe.checkout.sessions.list({customer:customer.id,limit:10});const session=pending.data.find(s=>s.url===checkout.url);assert(session&&!session.livemode&&session.status==='open');checkoutId=session.id;
   if(browserCheckout){
     subscription=await completeCheckoutInBrowser(checkout.url,session.id);checkoutId=undefined;
