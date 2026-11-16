@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { google, project, config } from './google.mjs';
 import { liveSmoke, liveApiSmoke } from './live-smoke.mjs';
+import { waitForApiGateway } from './api-smoke.mjs';
 const tools=JSON.parse(readFileSync(new URL('./tools.json',import.meta.url),'utf8'));
 const functionsRoot=`https://cloudfunctions.googleapis.com/v2/projects/${project}/locations/asia-southeast1`;
 const hosting=`https://firebasehosting.googleapis.com/v1beta1/sites/${project}/releases`;
@@ -100,6 +101,7 @@ async function release() {
       const [code]=await once(child,'exit');assert.equal(code,0,`Firebase deployment failed: ${only}`);
     };
     await deploy('functions');
+    await waitForApiGateway(`https://asia-southeast1-${project}.cloudfunctions.net/businessApi`);
     await liveApiSmoke(); // Backend must serve new clients before publishing their assets.
     await deploy('hosting');
     await verifyHosting(manifest);

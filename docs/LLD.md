@@ -760,3 +760,5 @@ CI 增加契约漂移检查、基于 PR 基线的保守兼容检查及真实 Aut
 发布凭据修订（2026-11-16）：Gitea Runner 的步骤环境日志会转义多行 JSON，可能绕过整段 Secret 遮罩。部署改为单行 `FIREBASE_SERVICE_ACCOUNT_B64`，仅在权限 0600 的临时文件内解码，退出删除；旧多行 Secret 已移除，对应密钥已撤销。发布验收同时检查原始日志没有包含新凭据或其单行编码，不以 UI 显示遮罩代替验证。
 
 新增 HTTP 函数的首次发布权限：CI 发布身份除既有部署角色外，增加仅包含 `cloudfunctions.functions.setIamPolicy` 的项目自定义角色 `velaHttpsPublisher`，用于新 HTTPS 函数的调用策略设置。发布失败恢复时先查询 Hosting 活动版本；已是快照版本则跳过重复发布，版本未知/查询失败/实际发布失败仍使恢复失败，且继续处理其他资源恢复。新增八项发布测试通过，覆盖同版本重复恢复和真实故障。
+
+首次 HTTP 发布还需等待 Cloud Run IAM 传播：2026-11-16 发布记录中，`SetIamPolicy(allUsers/run.invoker)` 成功后一秒请求仍收到网关 HTML 401。`businessApi` 显式声明 `invoker: public`（业务鉴权仍由 Firebase ID Token 与归属检查完成）；Functions 部署后至多 12 次、间隔 10 秒探测不带 Token 的受保护只读路由，只有应用 JSON `401 AUTH_REQUIRED` 才继续真实账户冒烟与 Hosting 发布。永久 IAM 拒绝、错误应用响应或鉴权缺失均阻断发布并恢复旧版本；不会重试业务写入或模型生成。实际编译函数测试检查 invoker 声明，发布测试覆盖传播延迟、永久拒绝和鉴权缺失；非 JSON API 错误仅输出方法、路径、HTTP 状态，不打印响应内容或 Token。

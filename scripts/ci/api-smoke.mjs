@@ -12,6 +12,7 @@ export function apiClient(baseUrl, token, fetchImpl = fetch) {
     const value = typeof token === 'function' ? await token() : token;
     assert(typeof value === 'string' && value.length, 'Firebase ID Token is required');
     const res = await fetchImpl(url, { method, redirect: 'error', headers: { Authorization: `Bearer ${value}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000) });
+    assert(res.status === 204 || res.headers.get('content-type')?.includes('application/json'), `API ${method} ${path} returned HTTP ${res.status} without JSON; check gateway access and readiness`);
     const data = res.status === 204 ? undefined : await res.json();
     return { status: res.status, body: data };
   };
@@ -39,4 +40,28 @@ export async function profileSmoke(call) {
     assert.equal(deleted.status, 200, 'Synthetic profile cleanup failed');
     assert.equal(deleted.body.deleted, true);
   }
+}
+
+// New Cloud Run services can report deployed before their invoker policy reaches the gateway.
+// Probe a protected read without credentials: reaching AUTH_REQUIRED proves both routing and auth.
+export async function waitForApiGateway(baseUrl, { fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), attempts = 12 } = {}) {
+  let last = 'unreachable';
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await fetchImpl(`${baseUrl}/v1/profiles`, { redirect: 'error', signal: AbortSignal.timeout(10_000) });
+      last = `HTTP ${res.status}`;
+      const json = res.headers.get('content-type')?.includes('application/json');
+      if (json) {
+        const body = await res.json();
+        assert(res.status === 401 && body.error?.message === 'AUTH_REQUIRED', 'API gateway did not enforce application authentication');
+        return;
+      }
+      assert([401, 403, 404, 502, 503, 504].includes(res.status), `Unexpected API gateway ${last}`);
+    } catch (error) {
+      if (error.code === 'ERR_ASSERTION') throw error;
+      last = 'network unavailable';
+    }
+    if (attempt < attempts) await sleep(10_000);
+  }
+  throw new Error(`API gateway not ready after ${attempts} probes (${last})`);
 }
