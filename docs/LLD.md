@@ -1060,3 +1060,6 @@ Webhook 是单独的服务器到服务器路径：使用原始请求体验证 St
 
 
 **首次 staging 本地引导例外：** 为实际创建的新 staging 项目提供显式 `VELA_BOOTSTRAP_STAGING=true` 本地执行路径，仅允许 `environment=staging` 且使用明确指定、同项目的 impersonated service account / 带 SA impersonation 的 WIF ADC；记录 `releaseOrigin: local-staging-bootstrap`，不设置虚假的 `CI=true`。生产及非 bootstrap 本地发布继续拒绝。该入口只放宽执行地点，保留干净源码与固定产物校验、环境绑定、真实 Vertex 候选证据、空项目检查、失败回滚、浏览器与真实模型矩阵等全部检查；空项目检查失败即拒绝，不能用于二次发布。CI 正常发布记录 `releaseOrigin: ci`，生产晋级仍要求独立 staging 证据。
+
+
+首次 staging 引导失败后，回滚会删除本次创建的函数并禁用 Hosting；Hosting 保留 `SITE_DISABLE` 历史记录。重试空项目检查允许完整历史中仅存在无 `version` 的 `SITE_DISABLE`，按 `pageSize=100` 查询且存在分页即拒绝；任何真实部署、未知 release 类型、附带版本、已有函数/用户/Firestore 集合或查询失败仍拒绝。该例外仅允许失败引导后的空站点重试，不适用于已有应用发布。

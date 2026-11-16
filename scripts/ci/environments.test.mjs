@@ -154,3 +154,20 @@ test('gcloud access tokens explicitly impersonate chosen release account and rej
   assert.throws(()=>gcloudAccessTokenArgs(email,production.firebase.projectId),/different environment/);
   for(const invalid of ['human@example.test','--account=human','release@project.iam.gserviceaccount.com\n'])assert.throws(()=>gcloudAccessTokenArgs(invalid,staging.firebase.projectId));
 });
+
+
+test('Bootstrap retry accepts only complete Hosting history of SITE_DISABLE entries without versions',async()=>{
+  const {emptyStagingSnapshot}=await import('./bootstrap-staging.mjs');
+  const inventory={existing:['chat'],introduced:['businessApi']};
+  const inspect=site=>async(url)=>url.includes('firebasehosting.googleapis.com')?site:{};
+  const disabled={type:'SITE_DISABLE',name:'sites/vela-test-stage/releases/disabled'};
+  for(const releases of [[],[disabled],[disabled,{...disabled,name:'older-disable'}]]) {
+    let hostingUrl;
+    const request=async url=>{if(url.includes('firebasehosting.googleapis.com')){hostingUrl=url;return {releases};}return {};};
+    const snapshot=await emptyStagingSnapshot(staging,production.firebase.projectId,inventory,{request});
+    assert.equal(snapshot.firstDeployment,true);assert.equal(snapshot.hosting,null);assert(hostingUrl.endsWith('?pageSize=100'));
+  }
+  for(const site of [{releases:[disabled],nextPageToken:'older-page'},{releases:[disabled,{type:'DEPLOY',version:{name:'real'}}]},{releases:[{...disabled,version:{name:'real'}}]},{releases:[{...disabled,version:null}]},{releases:[{type:'ROLLBACK'}]},{releases:[null]},{releases:'invalid'}])await assert.rejects(emptyStagingSnapshot(staging,production.firebase.projectId,inventory,{request:inspect(site)}));
+  // A disabled site never exempts existing application resources from inspection.
+  for(const occupied of [{functions:[{}]},{users:[{}]},{collectionIds:['users']}])await assert.rejects(emptyStagingSnapshot(staging,production.firebase.projectId,inventory,{request:async url=>url.includes('firebasehosting.googleapis.com')?{releases:[disabled]}:occupied}));
+});
