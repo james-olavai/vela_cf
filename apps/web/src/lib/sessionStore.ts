@@ -1,12 +1,5 @@
+import { streamTurn } from './turnClient';
 import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query,
-} from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import {
-  computeEffectiveBudget,
   extractVelaUiBlocks,
   summarizeQuestionTitle,
   type AnalysisDepth,
@@ -20,7 +13,8 @@ import {
   type Tier,
   type UsageRecord,
 } from '@vela-cf/shared';
-import { db, functions } from './firebase';
+import { auth } from './firebase';
+import { businessApi, apiList, subscribeApi } from './apiClient';
 import { saveCachedChart, type ChartSnapshot } from './profileStore';
 
 const e2eMode = import.meta.env.DEV && new URLSearchParams(window.location.search).get('e2e') === '1';
@@ -30,45 +24,19 @@ export function subscribeSessions(
   onData: (sessions: SessionRecord[]) => void,
   onError: (error: unknown) => void = console.error,
 ): () => void {
-  return onSnapshot(
-    collection(db, 'users', uid, 'sessions'),
-    (snap) => {
-      const list: SessionRecord[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<SessionRecord, 'id'>),
-      }));
-      list.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
-      onData(list);
-    },
-    onError,
-  );
+  return subscribeApi(signal => apiList<SessionRecord>(uid, '/v1/sessions', signal).then(list => list.sort((a,b)=>(b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))), onData, onError);
 }
 
 export function subscribeMessages(
   uid: string,
   sessionId: string,
-  onData: (messages: MessageRecord[]) => void,
+  onData: (messages: MessageRecord[]) => boolean | void,
   onError: (error: unknown) => void = console.error,
 ): () => void {
   if (import.meta.env.DEV && uid === 'e2e_test_user') {
     return () => {};
   }
-  const path = `users/${uid}/sessions/${sessionId}/messages`;
-  const q = query(
-    collection(db, 'users', uid, 'sessions', sessionId, 'messages'),
-    orderBy('createdAt', 'asc'),
-  );
-  return onSnapshot(
-    q,
-    (snap) => {
-      const list: MessageRecord[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<MessageRecord, 'id'>),
-      }));
-      onData(list);
-    },
-    onError,
-  );
+  return subscribeApi(signal => apiList<MessageRecord>(uid, `/v1/sessions/${encodeURIComponent(sessionId)}/messages`, signal), onData, onError);
 }
 
 export async function createConsultationSession(
@@ -94,23 +62,9 @@ export async function createConsultationSession(
       updatedAt: now,
     };
   }
-  const fn = httpsCallable<
-    { mode: ConsultationMode; profileIds: string[]; initialQuestion?: string },
-    { sessionId: string; session: SessionRecord }
-  >(functions, 'createSession');
-  const res = await fn({
-    mode,
-    profileIds: profiles.map((p) => p.id),
-    ...(initialQuestion ? { initialQuestion } : {}),
-  });
-  return res.data.session;
+  const uid=auth.currentUser?.uid;if(!uid)throw new Error('AUTH_REQUIRED');
+  return businessApi<SessionRecord>(uid, '/v1/sessions', 'POST', {mode, subjects:profiles.map((p,index)=>({ref:`subject_${index+1}`,profile_id:p.id})), ...(initialQuestion?{initialQuestion}:{})});
 }
-
-type ChatStreamChunk =
-  | { type: 'tool'; toolName?: string; label?: string }
-  | { type: 'chart'; chart?: ChartSnapshot }
-  | { type: 'text'; text?: string }
-  | { type: 'done'; suggestions?: string[] };
 
 export async function streamConsultationReply(params: {
   uid: string;
@@ -144,11 +98,6 @@ export async function streamConsultationReply(params: {
   } = params;
   const primaryProfile = profiles[0];
   signal.throwIfAborted();
-
-  if (!usage.unlimited && usage.used >= computeEffectiveBudget(tier, usage.bonusMicroUsd ?? 0)) {
-    onQuotaExceeded();
-    return;
-  }
 
   const lastUserIdx = editLastTurn
     ? existingMessages.map((m) => m.role).lastIndexOf('user')
@@ -257,19 +206,9 @@ export async function streamConsultationReply(params: {
       return;
     }
 
-    const callable = httpsCallable<
-      { sessionId: string; message: string; editLastTurn?: boolean; depth?: AnalysisDepth },
-      { text: string; suggestions?: string[]; uiBlocks?: AstroUiBlock[] },
-      ChatStreamChunk
-    >(functions, 'chat');
-    const { stream, data } = await callable.stream(
-      { sessionId: session.id, message: userText, ...(editLastTurn ? { editLastTurn: true } : {}), ...(depth ? { depth } : {}) },
-      { signal },
-    );
-
-    // Both SDK promises reject on a stream failure; observe data before consuming chunks.
-    void data.catch(() => undefined);
-    for await (const chunk of stream) {
+    let finalRes: {text:string;suggestions?:string[];uiBlocks?:AstroUiBlock[]} | undefined;
+    for await (const chunk of streamTurn(uid, session.id, {message:userText,...(editLastTurn?{editLastTurn:true}:{}),...(depth?{depth}:{})}, signal)) {
+      if(chunk.type==='result'){finalRes=chunk.result;continue;}
       signal.throwIfAborted();
       if (chunk.type === 'tool' && chunk.toolName) {
         toolParts.push({
@@ -291,7 +230,6 @@ export async function streamConsultationReply(params: {
       }
     }
 
-    const finalRes = await data;
     signal.throwIfAborted();
     if (finalRes?.text) fullText = finalRes.text;
     updateAssistant(finalRes?.suggestions ?? [], finalRes?.uiBlocks ?? []);

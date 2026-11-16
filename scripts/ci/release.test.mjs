@@ -4,7 +4,7 @@ import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import { parseChat } from './live-smoke.mjs';
+import { parseChat, parseHttpChat } from './live-smoke.mjs';
 import { rollback, validateArtifact } from './release.mjs';
 const sse=data=>`data: ${JSON.stringify(data)}\n\n`;
 test('HTTP 200 is insufficient: smoke requires text, done, final, and rejects stream errors',()=>{
@@ -48,4 +48,24 @@ test('Release refuses a wrong SHA, modified file, or untracked artifact file',()
     writeFileSync(join(dir,'asset.js'),'tested');writeFileSync(join(dir,'extra.js'),'extra');
     assert.throws(()=>validateArtifact(dir,'abc'),/inventory/);
   } finally {rmSync(dir,{recursive:true,force:true});}
+});
+
+test('Rollback deletes only explicitly introduced functions absent before deployment',async()=>{
+  const name='projects/test/locations/asia-southeast1/functions/businessApi', calls=[];
+  await rollback({...saved,createdFunctions:[name]}, {request:async(url,options)=>{
+    calls.push({url,options});
+    if(url.endsWith('/functions'))return {functions:[{name},{name:'projects/test/locations/asia-southeast1/functions/unrelated'}]};
+    if(options?.method==='DELETE')return {name:'projects/test/locations/asia-southeast1/operations/delete'};
+    if(url.includes('/functions/chat'))return {name:'projects/test/locations/asia-southeast1/operations/restore'};
+    if(url.includes('/operations/'))return {done:true};
+    return {};
+  }});
+  assert.deepEqual(calls.filter(c=>c.options?.method==='DELETE').map(c=>c.url),[`https://cloudfunctions.googleapis.com/v2/${name}`]);
+});
+
+test('HTTP chat smoke requires useful final result and streamed completion',()=>{
+  const good=sse({type:'text',text:'text'})+sse({type:'done'})+sse({type:'result',result:{text:'Useful final answer '.repeat(3)}});
+  assert(parseHttpChat(good).characters>30);
+  assert.throws(()=>parseHttpChat(sse({type:'done'})));
+  assert.throws(()=>parseHttpChat(good+sse({type:'error',error:{code:'FAILED'}})));
 });

@@ -8,7 +8,7 @@
     },
     "apps/api": {
       "maxSourceLines": 3000,
-      "maxCallableFunctions": 6,
+      "maxCallableFunctions": 7,
       "dependencies": [
         "@modelcontextprotocol/sdk",
         "@genkit-ai/firebase",

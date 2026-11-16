@@ -1,3 +1,5 @@
+import { TIER_META } from '../packages/shared/src/index.ts';
+import { computePortraitSummary } from '../apps/api/src/portrait.ts';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -45,18 +47,20 @@ async function setup(viewport = { width: 1366, height: 860 }, { seedProfiles = p
    } }), { headers: { 'Content-Type': 'text/event-stream' } });
   };
  }, { profiles: seedProfiles });
- await page.route('**/previewNatalWheel', async route => {
-  const data = route.request().postDataJSON()?.data ?? {};
-  const year = data.birthDateTime?.slice(0, 4);
-  chartRequests.push(data.birthDateTime);
+ await page.route('**/businessApi/v1/charts/*', async route => {
+  const data = route.request().postDataJSON() ?? {};
+  const at=data.atDateTime || data.birthDateTime;
+  const year = at?.slice(0, 4);
+  chartRequests.push(at);
   await new Promise(r => setTimeout(r, year === '1994' ? 180 : 20));
-  await route.fulfill({ json: { data: { natal: natal(year) } } });
+  await route.fulfill({ json: route.request().url().endsWith('/transits') ? {transit:natal(year)} : {natal:natal(year),portrait:computePortraitSummary(natal(year))} });
  });
- await page.route('**/resolveLocation', async route => {
-  const q = route.request().postDataJSON()?.data?.query ?? '';
+ await page.route('**/businessApi/v1/locations?*', async route => {
+  const q = new URL(route.request().url()).searchParams.get('query') || '';
   await new Promise(r => setTimeout(r, q === 'old' ? 200 : 10));
-  await route.fulfill({ json: { data: { results: [{ displayName: q, latitude: 12, longitude: 34, timezone: 'Asia/Shanghai' }] } } });
+  await route.fulfill({ json: { results: [{ displayName: q, latitude: 12, longitude: 34, timezone: 'Asia/Shanghai' }] } });
  });
+ await page.route('**/businessApi/v1/plans',route=>route.fulfill({json:{items:Object.entries(TIER_META).map(([id,p])=>({id,...p,analysisDepths:id==='pro'?['quick','balanced','deep']:[]}))}}));
  await page.goto(base + (visitor ? '/' : `/?e2e=1&tier=pro${unlimited ? '&unlimited=1&used=999999999' : ''}`));
  await page.getByRole('button', { name: viewport.width < 1024 ? '打开侧栏与档案' : '展开侧栏', exact: true }).waitFor();
  return { context, page, chartRequests };
@@ -146,7 +150,7 @@ try {
  await page.getByRole('button',{name:'停止生成',exact:true}).click();
  await page.getByRole('button',{name:'发送',exact:true}).waitFor();
  assert((await page.locator('main').innerText()).includes('第一问的回复'),'stop preserves received response even if another chunk arrived before the click');
- await page.getByRole('status').filter({hasText:'已停止生成，已保留收到的内容'}).waitFor();
+ await page.getByRole('status').filter({hasText:'已请求停止，最终结果以同步后的消息为准'}).waitFor();
  console.log('PASS stop preserves partial response and exposes stopped status');
  await input.fill('第二问'); await page.getByRole('button',{name:'发送',exact:true}).click();
  await page.getByText('第二问的回复',{exact:true}).waitFor();
@@ -338,25 +342,22 @@ try {
  assert.equal(await qp.getByText(/本月额度已用完/).count(),0);
  assert.equal(await qp.locator('link[rel="icon"]').getAttribute('href'),'/assets/logo-small.webp');
  assert.equal((await qp.request.get(base+'/assets/logo-small.webp')).status(),200);
- let serverError='Model rate limit exceeded';
- await qp.route('**/*cloudfunctions.net/chat',route=>route.fulfill({status:200,contentType:'text/event-stream',body:`data: ${JSON.stringify({error:{status:'RESOURCE_EXHAUSTED',message:serverError}})}\n\n`}));
- const invoke=()=>qp.evaluate(async({profiles})=>{
-  const {streamConsultationReply}=await import('/src/lib/sessionStore.ts');
+ const errorMessages=await qp.evaluate(async()=>{
+  const {apiError,readSse}=await import('/src/lib/apiClient.ts');
   const {formatAppError}=await import('/src/lib/accountStore.ts');
-  let exceeded=false;
-  try {
-   await streamConsultationReply({uid:'quota_regression',tier:'pro',usage:{used:999999999,unlimited:true,periodStart:'2026-11-01T00:00:00Z'},session:{id:'quota_test',mode:'personal'},profiles,existingMessages:[],userText:'test',signal:new AbortController().signal,onUpdateMessages:()=>{},onUpdateChart:()=>{},onQuotaExceeded:()=>{exceeded=true;}});
-   return {exceeded};
-  } catch(err) { return {exceeded,message:formatAppError(err,'failed')}; }
- },{profiles});
- const provider=await invoke();
- assert.equal(provider.exceeded,false,'provider throttling must not exhaust user quota');
- assert(provider.message.includes('模型服务暂时繁忙'));
- serverError='QUOTA_EXCEEDED';
- assert.equal((await invoke()).exceeded,true,'explicit application quota error is still recognized');
+  const messages=[];
+  for(const code of ['MODEL_BUSY','QUOTA_EXCEEDED']){
+   const body=new Response(`data: ${JSON.stringify({type:'error',error:{code,message:code,requestId:'test',retryable:code==='MODEL_BUSY'}})}\n\n`).body;
+   for await(const event of readSse(body,new AbortController().signal))messages.push(formatAppError(apiError(event.error),'failed'));
+  }
+  return messages;
+ });
+ assert(errorMessages[0].includes('模型服务暂时繁忙'));
+ assert(!errorMessages[0].includes('本月额度已用完'));
+ assert(errorMessages[1].includes('本月额度已用完'));
  await new Promise(r=>setTimeout(r,50));
  await quota.context.close();
- console.log('PASS unlimited sending beyond budget, provider/app quota separation, handled stream errors, and favicon');
+ console.log('PASS unlimited sending beyond budget, provider/app quota error rendering, SSE parsing, and favicon');
  assert.deepEqual(errors,[]);
  console.log('PASS no uncaught browser exceptions');
 } finally { await browser.close(); }

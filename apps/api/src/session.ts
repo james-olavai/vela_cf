@@ -1,3 +1,6 @@
+import { settleQuotaInTransaction } from './quota.js';
+import { turnRef } from './turns.js';
+import { resolveSubjects } from './subjects.js';
 import { defaultBundle } from './prompt-bundle.js';
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -111,6 +114,8 @@ export async function acquireSessionTurn(
 export async function commitSessionTurn(
   db: Firestore,
   params: {
+    settlement?: {periodStart:string;costMicroUsd:number;requestId:string};
+    durableResult?: unknown;
     uid: string;
     sessionId: string;
     turnId: string;
@@ -151,6 +156,11 @@ export async function commitSessionTurn(
     if (sessionData.activeTurnId && sessionData.activeTurnId !== turnId) {
       throw new HttpsError('aborted', 'SESSION_TURN_SUPERSEDED');
     }
+
+    const durable = params.durableResult === undefined ? null : turnRef(db,uid,sessionId,turnId);
+    if (durable && (await tx.get(durable)).data()?.status !== 'running') throw new HttpsError('aborted','TURN_CANCELLED');
+    if (params.settlement) await settleQuotaInTransaction(db,tx,{uid,...params.settlement});
+    if (durable) tx.update(durable,{status:'completed',result:params.durableResult});
 
     for (const msgId of replacedMessageIds) {
       tx.delete(messagesCol.doc(msgId));
@@ -231,30 +241,22 @@ export async function createFrozenSession(
   const { uid, tier, rawData, now = new Date() } = params;
   const input = CreateSessionRequestSchema.parse(rawData);
   const tierMeta = TIER_META[tier];
+  const subjects = 'subjects' in input ? input.subjects : input.profileIds.map(profile_id => ({ ref: profile_id, profile_id }));
 
   if (input.mode === 'synastry') {
     if (tierMeta.maxSynastryProfiles < 2) {
       throw new HttpsError('permission-denied', 'SYNASTRY_REQUIRES_GO');
     }
-    if (input.profileIds.length < 2 || input.profileIds.length > tierMeta.maxSynastryProfiles) {
+    if (subjects.length < 2 || subjects.length > tierMeta.maxSynastryProfiles) {
       throw new HttpsError('invalid-argument', 'INVALID_SYNASTRY_PROFILE_COUNT');
     }
-  } else if (input.profileIds.length !== 1) {
+  } else if (subjects.length !== 1) {
     throw new HttpsError('invalid-argument', 'PERSONAL_REQUIRES_ONE_PROFILE');
   }
 
-  const profileSnaps = await Promise.all(
-    input.profileIds.map((pid) =>
-      db.collection('users').doc(uid).collection('profiles').doc(pid).get(),
-    ),
-  );
-  const profiles = profileSnaps.map((s) => {
-    const data = s.data();
-    if (!s.exists || !data) {
-      throw new HttpsError('not-found', 'PROFILE_NOT_FOUND');
-    }
-    return data;
-  });
+  const frozenSubjects = await resolveSubjects(db, uid, subjects);
+  const profiles = frozenSubjects.map(subject => subject.profile);
+  const profileIds = frozenSubjects.map(subject => subject.profileId ?? subject.ref);
 
   if (!tierMeta.allowsEntityCharts && profiles.some((p) => p.entityType && p.entityType !== 'person')) {
     throw new HttpsError('permission-denied', 'ENTITY_CHART_REQUIRES_PRO');
@@ -267,8 +269,9 @@ export async function createFrozenSession(
   const defaultTitle = input.mode === 'synastry' ? `合盘 · ${names}` : names;
   const sessionDoc = {
     mode: input.mode,
-    profileIds: input.profileIds,
-    profileId: input.profileIds[0],
+    profileIds,
+    profileId: profileIds[0],
+    frozenSubjects,
     profileName: names,
     title: input.initialQuestion ? summarizeQuestionTitle(input.initialQuestion, defaultTitle) : defaultTitle,
     frozenPrompt: preset.systemPrompt,

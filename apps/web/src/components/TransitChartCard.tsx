@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ProfileRecord } from '@vela-cf/shared';
-import { fetchNatalChart, type ChartSnapshot } from '../lib/store';
+import { fetchTransitChart, type ChartSnapshot } from '../lib/store';
 import { NatalWheelSvg } from './NatalWheelSvg';
 
 interface TransitChartCardProps {
@@ -19,7 +19,7 @@ export function TransitChartCard({ dateISO, profile }: TransitChartCardProps) {
     if (!dateISO || !profile) return;
     let alive = true;
     setLoading(true);
-    void fetchNatalChart(null, { ...profile, birthDateTime: `${dateISO}T12:00` })
+    void fetchTransitChart(profile, dateISO)
       .then((res) => { if (alive) setTransitChart(res); })
       .catch(() => { if (alive) setError(true); })
       .finally(() => { if (alive) setLoading(false); });

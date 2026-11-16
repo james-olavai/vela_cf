@@ -1,3 +1,4 @@
+import { computePortraitSummary } from './portrait.js';
 import type { Genkit } from "genkit";
 import { natalWheel } from "@vela-cf/astrology";
 import {
@@ -111,6 +112,7 @@ export async function generateReading(
       };
       if (chartKey[name]) {
         chart[chartKey[name]] = output;
+        if(name === "natalWheel") chart.portrait = computePortraitSummary(output as ReturnType<typeof natalWheel>);
         emit?.({ type: "chart", chart: { ...chart } });
       }
       calls.push({ name, input: arg, output, elapsedMs: Date.now() - at });
@@ -126,6 +128,7 @@ export async function generateReading(
     timezone: p.timezone,
   });
   chart.natal = natal;
+  chart.portrait = computePortraitSummary(natal);
   let index = routed.skillIndexPrompt;
   const catalog = (await import("./skills.js")).SKILL_CATALOG;
   for (const [key, s] of Object.entries(bundle.skills)) {

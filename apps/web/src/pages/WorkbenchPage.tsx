@@ -1,9 +1,10 @@
+import { usePlan, planBudget, planUsagePercent } from '../lib/planStore';
+import { subscribeApi } from '../lib/apiClient';
+import { pendingTurn } from '../lib/turnClient';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
-  computeEffectiveBudget,
-  computeUsagePercent,
+  sessionProfiles,
   nextUtcMonthResetLabel,
-  TIER_META,
   ProfileInputSchema,
   type AnalysisDepth,
   type AstroUiBlock,
@@ -27,7 +28,6 @@ import {
 import { ProfileManagerSubpage, type ProfileManagerLaunch } from '../components/ProfileSidebarPanel';
 import { SoftAurora } from '../components/SoftAurora';
 import { WorkbenchSidebar, type ActiveSubpage } from '../components/WorkbenchSidebar';
-import { computePortraitSummary } from '../lib/portrait';
 import { navigate, usePathname } from '../lib/router';
 import {
   fetchNatalChart,
@@ -85,6 +85,8 @@ export function WorkbenchPage({
   onSelectSession,
 }: WorkbenchPageProps) {
   const pathname = usePathname();
+  const {plan,error:planError,retry:retryPlan}=usePlan(import.meta.env.DEV && uid==='e2e_test_user'?null:uid,tier);
+  const depths=plan?.analysisDepths??[];
   const [messageRetry, setMessageRetry] = useState(0);
   const [chartRetry, setChartRetry] = useState(0);
   const [chartError, setChartError] = useState<string | null>(null);
@@ -110,7 +112,7 @@ export function WorkbenchPage({
   const effectiveProfiles = uid ? profiles : draftProfiles;
 
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
-  const maxSelectable = Math.max(1, TIER_META[tier].maxSynastryProfiles);
+  const maxSelectable = plan ? Math.max(1, plan.maxSynastryProfiles) : Infinity;
 
   const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [chart, setChart] = useState<ChartSnapshot | null>(null);
@@ -145,6 +147,7 @@ export function WorkbenchPage({
   }, [inputText, activeSubpage]);
 
   useEffect(() => {
+    if (activeSession?.subjects?.length) return;
     if (effectiveProfiles.length === 0) {
       setSelectedProfileIds([]);
       setChart(null);
@@ -160,7 +163,7 @@ export function WorkbenchPage({
     } else if (validIds.length !== selectedProfileIds.length) {
       setSelectedProfileIds(validIds);
     }
-  }, [effectiveProfiles, maxSelectable]);
+  }, [effectiveProfiles, maxSelectable, activeSession?.subjects]);
 
   const cancelStream = () => {
     const request = abortRef.current;
@@ -182,14 +185,19 @@ export function WorkbenchPage({
     if (!uid || !activeSession) return;
     setSelectedProfileIds(activeSession.profileIds?.length ? activeSession.profileIds : [activeSession.profileId]);
     let alive = true;
+    const stopRecovery=subscribeApi(signal=>pendingTurn(uid,activeSession.id,signal),turn=>{
+      if(isStreamingRef.current)return false;
+      if(alive && turn)setReplyNotice(turn.status==='running'?'上一条请求仍在处理，正在同步结果':turn.status==='completed'?'上一条回复已恢复':turn.status==='cancelled'?'上一条请求已停止':'上一条请求未完成，可重试');
+    },()=>{});
     const unsub = subscribeMessages(uid, activeSession.id, (serverMsgs) => {
-      if (alive && !isStreamingRef.current) setMessages(serverMsgs);
+      if (!alive || isStreamingRef.current) return false;
+      setMessages(serverMsgs);
     }, () => { if (alive) setStreamError('历史消息加载失败，请重试'); });
-    return () => { alive = false; unsub(); };
+    return () => { alive = false; stopRecovery(); unsub(); };
   }, [uid, pathname, activeSession?.id, messageRetry]);
 
   const notifyQuotaExceeded = () => {
-    const budget = computeEffectiveBudget(tier, effectiveUsage.bonusMicroUsd ?? 0);
+    const budget = planBudget(effectiveUsage,plan) ?? effectiveUsage.used;
     setUsageOverride({ ...effectiveUsage, used: Math.max(effectiveUsage.used, budget) });
     setStreamError(
       `本月额度已用完（100%），下次重置时间为 ${nextUtcMonthResetLabel()}（UTC）；可分享星盘卡片领额度或升级套餐。`,
@@ -197,13 +205,13 @@ export function WorkbenchPage({
   };
 
   const sessionProfileIds = activeSession ? (activeSession.profileIds?.length ? activeSession.profileIds : [activeSession.profileId]) : null;
-  const activeProfiles = (sessionProfileIds ?? selectedProfileIds)
+  const activeProfiles = activeSession?.subjects?.length ? sessionProfiles(activeSession, effectiveProfiles) : (sessionProfileIds ?? selectedProfileIds)
     .map((id) => effectiveProfiles.find((p) => p.id === id))
     .filter((p): p is ProfileRecord => Boolean(p));
   const primaryProfile = activeProfiles[0] ?? (activeSession ? null : effectiveProfiles[0]) ?? null;
   const chartSignature = JSON.stringify(primaryProfile && [primaryProfile.id, primaryProfile.birthDateTime, primaryProfile.latitude, primaryProfile.longitude, primaryProfile.timezone, primaryProfile.gender]);
   const visibleChart = chartOwner === chartSignature ? chart : null;
-  const portraitSummary = useMemo(() => visibleChart?.natal ? computePortraitSummary(visibleChart.natal) : null, [visibleChart?.natal]);
+  const portraitSummary = visibleChart?.portrait ?? null;
   useEffect(() => {
     let alive = true;
     setChart(null);
@@ -217,7 +225,7 @@ export function WorkbenchPage({
     return () => { alive = false; };
   }, [uid, chartSignature, chartRetry]);
   const mode: ConsultationMode = activeProfiles.length >= 2 ? 'synastry' : 'personal';
-  const needsMoreProfiles = effectiveProfiles.length === 0;
+  const needsMoreProfiles = activeProfiles.length === 0 && effectiveProfiles.length === 0;
   const consultationLabel = `${(activeSession?.mode ?? mode) === 'synastry' ? '合盘' : '个人'} · ${activeSession?.profileName ?? (activeProfiles.map((p) => p.name).join(' × ') || primaryProfile?.name || '')}`;
 
   const requestAuthWithDrafts = (question = '', selectedIndices = [0]) => {
@@ -244,18 +252,10 @@ export function WorkbenchPage({
     if (followEndRef.current) endRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
   }, [messages, isStreaming, activeSubpage]);
 
-  const quotaExhausted =
-    !effectiveUsage.unlimited &&
-    Boolean(uid) &&
-    effectiveUsage.used >= computeEffectiveBudget(tier, effectiveUsage.bonusMicroUsd ?? 0);
-  const usagePercent = effectiveUsage.unlimited
-    ? 0
-    : computeUsagePercent(
-        effectiveUsage.used,
-        tier,
-        effectiveUsage.bonusMicroUsd ?? 0,
-      );
-  const quotaNearLimit = !quotaExhausted && Boolean(uid) && usagePercent >= 80;
+  const budget=planBudget(effectiveUsage,plan);
+  const quotaExhausted = !effectiveUsage.unlimited && Boolean(uid) && budget!==undefined && effectiveUsage.used>=budget;
+  const usagePercent = planUsagePercent(effectiveUsage,plan);
+  const quotaNearLimit = !quotaExhausted && Boolean(uid) && usagePercent!==null && usagePercent>=80;
 
   const handleSetPrimaryProfile = (id: string) => {
     cancelStream();
@@ -290,9 +290,7 @@ export function WorkbenchPage({
   const handleSaveSidebarProfile = async (input: ProfileInput, editId?: string) => {
     cancelStream();
     input = ProfileInputSchema.parse(input);
-    if (!editId && effectiveProfiles.length >= TIER_META[tier].maxProfiles) {
-      throw new Error(`当前${TIER_META[tier].label}最多存放 ${TIER_META[tier].maxProfiles} 个档案，请先删除旧档案或升级方案`);
-    }
+
     const finishSave = (savedId: string) => {
       focusAfterSaveRef.current = true;
       setActiveSubpage(null);
@@ -345,7 +343,7 @@ export function WorkbenchPage({
     setFailedTurn(null);
     setReplyNotice('');
 
-    if (effectiveProfiles.length === 0) {
+    if (!activeProfiles.length && effectiveProfiles.length === 0) {
       setStreamError('请先在左侧「档案管理」添加出生信息');
       return;
     }
@@ -359,7 +357,7 @@ export function WorkbenchPage({
       return;
     }
 
-    if (sessionProfileIds?.some((id) => !profiles.some((p) => p.id === id))) {
+    if (!activeSession?.subjects?.length && sessionProfileIds?.some((id) => !profiles.some((p) => p.id === id))) {
       setStreamError('此咨询的档案已删除，请切换对象开启新咨询');
       return;
     }
@@ -389,21 +387,18 @@ export function WorkbenchPage({
         onSelectSession(targetSession.id);
       }
       if (controller.signal.aborted) { setInputText((draft) => draft || text); return; }
-      const sessionProfiles =
-        activeSession && activeSession.profileIds?.length
-          ? activeSession.profileIds.map((id) => profiles.find((p) => p.id === id)).filter((p): p is ProfileRecord => Boolean(p))
-          : activeProfiles;
+      const turnProfiles = targetSession.subjects?.length ? sessionProfiles(targetSession, profiles) : activeProfiles;
 
       await streamConsultationReply({
         uid,
         tier,
         usage: effectiveUsage,
         session: targetSession,
-        profiles: sessionProfiles.length > 0 ? sessionProfiles : activeProfiles,
+        profiles: turnProfiles,
         existingMessages: prevMessages,
         userText: text,
         editLastTurn,
-        depth: tier === 'pro' ? depth : undefined,
+        depth: depths.includes(depth) ? depth : depths[0],
         signal: controller.signal,
         onUpdateMessages: (next) => { if (current()) setMessages(next); },
         onUpdateChart: (next) => { if (current() && chartSignature === chartOwner) setChart(next); },
@@ -420,7 +415,7 @@ export function WorkbenchPage({
       }
     } finally {
       if (current()) {
-        if (controller.signal.aborted) setReplyNotice('已停止生成，已保留收到的内容');
+        if (controller.signal.aborted) setReplyNotice('已请求停止，最终结果以同步后的消息为准');
         isStreamingRef.current = false;
         setIsStreaming(false);
         abortRef.current = null;
@@ -528,7 +523,7 @@ export function WorkbenchPage({
             maxLength={2000}
             disabled={needsMoreProfiles}
             placeholder={
-              effectiveProfiles.length === 0
+              needsMoreProfiles
                 ? '请先添加出生信息'
                 : '问问Vela，问问宇宙'
             }
@@ -544,15 +539,15 @@ export function WorkbenchPage({
           />
 
           <div className="flex w-full min-w-0 items-center justify-end gap-2">
-            {tier === 'pro' && <>
-              <select aria-label="推演深度" value={depth} onChange={(e) => setDepth(e.target.value as AnalysisDepth)} disabled={isStreaming}
+            {depths.length>0 && <>
+              <select aria-label="推演深度" value={depths.includes(depth)?depth:depths[0]} onChange={(e) => setDepth(e.target.value as AnalysisDepth)} disabled={isStreaming}
                 className="sm:hidden min-w-0 max-w-[96px] shrink-0 rounded-[12px] border border-border bg-panel px-2 text-secondary">
-                <option value="quick">速览</option><option value="balanced">均衡</option><option value="deep">全维</option>
+                {depths.map(d=><option key={d} value={d}>{({quick:'速览',balanced:'均衡',deep:'全维'})[d]}</option>)}
               </select>
               <div role="group" aria-label="推演深度" className="hidden sm:flex shrink-0 items-center rounded-full border border-border p-0.5">
-                {([{ id: 'quick', label: '速览' }, { id: 'balanced', label: '均衡' }, { id: 'deep', label: '全维' }] as const).map((opt) => (
-                  <button key={opt.id} type="button" disabled={isStreaming} aria-pressed={depth === opt.id} onClick={() => setDepth(opt.id)}
-                    className={`px-3 rounded-full border-0 text-[13px] cursor-pointer ${depth === opt.id ? 'bg-accent/20 text-accent-bright' : 'bg-transparent text-muted'}`}>{opt.label}</button>
+                {([{ id: 'quick', label: '速览' }, { id: 'balanced', label: '均衡' }, { id: 'deep', label: '全维' }] as const).filter(opt=>depths.includes(opt.id)).map((opt) => (
+                  <button key={opt.id} type="button" disabled={isStreaming} aria-pressed={(depths.includes(depth)?depth:depths[0]) === opt.id} onClick={() => setDepth(opt.id)}
+                    className={`px-3 rounded-full border-0 text-[13px] cursor-pointer ${(depths.includes(depth)?depth:depths[0]) === opt.id ? 'bg-accent/20 text-accent-bright' : 'bg-transparent text-muted'}`}>{opt.label}</button>
                 ))}
               </div>
             </>}
@@ -590,6 +585,7 @@ export function WorkbenchPage({
         displayName={displayName}
         photoURL={photoURL}
         tier={tier}
+        plan={plan}
         usage={effectiveUsage}
         sidebarOpen={sidebarOpen}
         activeSubpage={activeSubpage}
@@ -645,6 +641,7 @@ export function WorkbenchPage({
             </button>
           )}
         </header>
+        {planError && <p role="alert" className="m-0 px-4 py-2 text-[13px] text-secondary">{planError} <button type="button" onClick={retryPlan}>重新加载权益</button></p>}
 
         {activeSubpage ? (
           <div className="flex-1 min-h-0 flex flex-col">
@@ -669,6 +666,7 @@ export function WorkbenchPage({
                 <ProfileManagerSubpage
                   uid={uid}
                   tier={tier}
+                  plan={plan}
                   profiles={effectiveProfiles}
                   selectedProfileIds={selectedProfileIds}
                   launch={profileLaunch}

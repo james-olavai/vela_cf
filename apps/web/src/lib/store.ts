@@ -1,5 +1,6 @@
 export {
   fetchNatalChart,
+  fetchTransitChart,
   loadCachedChart,
   removeProfile,
   saveCachedChart,
