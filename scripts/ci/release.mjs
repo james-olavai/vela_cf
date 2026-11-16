@@ -11,6 +11,17 @@ const tools=JSON.parse(readFileSync(new URL('./tools.json',import.meta.url),'utf
 const functionsRoot=`https://cloudfunctions.googleapis.com/v2/projects/${project}/locations/asia-southeast1`;
 const hosting=`https://firebasehosting.googleapis.com/v1beta1/sites/${project}/releases`;
 const rules=`https://firebaserules.googleapis.com/v1/projects/${project}/releases`;
+const businessService=`projects/${project}/locations/asia-southeast1/services/businessapi`;
+export async function configureGateway(disabled, {request=google, sleep=ms=>new Promise(r=>setTimeout(r,ms))}={}) {
+  const url=`https://run.googleapis.com/v2/${businessService}`;
+  const current=await request(url);
+  if(Boolean(current.invokerIamDisabled)===disabled)return;
+  let op=await request(`${url}?updateMask=invokerIamDisabled,template.revision`,{method:'PATCH',body:{name:businessService,etag:current.etag,invokerIamDisabled:disabled,template:{revision:''}}});
+  for(let i=0;!op.done && i<24;i++) {await sleep(5000);op=await request(`https://run.googleapis.com/v2/${op.name}`);}
+  assert(op.done&&!op.error,'Cloud Run gateway configuration failed or timed out');
+  const updated=await request(url);
+  assert.equal(Boolean(updated.invokerIamDisabled),disabled,'Cloud Run gateway configuration was not applied');
+}
 async function listFunctions(request=google) {
   const found=[];let pageToken;
   do {
@@ -29,6 +40,7 @@ export async function snapshot(inventory) {
   const present=new Set(saved.functions.map(f=>f.name.split('/').at(-1)));
   assert(inventory.existing.every(n=>present.has(n))&&saved.functions.every(f=>f.buildConfig.source?.storageSource),'Missing Functions rollback sources');
   saved.createdFunctions=inventory.introduced.filter(n=>!present.has(n)).map(n=>`projects/${project}/locations/asia-southeast1/functions/${n}`);
+  if(present.has('businessApi')) saved.gateway={invokerIamDisabled:Boolean((await google(`https://run.googleapis.com/v2/${businessService}`)).invokerIamDisabled)};
   assert(saved.rules.length>0,'Missing Firestore rollback rulesets');return saved;
 }
 export async function rollback(saved, { request=google, sleep=ms=>new Promise(r=>setTimeout(r,ms)), timeoutMs=20*60_000 }={}) {
@@ -58,6 +70,7 @@ export async function rollback(saved, { request=google, sleep=ms=>new Promise(r=
     if(pending.length) await sleep(5000);
   }
   if(pending.length) errors.push(new Error('Rollback operations timed out'));
+  if(saved.gateway)try {await configureGateway(saved.gateway.invokerIamDisabled,{request,sleep});}catch(e){errors.push(e);}
   if(errors.length) throw new AggregateError(errors,'Rollback incomplete; see saved release snapshot');
 }
 export async function verifyHosting(manifest) {
@@ -101,6 +114,7 @@ async function release() {
       const [code]=await once(child,'exit');assert.equal(code,0,`Firebase deployment failed: ${only}`);
     };
     await deploy('functions');
+    await configureGateway(true); // Firebase ID Tokens belong to application auth, not Cloud Run IAM.
     await waitForApiGateway(`https://asia-southeast1-${project}.cloudfunctions.net/businessApi`);
     await liveApiSmoke(); // Backend must serve new clients before publishing their assets.
     await deploy('hosting');
