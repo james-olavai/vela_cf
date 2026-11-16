@@ -1020,6 +1020,9 @@ PAT 整合后的默认测试 153 项中 150 通过，3 项模拟器专用检查�
 
 ### 11.13 Stripe 安装预检与付费验收（2026-11-16）
 
+**staging Checkout 实测修复：** 真实候选 API 创建 Checkout 返回 500，Stripe 返回 `property_expansion_max_depth`：订阅列表请求使用 `data.items.data.price.product`，超过 Stripe 最多四层的展开限制。已移除列表请求的多余 expand；商品仍由后续独立 `prices.retrieve(..., {expand:['product']})` 校验。原模拟器直接替换 `subscriptions.list`，未执行 SDK 序列化和供应商参数验证，因此未发现此错误。新增真实 Stripe SDK → 本地 HTTP 供应商契约测试，验证请求携带正确 customer/status，服务端拒绝超过四层展开；该测试覆盖核心 Webhook 的实际查询路径，修复前会失败。签名及 HTTP 契约回归 5/5、API 构建通过；线上修复仍须部署后重新执行实际 Checkout，不以本地通过替代。
+
+
 **当前状态：尚未安装支付扩展，不能宣称 Vela 线上支付闭环已完成。** 用户提供的根目录 `.env` 中 `stripe_token` 经 Stripe API 验证为测试模式密钥。Go / Pro 商品 metadata `firebaseRole` 正确，默认价格分别为 USD 9.90 / 24.90 每月。当前项目只有 Delete User Data 扩展；Stripe 测试账户尚无 Webhook endpoint。根目录密钥不会自动成为 Functions 的生产配置，不写入源码、前端变量或日志。
 
 安装预检从 Firebase Extensions 注册表及发布源码核实 `invertase/firestore-stripe-payments@0.3.12` 的六个函数均为 Node.js 20、Firestore 触发器和 Admin SDK 固定 `(default)`，没有命名数据库参数。实际业务数据库为新加坡命名数据库，默认数据库位于悉尼。Google [运行时支持表](https://docs.cloud.google.com/functions/docs/runtime-support) 列出 Node.js 20 在 2026-10-30 退役，此后不能创建或重新部署；[Extensions FAQ](https://firebase.google.com/docs/extensions/faq-and-troubleshooting) 公告管理服务于 2027-03-31 关闭，已部署函数不因管理服务关闭而自动停止。此次在预检阶段阻止安装，未发起有部分资源落地风险的部署，未创建支付 secrets 或 Webhook。

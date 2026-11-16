@@ -38,7 +38,7 @@ export async function withBillingLock<T>(db:Firestore,uid:string,operation:(asse
 }
 async function currentSubscriptions(stripe:Stripe,customer:string) {
   const result:Stripe.Subscription[]=[];
-  for await(const subscription of stripe.subscriptions.list({customer,status:'all',limit:100,expand:['data.items.data.price.product']}))result.push(subscription);
+  for await(const subscription of stripe.subscriptions.list({customer,status:'all',limit:100}))result.push(subscription);
   return result;
 }
 function priceFor(tier:'go'|'pro') {
