@@ -52,11 +52,11 @@ test('checkout creation uses server price and owner scope; status strips extensi
   } finally {if(previous===undefined)delete process.env.STRIPE_PRICE_GO;else process.env.STRIPE_PRICE_GO=previous;}
 });
 
-test('location lookup falls back without geocoding and reuses validated cache',async()=>{
+test('location lookup matches builtin data without geocoding or database writes',async()=>{
   const {db,store}=database();let requests=0;
   const failed=(async()=>{requests++;throw new Error('offline');}) as typeof fetch;
-  const first=await searchLocations(db,{query:'上海'},failed);assert.equal(first.results[0].timezone,'Asia/Shanghai');assert.equal(store.size,1);
-  assert.deepEqual(await searchLocations(db,{query:'上海'},failed),first);assert.equal(requests,1);
+  const first=await searchLocations(db,{query:'上海'},failed);assert.equal(first.results[0].timezone,'Asia/Shanghai');assert.equal(store.size,0);
+  assert.deepEqual(await searchLocations(db,{query:'上海'},failed),first);assert.equal(requests,0);
 });
 
 test('public plans preserve tier entitlements and expose depth choices only for Pro with a concrete contract',async()=>{

@@ -1,0 +1,32 @@
+{
+  "catalogVersion": "2026-11-16-1",
+  "countryMappings": {
+    "CN": "CN"
+  },
+  "items": [
+    {
+      "id": "country-cn-founding",
+      "version": "1",
+      "countryCode": "CN",
+      "name": "中国",
+      "eventName": "中华人民共和国中央人民政府成立典礼",
+      "localDate": "1949-10-01",
+      "localTime": "15:00",
+      "timezone": "Asia/Shanghai",
+      "placeLabel": "天安门城楼，北京",
+      "latitude": 39.9087,
+      "longitude": 116.3975,
+      "sourceReferences": [
+        "https://www.fmprc.gov.cn/eng./zy/jj/zggcddwjw100ggs/jszgddzg/202406/t20240606_11377939.html"
+      ],
+      "sourceNote": "采用中央人民政府成立宣告事件；外交部资料记载当地 1949 年 10 月 1 日 15:00 于天安门城楼宣告成立。地点坐标沿用旧 Vela 事件目录的城楼近似位置，不表示唯一国家盘口径。历史当地时间由 IANA Asia/Shanghai 解析。",
+      "timeReliability": "verified"
+    }
+  ],
+  "defaults": {
+    "CN": {
+      "id": "country-cn-founding",
+      "version": "1"
+    }
+  }
+}

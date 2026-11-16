@@ -516,6 +516,24 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "locationRef": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "version": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version"
+                            ],
+                            "additionalProperties": false
+                          },
                           "name": {
                             "type": "string",
                             "minLength": 1,
@@ -575,6 +593,17 @@
                           },
                           "updatedAt": {
                             "type": "string"
+                          },
+                          "countryCode": {
+                            "type": "string",
+                            "pattern": "^[A-Z]{2}$"
+                          },
+                          "locationSource": {
+                            "type": "string",
+                            "enum": [
+                              "builtin",
+                              "external"
+                            ]
                           }
                         },
                         "required": [
@@ -730,6 +759,24 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "locationRef": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "version": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -802,6 +849,24 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "locationRef": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
                     "name": {
                       "type": "string",
                       "minLength": 1,
@@ -861,6 +926,17 @@
                     },
                     "updatedAt": {
                       "type": "string"
+                    },
+                    "countryCode": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{2}$"
+                    },
+                    "locationSource": {
+                      "type": "string",
+                      "enum": [
+                        "builtin",
+                        "external"
+                      ]
                     }
                   },
                   "required": [
@@ -1011,6 +1087,24 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "locationRef": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
                     "name": {
                       "type": "string",
                       "minLength": 1,
@@ -1070,6 +1164,17 @@
                     },
                     "updatedAt": {
                       "type": "string"
+                    },
+                    "countryCode": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{2}$"
+                    },
+                    "locationSource": {
+                      "type": "string",
+                      "enum": [
+                        "builtin",
+                        "external"
+                      ]
                     }
                   },
                   "required": [
@@ -1217,6 +1322,24 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "locationRef": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      },
+                      "version": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -1279,6 +1402,24 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "locationRef": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
                     "name": {
                       "type": "string",
                       "minLength": 1,
@@ -1338,6 +1479,17 @@
                     },
                     "updatedAt": {
                       "type": "string"
+                    },
+                    "countryCode": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{2}$"
+                    },
+                    "locationSource": {
+                      "type": "string",
+                      "enum": [
+                        "builtin",
+                        "external"
+                      ]
                     }
                   },
                   "required": [
@@ -1659,6 +1811,24 @@
                                 "profile": {
                                   "type": "object",
                                   "properties": {
+                                    "locationRef": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        },
+                                        "version": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "version"
+                                      ],
+                                      "additionalProperties": false
+                                    },
                                     "name": {
                                       "type": "string",
                                       "minLength": 1,
@@ -1708,6 +1878,17 @@
                                     },
                                     "consentedOther": {
                                       "type": "boolean"
+                                    },
+                                    "countryCode": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{2}$"
+                                    },
+                                    "locationSource": {
+                                      "type": "string",
+                                      "enum": [
+                                        "builtin",
+                                        "external"
+                                      ]
                                     }
                                   },
                                   "required": [
@@ -1719,6 +1900,116 @@
                                     "longitude",
                                     "timezone",
                                     "gender"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "countryChart": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                    },
+                                    "countryCode": {
+                                      "type": "string",
+                                      "pattern": "^[A-Z]{2}$"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "eventName": {
+                                      "type": "string"
+                                    },
+                                    "localDate": {
+                                      "type": "string"
+                                    },
+                                    "localTime": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "timezone": {
+                                      "type": "string"
+                                    },
+                                    "placeLabel": {
+                                      "type": "string"
+                                    },
+                                    "latitude": {
+                                      "type": "number"
+                                    },
+                                    "longitude": {
+                                      "type": "number"
+                                    },
+                                    "sourceReferences": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "format": "uri"
+                                      }
+                                    },
+                                    "sourceNote": {
+                                      "type": "string"
+                                    },
+                                    "timeReliability": {
+                                      "type": "string",
+                                      "enum": [
+                                        "verified",
+                                        "approximate",
+                                        "unknown"
+                                      ]
+                                    },
+                                    "isDefault": {
+                                      "type": "boolean"
+                                    },
+                                    "contentHash": {
+                                      "type": "string"
+                                    },
+                                    "usable": {
+                                      "type": "boolean"
+                                    },
+                                    "reason": {
+                                      "type": "string"
+                                    },
+                                    "catalogVersion": {
+                                      "type": "string"
+                                    },
+                                    "sourceRef": {
+                                      "type": "string",
+                                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                    },
+                                    "basis": {
+                                      "type": "string",
+                                      "enum": [
+                                        "birth_location",
+                                        "registration_location",
+                                        "explicit"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "version",
+                                    "countryCode",
+                                    "name",
+                                    "eventName",
+                                    "localDate",
+                                    "localTime",
+                                    "timezone",
+                                    "placeLabel",
+                                    "latitude",
+                                    "longitude",
+                                    "sourceReferences",
+                                    "sourceNote",
+                                    "timeReliability",
+                                    "isDefault",
+                                    "contentHash",
+                                    "usable",
+                                    "catalogVersion"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -1942,6 +2233,60 @@
                                   "type": "string",
                                   "pattern": "^[a-zA-Z0-9_-]{1,128}$"
                                 },
+                                "country_chart": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        },
+                                        "version": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "version"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "mode": {
+                                          "type": "string",
+                                          "const": "auto"
+                                        },
+                                        "source_ref": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "mode",
+                                        "source_ref"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "ref",
+                                "country_chart"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "ref": {
+                                  "type": "string",
+                                  "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                },
                                 "profile_id": {
                                   "type": "string",
                                   "pattern": "^[a-zA-Z0-9_-]{1,128}$"
@@ -1963,6 +2308,24 @@
                                 "birth": {
                                   "type": "object",
                                   "properties": {
+                                    "locationRef": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        },
+                                        "version": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "version"
+                                      ],
+                                      "additionalProperties": false
+                                    },
                                     "datetime": {
                                       "type": "string",
                                       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$"
@@ -2095,6 +2458,24 @@
                           "profile": {
                             "type": "object",
                             "properties": {
+                              "locationRef": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              },
                               "name": {
                                 "type": "string",
                                 "minLength": 1,
@@ -2144,6 +2525,17 @@
                               },
                               "consentedOther": {
                                 "type": "boolean"
+                              },
+                              "countryCode": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{2}$"
+                              },
+                              "locationSource": {
+                                "type": "string",
+                                "enum": [
+                                  "builtin",
+                                  "external"
+                                ]
                               }
                             },
                             "required": [
@@ -2155,6 +2547,116 @@
                               "longitude",
                               "timezone",
                               "gender"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "countryChart": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "version": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "countryCode": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{2}$"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "eventName": {
+                                "type": "string"
+                              },
+                              "localDate": {
+                                "type": "string"
+                              },
+                              "localTime": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "timezone": {
+                                "type": "string"
+                              },
+                              "placeLabel": {
+                                "type": "string"
+                              },
+                              "latitude": {
+                                "type": "number"
+                              },
+                              "longitude": {
+                                "type": "number"
+                              },
+                              "sourceReferences": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "format": "uri"
+                                }
+                              },
+                              "sourceNote": {
+                                "type": "string"
+                              },
+                              "timeReliability": {
+                                "type": "string",
+                                "enum": [
+                                  "verified",
+                                  "approximate",
+                                  "unknown"
+                                ]
+                              },
+                              "isDefault": {
+                                "type": "boolean"
+                              },
+                              "contentHash": {
+                                "type": "string"
+                              },
+                              "usable": {
+                                "type": "boolean"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "catalogVersion": {
+                                "type": "string"
+                              },
+                              "sourceRef": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "basis": {
+                                "type": "string",
+                                "enum": [
+                                  "birth_location",
+                                  "registration_location",
+                                  "explicit"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version",
+                              "countryCode",
+                              "name",
+                              "eventName",
+                              "localDate",
+                              "localTime",
+                              "timezone",
+                              "placeLabel",
+                              "latitude",
+                              "longitude",
+                              "sourceReferences",
+                              "sourceNote",
+                              "timeReliability",
+                              "isDefault",
+                              "contentHash",
+                              "usable",
+                              "catalogVersion"
                             ],
                             "additionalProperties": false
                           }
@@ -2362,6 +2864,24 @@
                           "profile": {
                             "type": "object",
                             "properties": {
+                              "locationRef": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              },
                               "name": {
                                 "type": "string",
                                 "minLength": 1,
@@ -2411,6 +2931,17 @@
                               },
                               "consentedOther": {
                                 "type": "boolean"
+                              },
+                              "countryCode": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{2}$"
+                              },
+                              "locationSource": {
+                                "type": "string",
+                                "enum": [
+                                  "builtin",
+                                  "external"
+                                ]
                               }
                             },
                             "required": [
@@ -2422,6 +2953,116 @@
                               "longitude",
                               "timezone",
                               "gender"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "countryChart": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "version": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "countryCode": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{2}$"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "eventName": {
+                                "type": "string"
+                              },
+                              "localDate": {
+                                "type": "string"
+                              },
+                              "localTime": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "timezone": {
+                                "type": "string"
+                              },
+                              "placeLabel": {
+                                "type": "string"
+                              },
+                              "latitude": {
+                                "type": "number"
+                              },
+                              "longitude": {
+                                "type": "number"
+                              },
+                              "sourceReferences": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "format": "uri"
+                                }
+                              },
+                              "sourceNote": {
+                                "type": "string"
+                              },
+                              "timeReliability": {
+                                "type": "string",
+                                "enum": [
+                                  "verified",
+                                  "approximate",
+                                  "unknown"
+                                ]
+                              },
+                              "isDefault": {
+                                "type": "boolean"
+                              },
+                              "contentHash": {
+                                "type": "string"
+                              },
+                              "usable": {
+                                "type": "boolean"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "catalogVersion": {
+                                "type": "string"
+                              },
+                              "sourceRef": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                              },
+                              "basis": {
+                                "type": "string",
+                                "enum": [
+                                  "birth_location",
+                                  "registration_location",
+                                  "explicit"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version",
+                              "countryCode",
+                              "name",
+                              "eventName",
+                              "localDate",
+                              "localTime",
+                              "timezone",
+                              "placeLabel",
+                              "latitude",
+                              "longitude",
+                              "sourceReferences",
+                              "sourceNote",
+                              "timeReliability",
+                              "isDefault",
+                              "contentHash",
+                              "usable",
+                              "catalogVersion"
                             ],
                             "additionalProperties": false
                           }
@@ -3432,11 +4073,293 @@
         }
       }
     },
+    "/v1/locations/catalog": {
+      "get": {
+        "operationId": "listLocationCatalog",
+        "security": [],
+        "parameters": [
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "catalogVersion": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                          },
+                          "version": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                          },
+                          "displayName": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "aliases": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "admin1": {
+                            "type": "string"
+                          },
+                          "countryCode": {
+                            "type": "string",
+                            "pattern": "^[A-Z]{2}$"
+                          },
+                          "latitude": {
+                            "type": "number",
+                            "minimum": -90,
+                            "maximum": 90
+                          },
+                          "longitude": {
+                            "type": "number",
+                            "minimum": -180,
+                            "maximum": 180
+                          },
+                          "timezone": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "builtin",
+                              "external"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version",
+                          "displayName",
+                          "name",
+                          "aliases",
+                          "countryCode",
+                          "latitude",
+                          "longitude",
+                          "timezone",
+                          "source"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "catalogVersion",
+                    "items",
+                    "nextCursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Public catalog unchanged",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/locations": {
       "get": {
         "operationId": "searchLocations",
         "security": [],
         "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "builtin",
+                "external",
+                "auto"
+              ]
+            }
+          },
           {
             "name": "query",
             "in": "query",
@@ -3461,8 +4384,33 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                          },
+                          "version": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                          },
                           "displayName": {
                             "type": "string"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "aliases": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "admin1": {
+                            "type": "string"
+                          },
+                          "countryCode": {
+                            "type": "string",
+                            "pattern": "^[A-Z]{2}$"
                           },
                           "latitude": {
                             "type": "number"
@@ -3472,6 +4420,13 @@
                           },
                           "timezone": {
                             "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "builtin",
+                              "external"
+                            ]
                           }
                         },
                         "required": [
@@ -3651,6 +4606,60 @@
                                   "type": "string",
                                   "pattern": "^[a-zA-Z0-9_-]{1,128}$"
                                 },
+                                "country_chart": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        },
+                                        "version": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "version"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "mode": {
+                                          "type": "string",
+                                          "const": "auto"
+                                        },
+                                        "source_ref": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "mode",
+                                        "source_ref"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "ref",
+                                "country_chart"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "ref": {
+                                  "type": "string",
+                                  "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                },
                                 "profile_id": {
                                   "type": "string",
                                   "pattern": "^[a-zA-Z0-9_-]{1,128}$"
@@ -3672,6 +4681,24 @@
                                 "birth": {
                                   "type": "object",
                                   "properties": {
+                                    "locationRef": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        },
+                                        "version": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "version"
+                                      ],
+                                      "additionalProperties": false
+                                    },
                                     "datetime": {
                                       "type": "string",
                                       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$"
@@ -4091,6 +5118,60 @@
                                   "type": "string",
                                   "pattern": "^[a-zA-Z0-9_-]{1,128}$"
                                 },
+                                "country_chart": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        },
+                                        "version": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "version"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "mode": {
+                                          "type": "string",
+                                          "const": "auto"
+                                        },
+                                        "source_ref": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "mode",
+                                        "source_ref"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "ref",
+                                "country_chart"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "ref": {
+                                  "type": "string",
+                                  "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                },
                                 "profile_id": {
                                   "type": "string",
                                   "pattern": "^[a-zA-Z0-9_-]{1,128}$"
@@ -4112,6 +5193,24 @@
                                 "birth": {
                                   "type": "object",
                                   "properties": {
+                                    "locationRef": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        },
+                                        "version": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "version"
+                                      ],
+                                      "additionalProperties": false
+                                    },
                                     "datetime": {
                                       "type": "string",
                                       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$"
@@ -6062,6 +7161,839 @@
                   },
                   "required": [
                     "type"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/country-charts": {
+      "get": {
+        "operationId": "listCountryCharts",
+        "security": [],
+        "parameters": [
+          {
+            "name": "countryCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:[1-9]|[1-9]\\d|100)$"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "catalogVersion": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "version": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                          },
+                          "countryCode": {
+                            "type": "string",
+                            "pattern": "^[A-Z]{2}$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "eventName": {
+                            "type": "string"
+                          },
+                          "localDate": {
+                            "type": "string"
+                          },
+                          "localTime": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "timezone": {
+                            "type": "string"
+                          },
+                          "placeLabel": {
+                            "type": "string"
+                          },
+                          "latitude": {
+                            "type": "number"
+                          },
+                          "longitude": {
+                            "type": "number"
+                          },
+                          "sourceReferences": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uri"
+                            }
+                          },
+                          "sourceNote": {
+                            "type": "string"
+                          },
+                          "timeReliability": {
+                            "type": "string",
+                            "enum": [
+                              "verified",
+                              "approximate",
+                              "unknown"
+                            ]
+                          },
+                          "isDefault": {
+                            "type": "boolean"
+                          },
+                          "contentHash": {
+                            "type": "string"
+                          },
+                          "usable": {
+                            "type": "boolean"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version",
+                          "countryCode",
+                          "name",
+                          "eventName",
+                          "localDate",
+                          "localTime",
+                          "timezone",
+                          "placeLabel",
+                          "latitude",
+                          "longitude",
+                          "sourceReferences",
+                          "sourceNote",
+                          "timeReliability",
+                          "isDefault",
+                          "contentHash",
+                          "usable"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "catalogVersion",
+                    "items",
+                    "nextCursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Public catalog unchanged",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/country-charts/{id}": {
+      "get": {
+        "operationId": "getCountryChart",
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                    },
+                    "version": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                    },
+                    "countryCode": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{2}$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "eventName": {
+                      "type": "string"
+                    },
+                    "localDate": {
+                      "type": "string"
+                    },
+                    "localTime": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "placeLabel": {
+                      "type": "string"
+                    },
+                    "latitude": {
+                      "type": "number"
+                    },
+                    "longitude": {
+                      "type": "number"
+                    },
+                    "sourceReferences": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uri"
+                      }
+                    },
+                    "sourceNote": {
+                      "type": "string"
+                    },
+                    "timeReliability": {
+                      "type": "string",
+                      "enum": [
+                        "verified",
+                        "approximate",
+                        "unknown"
+                      ]
+                    },
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "contentHash": {
+                      "type": "string"
+                    },
+                    "usable": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "version",
+                    "countryCode",
+                    "name",
+                    "eventName",
+                    "localDate",
+                    "localTime",
+                    "timezone",
+                    "placeLabel",
+                    "latitude",
+                    "longitude",
+                    "sourceReferences",
+                    "sourceNote",
+                    "timeReliability",
+                    "isDefault",
+                    "contentHash",
+                    "usable"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Public catalog unchanged",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Rejected request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{id}/country-chart": {
+      "get": {
+        "operationId": "recommendCountryChart",
+        "security": [
+          {
+            "FirebaseIdToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "matched",
+                        "needs_selection",
+                        "unavailable"
+                      ]
+                    },
+                    "basis": {
+                      "type": "string",
+                      "enum": [
+                        "birth_location",
+                        "registration_location",
+                        "none"
+                      ]
+                    },
+                    "countryCode": {
+                      "type": "string"
+                    },
+                    "chart": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_-]{1,128}$"
+                        },
+                        "countryCode": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "eventName": {
+                          "type": "string"
+                        },
+                        "localDate": {
+                          "type": "string"
+                        },
+                        "localTime": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "timezone": {
+                          "type": "string"
+                        },
+                        "placeLabel": {
+                          "type": "string"
+                        },
+                        "latitude": {
+                          "type": "number"
+                        },
+                        "longitude": {
+                          "type": "number"
+                        },
+                        "sourceReferences": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uri"
+                          }
+                        },
+                        "sourceNote": {
+                          "type": "string"
+                        },
+                        "timeReliability": {
+                          "type": "string",
+                          "enum": [
+                            "verified",
+                            "approximate",
+                            "unknown"
+                          ]
+                        },
+                        "isDefault": {
+                          "type": "boolean"
+                        },
+                        "contentHash": {
+                          "type": "string"
+                        },
+                        "usable": {
+                          "type": "boolean"
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version",
+                        "countryCode",
+                        "name",
+                        "eventName",
+                        "localDate",
+                        "localTime",
+                        "timezone",
+                        "placeLabel",
+                        "latitude",
+                        "longitude",
+                        "sourceReferences",
+                        "sourceNote",
+                        "timeReliability",
+                        "isDefault",
+                        "contentHash",
+                        "usable"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "catalogVersion": {
+                      "type": "string"
+                    },
+                    "profileUpdatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "basis",
+                    "catalogVersion",
+                    "profileUpdatedAt"
                   ],
                   "additionalProperties": false
                 }

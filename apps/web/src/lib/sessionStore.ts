@@ -1,3 +1,4 @@
+import { consultationSubjects, type CountryChoice } from './geoStore';
 import { streamTurn } from './turnClient';
 import {
   extractVelaUiBlocks,
@@ -43,6 +44,7 @@ export async function createConsultationSession(
   mode: ConsultationMode,
   profiles: ProfileRecord[],
   initialQuestion?: string,
+  country?: CountryChoice,
 ): Promise<SessionRecord> {
   if (e2eMode) {
     const now = new Date().toISOString();
@@ -63,7 +65,7 @@ export async function createConsultationSession(
     };
   }
   const uid=auth.currentUser?.uid;if(!uid)throw new Error('AUTH_REQUIRED');
-  return businessApi<SessionRecord>(uid, '/v1/sessions', 'POST', {mode, subjects:profiles.map((p,index)=>({ref:`subject_${index+1}`,profile_id:p.id})), ...(initialQuestion?{initialQuestion}:{})});
+  return businessApi<SessionRecord>(uid, '/v1/sessions', 'POST', {mode, subjects:consultationSubjects(profiles,country), ...(initialQuestion?{initialQuestion}:{})});
 }
 
 export async function streamConsultationReply(params: {

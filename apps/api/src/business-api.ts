@@ -3,16 +3,18 @@ import { FieldPath, type Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { ProfileInputSchema, CreateSessionRequestSchema, TierSchema, TIER_META, computeEffectiveBudget } from '@vela-cf/shared';
 import { createFrozenSession } from './session.js';
+import { CountrySnapshotSchema } from './country-charts.js';
 import { resolveUserPeriodAndTier } from './quota.js';
+import { resolveProfileLocation } from './locations.js';
 
 const Id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
 const DateText = z.string();
 const Profile = ProfileInputSchema.strict();
-const ProfileRecord = Profile.extend({ id: Id, createdAt: DateText, updatedAt: DateText });
+const ProfileRecord = Profile.extend({ id: Id, createdAt: DateText, updatedAt: DateText, countryCode:z.string().regex(/^[A-Z]{2}$/).optional(),locationSource:z.enum(['builtin','external']).optional() });
 const ProfilePatch = Profile.partial().extend({ entityType: Profile.shape.entityType.unwrap().optional(), gender: Profile.shape.gender.unwrap().optional() }).strict().refine(v => Object.keys(v).length > 0, 'EMPTY_PATCH');
 const MePatch = z.object({ displayName: z.string().trim().max(64).optional(), acceptedTerms: z.literal(true).optional(), confirmedAdult: z.literal(true).optional() }).strict();
 const Me = z.object({ uid: Id, email: z.string(), displayName: z.string(), acceptedTermsAt: DateText, confirmedAdultAt: DateText, createdAt: DateText });
-const Session = z.object({ subjects: z.array(z.object({ref:Id,profileId:Id.optional(),profile:ProfileInputSchema})).optional(), id: Id, mode: z.enum(['personal', 'synastry']), profileIds: z.array(Id), profileId: Id, profileName: z.string(), title: z.string(), createdAt: DateText, updatedAt: DateText });
+const Session = z.object({ subjects: z.array(z.object({ref:Id,profileId:Id.optional(),profile:ProfileInputSchema.extend({countryCode:ProfileRecord.shape.countryCode,locationSource:ProfileRecord.shape.locationSource}),countryChart:CountrySnapshotSchema.optional()})).optional(), id: Id, mode: z.enum(['personal', 'synastry']), profileIds: z.array(Id), profileId: Id, profileName: z.string(), title: z.string(), createdAt: DateText, updatedAt: DateText });
 const Message = z.object({ id: Id, role: z.enum(['user','assistant','tool']), parts: z.array(z.record(z.string(), z.unknown())), suggestions: z.array(z.string()).optional(), createdAt: DateText });
 const PageQuery = z.object({ limit: z.string().regex(/^(?:[1-9]|[1-4]\d|50)$/).transform(Number).optional(), cursor: Id.optional() }).strict();
 const page = (item: z.ZodType) => z.object({ items: z.array(item), nextCursor: Id.nullable() });
@@ -83,7 +85,7 @@ export async function dispatchBusinessApi(db: Firestore, request: BusinessReques
     case 'listProfiles': result = await list(root.collection('profiles')); break;
     case 'createProfile': {
       const ref = root.collection('profiles').doc();
-      const data = { ...input, consentedOther: Boolean(input.consentedOther), createdAt: now, updatedAt: now };
+      const data = { ...await resolveProfileLocation(db,input), consentedOther: Boolean(input.consentedOther), createdAt: now, updatedAt: now };
       const guard = root.collection('private').doc('profile-limit');
       await db.runTransaction(async tx => {
         const lock = await tx.get(guard), usage = await tx.get(db.collection('usage').doc(uid));
@@ -103,7 +105,7 @@ export async function dispatchBusinessApi(db: Firestore, request: BusinessReques
       result = await db.runTransaction(async tx => {
         const snap = await tx.get(ref);
         if (!snap.exists) throw new HttpsError('not-found', 'RESOURCE_NOT_FOUND');
-        const data = ProfileRecord.parse({ ...snap.data(), ...input, updatedAt: now, id });
+        const data = ProfileRecord.parse({ ...await resolveProfileLocation(db,input,snap.data()), updatedAt: now, id });
         const { id: _, ...stored } = data; tx.set(ref, stored); return data;
       }); break;
     }

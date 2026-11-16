@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import { parseChat, parseHttpChat } from './live-smoke.mjs';
-import { rollback, validateArtifact, configureGateway } from './release.mjs';
+import { rollback, validateArtifact, configureGateway, verifyRollbackCapabilities } from './release.mjs';
 const sse=data=>`data: ${JSON.stringify(data)}\n\n`;
 test('HTTP 200 is insufficient: smoke requires text, done, final, and rejects stream errors',()=>{
   const text=sse({message:{type:'text',text:'reply'}}), done=sse({message:{type:'done'}}), final=sse({result:{text:'verified response '.repeat(4)}});
@@ -144,4 +144,31 @@ test('Rollback restores the prior gateway setting for a pre-existing business AP
     return {};
   }});
   assert(restored);
+});
+
+
+test('Release checks the active rollback capability before permitting new profile metadata writes',async()=>{
+  const manifest={requiredRollbackCapabilities:['profile-location-metadata']};
+  const active={sha:'a'.repeat(40),rollbackCapabilities:['profile-location-metadata']};
+  const result=await verifyRollbackCapabilities(manifest,async(url,options)=>{
+    assert(url.startsWith('https://'));assert(url.includes('/version.json?t='));
+    assert.equal(options.cache,'no-store');assert.equal(options.redirect,'error');assert(options.signal);
+    return Response.json(active);
+  });
+  assert.deepEqual(result,active);
+  await assert.rejects(verifyRollbackCapabilities(manifest,async()=>Response.json({sha:'299c6404063039cced486781bc981a10fdfbf0b9'})),/preparation release first/);
+  await assert.rejects(verifyRollbackCapabilities(manifest,async()=>Response.json({...active,rollbackCapabilities:['unrelated']})),/profile-location-metadata/);
+});
+
+test('Rollback capability gate fails closed on unavailable, malformed, or incomplete evidence',async()=>{
+  const manifest={requiredRollbackCapabilities:['profile-location-metadata']};
+  for(const response of [
+    new Response('not found',{status:404}),new Response('<html>fallback</html>'),
+    Response.json({sha:'not-a-commit',rollbackCapabilities:manifest.requiredRollbackCapabilities}),
+    Response.json({sha:'b'.repeat(40),rollbackCapabilities:'profile-location-metadata'}),
+    new Response('invalid JSON',{headers:{'content-type':'application/json'}}),
+  ])await assert.rejects(verifyRollbackCapabilities(manifest,async()=>response));
+  await assert.rejects(verifyRollbackCapabilities(manifest,async()=>{throw new Error('network unavailable');}),/network unavailable/);
+  await assert.rejects(verifyRollbackCapabilities({},async()=>{assert.fail('Malformed manifest must fail before network');}),/Invalid required/);
+  await verifyRollbackCapabilities({requiredRollbackCapabilities:[]},async()=>{assert.fail('Read-only preparation release has no new write capability requirement');});
 });

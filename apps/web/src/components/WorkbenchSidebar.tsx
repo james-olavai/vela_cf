@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { ApiPlan } from '../lib/accountStore';
 import { planUsagePercent } from '../lib/planStore';
 import { Modal } from './Modal';
@@ -32,6 +32,7 @@ interface WorkbenchSidebarProps {
   portraitSubtitle: string;
   profiles: ProfileRecord[];
   selectedProfileIds: string[];
+  countryPanel?: ReactNode;
   onSetSidebarOpen: (open: boolean) => void;
   onNewSession: () => void;
   onOpenHistorySearch: () => void;
@@ -55,7 +56,7 @@ export function WorkbenchSidebar({
   needsMoreProfiles,
   portraitSubtitle,
   profiles,
-  selectedProfileIds,
+  selectedProfileIds, countryPanel,
   onSetSidebarOpen,
   onNewSession,
   onOpenHistorySearch,
@@ -187,6 +188,7 @@ export function WorkbenchSidebar({
           onSetPrimaryProfile={onSetPrimaryProfile}
           onToggleSynastryProfile={onToggleSynastryProfile}
         />
+        {countryPanel}
       </div>
 
       <div className="p-3 border-t border-divider">

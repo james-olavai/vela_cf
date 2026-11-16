@@ -73,10 +73,26 @@ export async function rollback(saved, { request=google, sleep=ms=>new Promise(r=
   if(saved.gateway)try {await configureGateway(saved.gateway.invokerIamDisabled,{request,sleep});}catch(e){errors.push(e);}
   if(errors.length) throw new AggregateError(errors,'Rollback incomplete; see saved release snapshot');
 }
+// Fail before any deployment: the saved server must be able to read data this release can create.
+export async function verifyRollbackCapabilities(manifest, fetchImpl=fetch) {
+  const required=manifest.requiredRollbackCapabilities;
+  assert(Array.isArray(required) && required.every(value=>typeof value==='string' && /^[a-z0-9-]+$/.test(value)) && new Set(required).size===required.length,'Invalid required rollback capabilities');
+  if(!required.length)return;
+  const response=await fetchImpl(`https://${project}.web.app/version.json?t=${Date.now()}`,{cache:'no-store',redirect:'error',signal:AbortSignal.timeout(30_000)});
+  assert(response.ok && response.headers.get('content-type')?.includes('application/json'),'Cannot verify the active rollback release capabilities');
+  const active=await response.json();
+  assert(typeof active.sha==='string' && /^[a-f0-9]{40}$/.test(active.sha),'Active rollback release has no valid commit SHA');
+  const capabilities=active.rollbackCapabilities;
+  assert(Array.isArray(capabilities) && capabilities.every(value=>typeof value==='string'),'Active rollback release lacks capability evidence; deploy a tested read-compatible preparation release first');
+  const missing=required.filter(value=>!capabilities.includes(value));
+  assert(!missing.length,`Rollback target lacks ${missing.join(', ')}; deploy a tested read-compatible preparation release before enabling new data writes`);
+  return {sha:active.sha,rollbackCapabilities:capabilities};
+}
 export async function verifyHosting(manifest) {
   const base=`https://${project}.web.app`;
   const version=await (await fetch(`${base}/version.json?t=${Date.now()}`,{cache:'no-store',signal:AbortSignal.timeout(30_000)})).json();
   assert.equal(version.sha,manifest.sha,'Hosting release SHA does not match tested artifact');
+  assert.deepEqual(version.rollbackCapabilities,manifest.rollbackCapabilities,'Hosting rollback capability declaration does not match tested artifact');
   const html=await(await fetch(base,{cache:'no-store',signal:AbortSignal.timeout(30_000)})).text();
   assert.equal(createHash('sha256').update(html).digest('hex'),manifest.hashes['web/index.html']);
   for(const match of html.matchAll(/(?:src|href)="(\/assets\/[^\"]+\.(?:js|css|webp))"/g)) assert((await fetch(base+match[1],{signal:AbortSignal.timeout(30_000)})).ok,`Missing live asset ${match[1]}`);
@@ -103,11 +119,12 @@ async function release() {
   assert(process.env.CI_COMMIT_SHA,'CI_COMMIT_SHA is required');
   assert(process.env.GOOGLE_APPLICATION_CREDENTIALS,'Release credentials are required');
   const manifest=validateArtifact('.release',process.env.CI_COMMIT_SHA);
+  const rollbackVersion=await verifyRollbackCapabilities(manifest);
   // CLI loads the compiled function locally before upload; install the exact artifact lock for discovery.
   const install=spawn('npm',['ci','--omit=dev','--ignore-scripts','--prefix',resolve('.release/api')],{stdio:'inherit'});
   const [installed]=await once(install,'exit');assert.equal(installed,0,'Release dependency installation failed');
   mkdirSync('artifacts',{recursive:true});
-  const saved=await snapshot(manifest.functionInventory);writeFileSync('artifacts/rollback.json',JSON.stringify(saved,null,2),{mode:0o600});
+  const saved={...await snapshot(manifest.functionInventory),...(rollbackVersion?{rollbackVersion}:{})};writeFileSync('artifacts/rollback.json',JSON.stringify(saved,null,2),{mode:0o600});
   try {
     const deploy=async only=>{
       const child=spawn('npx',['--yes',`firebase-tools@${tools.firebase}`,'deploy','--config',resolve('.release/firebase.json'),'--project',project,'--only',only,'--non-interactive'],{stdio:'inherit'});

@@ -75,9 +75,11 @@ test('me initialization requires explicit consent, trusted identity and preserve
 
 test('session responses strip frozen prompt/config and messages require owned session', async () => {
   const { db, store } = database();
-  store.set('users/alice/sessions/s1', { mode: 'personal', profileIds: ['p1'], profileId: 'p1', profileName: 'A', title: 'T', createdAt: 'now', updatedAt: 'now', frozenPrompt: 'secret', frozenModel: 'internal', frozenTools: [], activeTurnId: 'hidden', frozenSubjects: [{ref:'self',profileId:'p1',profile:{...profile,gender:'female',entityType:'person'}}] });
+  store.set('users/alice/sessions/s1', { mode: 'personal', profileIds: ['p1'], profileId: 'p1', profileName: 'A', title: 'T', createdAt: 'now', updatedAt: 'now', frozenPrompt: 'secret', frozenModel: 'internal', frozenTools: [], activeTurnId: 'hidden', frozenSubjects: [{ref:'self',profileId:'p1',profile:{...profile,gender:'female',entityType:'person',locationRef:{id:'geonames-1796236',version:'1'},countryCode:'CN',locationSource:'builtin'}}] });
   const result = (await request(db, 'GET', '/v1/sessions/s1')).body as any;
   assert(!('frozenPrompt' in result)); assert(!('activeTurnId' in result));
+  assert.equal(result.subjects[0].profile.countryCode,'CN'); assert.equal(result.subjects[0].profile.locationSource,'builtin');
+  assert.deepEqual(result.subjects[0].profile.locationRef,{id:'geonames-1796236',version:'1'});
   assert.equal(result.subjects[0].profile.name,profile.name);assert(!('frozenSubjects' in result));
   const listed=(await request(db,'GET','/v1/sessions')).body as any;assert.equal(listed.items[0].subjects[0].ref,'self');
   store.set('users/bob/sessions/s2/messages/m1', { role: 'user', parts: [], createdAt: 'now' });

@@ -10,7 +10,7 @@ const directory=await mkdtemp(resolve('.plan-test-'));
 async function bundle(entry,name){
   const built=await build({entryPoints:[entry],bundle:true,write:false,format:'esm',platform:'node',jsx:'automatic',packages:'external',plugins:[{name:'isolated-services',setup(b){
     b.onResolve({filter:/\/(firebase|store|accountStore|apiClient)$/},()=>({path:'services',namespace:'test'}));
-    b.onLoad({filter:/.*/,namespace:'test'},()=>({contents:'export const updateAnalyticsConsent=()=>{};export const searchLocations=async()=>[];export const loadPlans=async()=>[];export const subscribeApi=()=>()=>{};export const invalidateApi=()=>{};'}));
+    b.onLoad({filter:/.*/,namespace:'test'},()=>({contents:'export const businessApi=async()=>({items:[]});export const updateAnalyticsConsent=()=>{};export const searchLocations=async()=>[];export const loadPlans=async()=>[];export const subscribeApi=()=>()=>{};export const invalidateApi=()=>{};'}));
   }}]});const path=resolve(directory,name+'.mjs');await writeFile(path,built.outputFiles[0].text);return import(pathToFileURL(path));
 }
 const {ProfileSidebarPanel,ProfileManagerSubpage}=await bundle('apps/web/src/components/ProfileSidebarPanel.tsx','components');
