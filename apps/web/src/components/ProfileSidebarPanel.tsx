@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
-  TIER_META,
   type EntityType,
   type Gender,
   type LocationCandidate,
@@ -8,6 +7,7 @@ import {
   type ProfileRecord,
   type Tier,
 } from '@vela-cf/shared';
+import type { ApiPlan } from '../lib/accountStore';
 import { updateAnalyticsConsent } from '../lib/firebase';
 import { searchLocations } from '../lib/store';
 import { IconNotebook, IconPlus, IconSearch } from './Icons';
@@ -20,6 +20,7 @@ export interface ProfileManagerLaunch {
 
 interface ProfileSidebarPanelProps {
   tier: Tier;
+  plan?: ApiPlan;
   profiles: ProfileRecord[];
   selectedProfileIds: string[];
   active: boolean;
@@ -31,6 +32,7 @@ interface ProfileSidebarPanelProps {
 interface ProfileManagerSubpageProps {
   uid: string | null;
   tier: Tier;
+  plan?: ApiPlan;
   profiles: ProfileRecord[];
   selectedProfileIds: string[];
   launch: ProfileManagerLaunch;
@@ -51,11 +53,10 @@ function orderWithPrimaryFirst(profiles: ProfileRecord[], primaryId?: string): P
 }
 
 export function ProfileSidebarPanel({
-  tier, profiles, selectedProfileIds, active,
+  plan, profiles, selectedProfileIds, active,
   onOpenProfileManager, onSetPrimaryProfile, onToggleSynastryProfile,
 }: ProfileSidebarPanelProps) {
-  const tierMeta = TIER_META[tier];
-  const maxSelectable = Math.max(1, tierMeta.maxSynastryProfiles);
+  const maxSelectable = plan ? Math.max(1, plan.maxSynastryProfiles) : Infinity;
   const primaryId = selectedProfileIds[0] ?? profiles[0]?.id;
   const ordered = useMemo(() => orderWithPrimaryFirst(profiles, primaryId), [profiles, primaryId]);
   const partnerCount = Math.max(0, selectedProfileIds.length - 1);
@@ -73,13 +74,13 @@ export function ProfileSidebarPanel({
         <span className="shrink-0 flex items-center justify-center"><IconNotebook size={20} /></span>
         <div className="min-w-0 flex-1">
           <div className="text-[13.5px] font-semibold">档案管理</div>
-          <div className="text-[13px] text-muted truncate">{profiles.length} / {tierMeta.maxProfiles} 个档案</div>
+          <div className="text-[13px] text-muted truncate">{profiles.length}{plan ? ` / ${plan.maxProfiles}` : ''} 个档案</div>
         </div>
       </button>
 
       <div className="flex items-center justify-between px-1 pt-1">
         <span className="text-[13px] font-medium text-muted">快速选择档案</span>
-        <span className="text-[13px] text-muted">{partnerCount > 0 ? `合盘 ${selectedProfileIds.length}/${maxSelectable} 人` : '点击切换主盘'}</span>
+        <span className="text-[13px] text-muted">{partnerCount > 0 ? `已选 ${selectedProfileIds.length}${plan ? `/${maxSelectable}` : ''} 人` : '点击切换主盘'}</span>
       </div>
 
       {ordered.length === 0 ? (
@@ -96,7 +97,7 @@ export function ProfileSidebarPanel({
             const isPrimary = p.id === primaryId;
             const isPartner = !isPrimary && selectedProfileIds.includes(p.id);
             const et = p.entityType ?? 'person';
-            const lockedEntity = et !== 'person' && !tierMeta.allowsEntityCharts;
+            const lockedEntity = et !== 'person' && plan?.allowsEntityCharts === false;
             return (
               <div
                 key={p.id}
@@ -132,7 +133,7 @@ export function ProfileSidebarPanel({
                     type="button"
                     disabled={lockedEntity}
                     aria-pressed={isPartner} onClick={() => onToggleSynastryProfile(p.id)}
-                    title={maxSelectable <= 1 ? '升级 Go/Pro 开启合盘勾选' : isPartner ? '取消合盘' : '勾选为合盘人'}
+                    title={maxSelectable <= 1 ? '查看支持合盘的套餐' : isPartner ? '取消合盘' : '勾选为合盘人'}
                     aria-label={isPartner ? `取消合盘 ${p.name}` : `勾选合盘 ${p.name}`}
                     data-testid="sidebar-ps-check"
                     className={`w-6 h-6 shrink-0 flex items-center justify-center rounded bg-transparent border-0 text-[13px] hover:bg-white/10 cursor-pointer disabled:opacity-40 ${
@@ -152,7 +153,7 @@ export function ProfileSidebarPanel({
 }
 
 export function ProfileManagerSubpage({
-  uid, tier, profiles, selectedProfileIds, launch,
+  uid, plan, profiles, selectedProfileIds, launch,
   onSetPrimaryProfile, onToggleSynastryProfile, onSaveProfile, onDeleteProfile, onOpenSubscription,
 }: ProfileManagerSubpageProps) {
   const [formMode, setFormMode] = useState<'none' | 'add' | 'edit'>('none');
@@ -175,9 +176,8 @@ export function ProfileManagerSubpage({
   );
   const [allowAnalytics, setAllowAnalytics] = useState(false);
 
-  const tierMeta = TIER_META[tier];
-  const maxProfiles = tierMeta.maxProfiles;
-  const maxSelectable = Math.max(1, tierMeta.maxSynastryProfiles);
+  const maxProfiles = plan?.maxProfiles ?? Infinity;
+  const maxSelectable = plan ? Math.max(1, plan.maxSynastryProfiles) : Infinity;
   const atCapacity = profiles.length >= maxProfiles;
   const primaryId = selectedProfileIds[0] ?? profiles[0]?.id;
 
@@ -190,7 +190,7 @@ export function ProfileManagerSubpage({
 
   const startAdd = () => {
     resetForm();
-    if (atCapacity) { setErr(`当前${tierMeta.label}最多保存 ${maxProfiles} 个档案，请先删除旧档案或升级方案。`); return; }
+    if (atCapacity) { setErr(`当前${plan?.label ?? '套餐'}最多保存 ${maxProfiles} 个档案，请先删除旧档案或升级方案。`); return; }
     setFormMode('add');
   };
 
@@ -264,9 +264,9 @@ export function ProfileManagerSubpage({
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1 flex-1 min-w-[180px]">
           {(['person', 'company', 'country'] as const).map((et) => {
-            const disabled = et !== 'person' && !tierMeta.allowsEntityCharts;
+            const disabled = et !== 'person' && plan?.allowsEntityCharts === false;
             return (
-              <button key={et} type="button" disabled={disabled} aria-pressed={entityType === et} onClick={() => setEntityType(et)} title={disabled ? 'Pro 订阅支持公司/国家盘' : undefined} className={`flex-1 min-h-[32px] rounded-[8px] border text-[13px] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${entityType === et ? 'border-accent bg-selected text-accent-bright' : 'border-border bg-panel text-muted'}`}>
+              <button key={et} type="button" disabled={disabled} aria-pressed={entityType === et} onClick={() => setEntityType(et)} title={disabled ? '查看支持公司/国家盘的套餐' : undefined} className={`flex-1 min-h-[32px] rounded-[8px] border text-[13px] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${entityType === et ? 'border-accent bg-selected text-accent-bright' : 'border-border bg-panel text-muted'}`}>
                 {ENTITY_LABELS[et]}
               </button>
             );
@@ -318,14 +318,14 @@ export function ProfileManagerSubpage({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="m-0 font-serif-sc text-[18px] font-bold text-primary">出生档案管理</h2>
-            <span data-testid="pm-quota" className="px-2.5 py-0.5 rounded-full border border-border bg-panel-2 font-mono-num text-[13px] text-accent-bright">{profiles.length} / {maxProfiles} 容量</span>
-            {tier !== 'pro' && (
+            <span data-testid="pm-quota" className="px-2.5 py-0.5 rounded-full border border-border bg-panel-2 font-mono-num text-[13px] text-accent-bright">{profiles.length}{plan ? ` / ${maxProfiles} 容量` : ' 个档案 · 套餐加载中'}</span>
+            {(
               <button type="button" onClick={onOpenSubscription} className="px-2 py-0.5 rounded-full border border-accent/40 bg-selected text-[13px] text-accent-bright cursor-pointer hover:border-accent">
-                {tier === 'free' ? 'Go 可放 5 个 / Pro 50 个' : '升级 Pro 扩容至 50 个'}
+                查看套餐权益
               </button>
             )}
           </div>
-          <p className="m-0 mt-1 text-[13px] text-muted">★ 星标设为主档案（当前看盘对象） · {maxSelectable >= 2 ? `☑ 勾选合盘人（最多 ${maxSelectable} 人同盘）` : '合盘勾选需 Go（2人）或 Pro（4人）'}{!uid ? ' · 访客资料仅保留在当前会话' : ''}</p>
+          <p className="m-0 mt-1 text-[13px] text-muted">★ 星标设为主档案（当前看盘对象） · {!plan ? `已选 ${selectedProfileIds.length} 人 · 套餐加载中，提交时验证权益` : maxSelectable >= 2 ? `☑ 勾选合盘人（最多 ${maxSelectable} 人同盘）` : '查看支持合盘的套餐'}{!uid ? ' · 访客资料仅保留在当前会话' : ''}</p>
         </div>
         <button type="button" onClick={startAdd} disabled={atCapacity} data-testid="pm-add" className="flex items-center gap-1.5 min-h-[38px] px-4 rounded-[10px] border-0 bg-accent text-on-accent text-[13px] font-bold cursor-pointer hover:bg-accent-bright disabled:opacity-45 disabled:cursor-not-allowed">
           <IconPlus size={15} /><span>添加档案</span>
@@ -357,7 +357,7 @@ export function ProfileManagerSubpage({
             const isPrimary = c.id === primaryId;
             const isPartner = !isPrimary && selectedProfileIds.includes(c.id);
             const et = c.entityType ?? 'person';
-            const lockedEntity = et !== 'person' && !tierMeta.allowsEntityCharts;
+            const lockedEntity = et !== 'person' && plan?.allowsEntityCharts === false;
             return (
               <div key={c.id} data-testid="pm-item" className={`rounded-[14px] border p-4 flex flex-col gap-3 ${isPrimary ? 'border-accent/50 bg-[#151722]' : isPartner ? 'border-border-strong bg-panel' : 'border-divider bg-[#0b1020]'}`}>
                 <div className="flex flex-wrap items-center gap-2.5">

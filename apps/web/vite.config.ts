@@ -1,3 +1,4 @@
+import { computePortraitSummary } from '../api/src/portrait';
 import { existsSync, readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
@@ -270,7 +271,7 @@ function velaApiPlugin(): Plugin {
         };
         const natal = natalWheel(profile);
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ natal }));
+        res.end(JSON.stringify({ natal, portrait:computePortraitSummary(natal) }));
       } catch (err) {
         res.statusCode = 400;
         res.end(JSON.stringify({ error: String(err) }));
@@ -359,7 +360,7 @@ function velaApiPlugin(): Plugin {
           });
         }
 
-        sendSse(res, 'chart', { natal, transits, bazi, ziwei });
+        sendSse(res, 'chart', { natal, portrait:computePortraitSummary(natal), transits, bazi, ziwei });
 
         const routed = routeTurnCapabilities({
           tier,

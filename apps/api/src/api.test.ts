@@ -1,8 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Firestore } from 'firebase-admin/firestore';
 import {
   claimShareBonus,
@@ -274,102 +271,6 @@ class MockFirestoreEmulator {
   }
 }
 
-/**
- * Evaluator for `/usage/{uid}` rules from `firestore.rules` to verify that the
- * deployed rules file enforces `request.time` (`currentUtcDate()` & `currentUtcPeriodStart()`).
- */
-function evaluateUsageFirestoreRule(params: {
-  op: 'create' | 'update';
-  authUid: string | null;
-  docUid: string;
-  requestTimeIso: string;
-  existingData: Record<string, unknown> | null;
-  newData: Record<string, unknown>;
-}): boolean {
-  const rulesPath = join(dirname(fileURLToPath(import.meta.url)), '../../../firestore.rules');
-  const rulesSource = readFileSync(rulesPath, 'utf8');
-  // Verify the rules file itself contains our trusted server-time helper functions
-  assert.ok(rulesSource.includes('function currentUtcDate()'), 'firestore.rules must define currentUtcDate()');
-  assert.ok(rulesSource.includes('function currentUtcPeriodStart()'), 'firestore.rules must define currentUtcPeriodStart()');
-  assert.ok(rulesSource.includes('request.resource.data.lastShareDate == currentUtcDate()'), 'firestore.rules must enforce lastShareDate == currentUtcDate()');
-
-  const { op, authUid, docUid, requestTimeIso, existingData, newData } = params;
-  if (!authUid || authUid !== docUid || !/^[a-zA-Z0-9_-]{1,128}$/.test(docUid)) {
-    return false;
-  }
-
-  const reqDate = new Date(requestTimeIso);
-  const y = String(reqDate.getUTCFullYear());
-  const m = String(reqDate.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(reqDate.getUTCDate()).padStart(2, '0');
-  const currentUtcDate = `${y}-${m}-${d}`;
-  const currentUtcPeriodStart = `${y}-${m}-01T00:00:00Z`;
-
-  const hasValidShareMethod = (data: Record<string, unknown>) =>
-    !('lastShareMethod' in data) ||
-    ['native', 'poster', 'copy'].includes(String(data.lastShareMethod));
-
-  if (op === 'create') {
-    const keys = Object.keys(newData);
-    const required = ['periodStart', 'used', 'bonusMicroUsd', 'shareCount', 'lastShareDate'];
-    const allowed = [...required, 'lastShareMethod'];
-    return (
-      required.every((k) => keys.includes(k)) &&
-      keys.every((k) => allowed.includes(k)) &&
-      newData.periodStart === currentUtcPeriodStart &&
-      newData.used === 0 &&
-      newData.bonusMicroUsd === 30000 &&
-      newData.shareCount === 1 &&
-      newData.lastShareDate === currentUtcDate &&
-      hasValidShareMethod(newData)
-    );
-  }
-
-  if (!existingData) return false;
-  const allKeys = new Set([...Object.keys(existingData), ...Object.keys(newData)]);
-  const affectedKeys = Array.from(allKeys).filter(
-    (k) => JSON.stringify(existingData[k]) !== JSON.stringify(newData[k]),
-  );
-
-  if (!hasValidShareMethod(newData) || newData.lastShareDate !== currentUtcDate) {
-    return false;
-  }
-
-  const oldPeriod = String(existingData.periodStart ?? '');
-  if (oldPeriod === currentUtcPeriodStart) {
-    const allowedDiff = ['bonusMicroUsd', 'shareCount', 'lastShareDate', 'lastShareMethod'];
-    return (
-      affectedKeys.every((k) => allowedDiff.includes(k)) &&
-      String(existingData.lastShareDate ?? '') !== currentUtcDate &&
-      newData.bonusMicroUsd === Number(existingData.bonusMicroUsd ?? 0) + 30000 &&
-      Number(newData.bonusMicroUsd) <= 90000 &&
-      newData.shareCount === Number(existingData.shareCount ?? 0) + 1 &&
-      Number(newData.shareCount) <= 3
-    );
-  }
-
-  if (oldPeriod < currentUtcPeriodStart) {
-    const allowedDiff = [
-      'periodStart',
-      'used',
-      'bonusMicroUsd',
-      'shareCount',
-      'lastShareDate',
-      'lastShareMethod',
-      'reservations',
-    ];
-    return (
-      affectedKeys.every((k) => allowedDiff.includes(k)) &&
-      newData.periodStart === currentUtcPeriodStart &&
-      newData.used === 0 &&
-      newData.bonusMicroUsd === 30000 &&
-      newData.shareCount === 1
-    );
-  }
-
-  return false;
-}
-
 test('Unlimited overrides bypass exhausted budgets and survive settlement and period rollover', async () => {
   const mockDb = new MockFirestoreEmulator();
   const db = mockDb as unknown as Firestore;
@@ -505,13 +406,14 @@ test('Quota concurrency: 5 concurrent requests on free tier cannot exceed budget
   assert.equal(settledDec.used, 25_000);
 });
 
-test('Share bonus rules & server transaction: blocks forged dates, concurrent same-day claims, enforces 3/month limit, and resets across periods', async () => {
+test('Share bonus server transaction: blocks forged dates, concurrent same-day claims, enforces 3/month limit, and resets across periods', async () => {
   const mockDb = new MockFirestoreEmulator();
   const db = mockDb as unknown as Firestore;
   const uid = 'user_share_bonus';
   const day1 = new Date('2026-11-15T08:00:00Z');
 
-  // 1. Forged clientDate is rejected by server transaction AND by firestore.rules
+  // Rules deny all direct writes; firestore-emulator.test.ts verifies the real Rules engine.
+  // 1. Legacy server input rejects a forged clientDate.
   await assert.rejects(
     () =>
       claimShareBonus(db, {
@@ -523,45 +425,6 @@ test('Share bonus rules & server transaction: blocks forged dates, concurrent sa
     /INVALID_SHARE_DATE/,
   );
 
-  assert.equal(
-    evaluateUsageFirestoreRule({
-      op: 'create',
-      authUid: uid,
-      docUid: uid,
-      requestTimeIso: day1.toISOString(),
-      existingData: null,
-      newData: {
-        periodStart: '2026-11-01T00:00:00Z',
-        used: 0,
-        bonusMicroUsd: 30000,
-        shareCount: 1,
-        lastShareDate: '2026-11-14', // forged date != 2026-11-15
-      },
-    }),
-    false,
-    'firestore.rules must reject forged lastShareDate on create',
-  );
-
-  assert.equal(
-    evaluateUsageFirestoreRule({
-      op: 'create',
-      authUid: uid,
-      docUid: uid,
-      requestTimeIso: day1.toISOString(),
-      existingData: null,
-      newData: {
-        periodStart: '2026-11-01T00:00:00Z',
-        used: 0,
-        bonusMicroUsd: 30000,
-        shareCount: 1,
-        lastShareDate: '2026-11-15',
-        lastShareMethod: 'poster',
-      },
-    }),
-    true,
-    'firestore.rules must allow valid today create',
-  );
-
   // 2. Concurrent claims on Day 1: only 1 succeeds, others get ALREADY_SHARED_TODAY
   const day1Concurrent = await Promise.allSettled([
     claimShareBonus(db, { uid, shareMethod: 'poster', now: day1 }),
@@ -571,25 +434,10 @@ test('Share bonus rules & server transaction: blocks forged dates, concurrent sa
   assert.equal(day1Concurrent.filter((r) => r.status === 'fulfilled').length, 1);
   assert.equal(day1Concurrent.filter((r) => r.status === 'rejected').length, 2);
 
-  // Verify firestore.rules also blocks a second update on the same day or with a forged date
   const afterDay1 = mockDb.getRaw(`usage/${uid}`)!;
-  assert.equal(
-    evaluateUsageFirestoreRule({
-      op: 'update',
-      authUid: uid,
-      docUid: uid,
-      requestTimeIso: day1.toISOString(),
-      existingData: afterDay1,
-      newData: {
-        ...afterDay1,
-        bonusMicroUsd: 60000,
-        shareCount: 2,
-        lastShareDate: '2026-11-16', // forged future date on same server day
-      },
-    }),
-    false,
-    'firestore.rules must block client attempting to pass different date string on same day',
-  );
+  assert.equal(afterDay1.shareCount, 1);
+  assert.equal(afterDay1.bonusMicroUsd, 30_000);
+  assert.equal(afterDay1.lastShareDate, '2026-11-15');
 
   // 3. Day 2 & Day 3 claims succeed (reaching 3/3 = 90,000 micro-USD)
   const day2 = new Date('2026-11-16T09:00:00Z');

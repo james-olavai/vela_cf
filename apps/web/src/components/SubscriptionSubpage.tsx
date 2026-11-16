@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { computeUsagePercent, nextUtcMonthResetLabel, TIER_META, type Tier, type UsageRecord } from '@vela-cf/shared';
-import { createStripeCheckout, createStripePortal } from '../lib/accountStore';
+import { planUsagePercent } from '../lib/planStore';
+import { useEffect, useRef, useState } from 'react';
+import { nextUtcMonthResetLabel, type Tier, type UsageRecord } from '@vela-cf/shared';
+import { createStripeCheckout, createStripePortal, loadSubscriptionPage } from '../lib/accountStore';
 
 interface SubscriptionSubpageProps {
   uid: string | null;
@@ -21,8 +22,21 @@ export function SubscriptionSubpage({
 }: SubscriptionSubpageProps) {
   const [checkoutBusy, setCheckoutBusy] = useState<'go' | 'pro' | 'portal' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const pct = usage.unlimited ? 0 : computeUsagePercent(usage.used, tier, usage.bonusMicroUsd ?? 0);
-  const tierMeta = TIER_META[tier];
+  const owner=useRef(uid);owner.current=uid;
+  const [reload,setReload]=useState(0);
+  const [loaded,setLoaded]=useState<{uid:string|null;data?:Awaited<ReturnType<typeof loadSubscriptionPage>>;error?:string}>();
+  useEffect(()=>{
+    owner.current=uid;const controller=new AbortController();setLoaded(undefined);setNotice(null);setCheckoutBusy(null);
+    void loadSubscriptionPage(uid,controller.signal).then(data=>{if(!controller.signal.aborted)setLoaded({uid,data});})
+      .catch(error=>{if(!controller.signal.aborted)setLoaded({uid,error:error instanceof Error?error.message:'订阅信息加载失败'});});
+    return ()=>{controller.abort();if(owner.current===uid)owner.current=null;};
+  },[uid,reload]);
+  const data=loaded?.uid===uid?loaded.data:undefined;
+  const loadError=loaded?.uid===uid?loaded.error:undefined;
+  const tierMeta=data?.plans.find(p=>p.id===tier);
+  const pct=planUsagePercent(usage,tierMeta);
+  const subscriptions=data?.subscriptions??[];
+  const statusLabels:Record<string,string>={active:'生效中',trialing:'试用中',past_due:'付款逾期',unpaid:'未付款',canceled:'已取消',incomplete:'等待付款',incomplete_expired:'付款已过期',paused:'已暂停'};
 
   const handleUpgrade = async (target: 'go' | 'pro') => {
     if (!uid) {
@@ -33,12 +47,13 @@ export function SubscriptionSubpage({
     setCheckoutBusy(target);
     try {
       const url = await createStripeCheckout(uid, target);
+      if(owner.current!==uid)return;
       if (url) window.location.assign(url);
       else setNotice('当前环境尚未接入 Stripe 生产密钥，升级流程将在配置完成后开放。');
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : '发起结账失败');
+      if(owner.current===uid)setNotice(err instanceof Error ? err.message : '发起结账失败');
     } finally {
-      setCheckoutBusy(null);
+      if(owner.current===uid)setCheckoutBusy(null);
     }
   };
 
@@ -51,14 +66,19 @@ export function SubscriptionSubpage({
     setCheckoutBusy('portal');
     try {
       const url = await createStripePortal();
+      if(owner.current!==uid)return;
       if (url) window.location.assign(url);
       else setNotice('当前环境尚未接入 Stripe 客户门户，降级或取消订阅将在配置完成后开放。');
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : '打开订阅管理失败');
+      if(owner.current===uid)setNotice(err instanceof Error ? err.message : '打开订阅管理失败');
     } finally {
-      setCheckoutBusy(null);
+      if(owner.current===uid)setCheckoutBusy(null);
     }
   };
+
+  if(!data || !tierMeta)return <div data-testid="subscription-subpage" className="p-5 text-secondary" aria-busy={!loadError}>
+    {loadError?<><p role="alert">{loadError}</p><button type="button" className="min-h-[38px] px-4" onClick={()=>setReload(n=>n+1)}>重新加载订阅信息</button></>:<><progress aria-label="正在加载套餐与订阅" /><p>正在加载套餐与订阅…</p></>}
+  </div>;
 
   return (
     <div data-testid="subscription-subpage" className="mx-auto w-full max-w-3xl flex flex-col gap-4 pb-16">
@@ -91,9 +111,16 @@ export function SubscriptionSubpage({
         </p>
       </div>
 
+      {uid && <div data-testid="subscription-status" className="p-4 rounded-[12px] border border-border text-[13px] text-secondary">
+        {subscriptions.length===0?'暂无订阅记录':<ul className="m-0 pl-4">{subscriptions.map(item=><li key={item.id}>
+          {data.plans.find(p=>p.id===item.role)?.label??'订阅'}：{statusLabels[item.status]??'状态待确认'}
+          {item.currentPeriodEnd?` · 当前周期结束：${new Date(item.currentPeriodEnd*1000).toLocaleDateString()}`:''}
+        </li>)}</ul>}
+      </div>}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {(['go', 'pro'] as const).map((plan) => {
-          const meta = TIER_META[plan];
+        {data.plans.filter((p):p is typeof p & {id:'go'|'pro'}=>p.id==='go'||p.id==='pro').map((meta) => {
+          const plan = meta.id;
           const isCurrent = tier === plan;
           const isDowngrade = tier === 'pro' && plan === 'go';
           return (
@@ -140,11 +167,11 @@ export function SubscriptionSubpage({
         })}
       </div>
 
-      {tier !== 'free' && (
+      {uid && subscriptions.some(s=>!['canceled','incomplete_expired'].includes(s.status)) && (
         <div className="p-4 rounded-[12px] border border-border bg-[#0b1020] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <p className="m-0 text-[13.5px] font-medium text-primary">管理或取消订阅</p>
-            <p className="m-0 text-[13px] text-muted">降级或取消后将在当前计费周期结束时生效，期间仍可使用全部已购额度。</p>
+            <p className="m-0 text-[13px] text-muted">具体变更时间与计费状态以账单管理页面为准。</p>
           </div>
           <button
             type="button"

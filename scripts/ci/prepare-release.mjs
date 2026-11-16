@@ -27,9 +27,13 @@ execFileSync('npm',['prune','--package-lock-only','--omit=dev','--ignore-scripts
 const known=new Set(Object.values(lock.packages).filter(x=>x.version).map(x=>`${x.version}|${x.integrity||''}`));
 for(const [path,entry] of Object.entries(read(resolve(out,'api/package-lock.json')).packages)) if(path) assert(known.has(`${entry.version}|${entry.integrity||''}`),`Release resolved an untested dependency: ${path}@${entry.version}`);
 cpSync('apps/web/dist',resolve(out,'web'),{recursive:true});
+cpSync('docs/openapi.json',resolve(out,'openapi.json'));
 cpSync('firestore.rules',resolve(out,'firestore.rules'));
 const fb=read('firebase.json');
 writeFileSync(resolve(out,'firebase.json'),JSON.stringify({functions:[{source:'api',codebase:'default',runtime:'nodejs22'}],hosting:{...fb.hosting,public:'web'},firestore:{database:config.firestoreDatabaseId,rules:'firestore.rules'}},null,2));
+const functionInventory=read('scripts/ci/functions.json');
+const declared=[...readFileSync('apps/api/src/index.ts','utf8').matchAll(/export const (\w+) = (?:onCall|onCallGenkit|onRequest)\(/g)].map(m=>m[1]).sort();
+assert.deepEqual([...functionInventory.existing,...functionInventory.introduced].sort(),declared,'Function inventory does not match source exports');
 const sha=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 writeFileSync(resolve(out,'web/version.json'),JSON.stringify({sha}));
 const hashes={};
@@ -41,6 +45,6 @@ function hashFiles(dir='') {
   }
 }
 hashFiles();
-writeFileSync(resolve(out,'manifest.json'),JSON.stringify({sha,node:process.version,runtimeDependencies:pkg.dependencies,hashes},null,2));
+writeFileSync(resolve(out,'manifest.json'),JSON.stringify({sha,node:process.version,functionInventory,openApiHash:hashes['openapi.json'],runtimeDependencies:pkg.dependencies,hashes},null,2));
 execFileSync('tar',['-czf','release.tar.gz','-C',out,'.']);
 console.log(`Prepared immutable release ${sha}`);

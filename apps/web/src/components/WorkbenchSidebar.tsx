@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
+import type { ApiPlan } from '../lib/accountStore';
+import { planUsagePercent } from '../lib/planStore';
 import { Modal } from './Modal';
 import {
-  computeUsagePercent,
-  TIER_META,
   type ProfileRecord,
   type Tier,
   type UsageRecord,
@@ -24,6 +24,7 @@ interface WorkbenchSidebarProps {
   displayName: string;
   photoURL: string | null;
   tier: Tier;
+  plan?: ApiPlan;
   usage: UsageRecord;
   sidebarOpen: boolean;
   activeSubpage: ActiveSubpage;
@@ -47,6 +48,7 @@ export function WorkbenchSidebar({
   displayName,
   photoURL,
   tier,
+  plan,
   usage,
   sidebarOpen,
   activeSubpage,
@@ -75,8 +77,8 @@ export function WorkbenchSidebar({
     if (typeof window !== 'undefined' && window.innerWidth < 1024) onSetSidebarOpen(false);
   };
 
-  const pct = usage.unlimited ? 0 : computeUsagePercent(usage.used, tier, usage.bonusMicroUsd ?? 0);
-  const usageSummary = usage.unlimited ? '无限额度' : `已用 ${pct}%`;
+  const pct = planUsagePercent(usage, plan);
+  const usageSummary = usage.unlimited ? '无限额度' : pct === null ? '额度加载中' : `已用 ${pct}%`;
 
   const avatarRingClass =
     tier === 'pro'
@@ -177,6 +179,7 @@ export function WorkbenchSidebar({
       <div className="flex-1 overflow-y-auto border-t border-divider/70 mt-1">
         <ProfileSidebarPanel
           tier={tier}
+          plan={plan}
           profiles={profiles}
           selectedProfileIds={selectedProfileIds}
           active={activeSubpage === 'profiles'}
@@ -196,7 +199,7 @@ export function WorkbenchSidebar({
           {renderAvatar()}
           <div className="min-w-0 flex-1 flex flex-col">
             <span className="text-[13px] font-medium text-primary truncate">{uid ? displayName : '登录 / 注册账号'}</span>
-            <span className="text-[13px] text-muted truncate">{uid ? '账号登录与合规设置' : '同步已有档案与历史对话'}</span>
+            <span className="text-[13px] text-muted truncate">{uid ? (plan?.label ?? '套餐加载中') : '同步已有档案与历史对话'}</span>
           </div>
           {!uid && <span className="px-2 py-0.5 rounded-[6px] bg-accent text-on-accent text-[13px] font-bold shrink-0">登录</span>}
         </button>

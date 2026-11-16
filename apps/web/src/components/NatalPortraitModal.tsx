@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { ProfileRecord } from '@vela-cf/shared';
-import { computePortraitSummary, sunriseImageUrl } from '../lib/portrait';
+import { sunriseImageUrl } from '../lib/portrait';
 import type { ChartSnapshot } from '../lib/store';
 import { Modal } from './Modal';
 import { ElementRadar } from './ElementRadar';
@@ -24,7 +24,7 @@ const ELEM_META = [
 
 export function NatalPortraitModal({ open, profile, chart, onClose, onOpenShare }: NatalPortraitModalProps) {
   const [selectedDate, setSelectedDate] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: profile?.timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
-  const summary = useMemo(() => chart?.natal ? computePortraitSummary(chart.natal) : null, [chart?.natal]);
+  const summary = chart?.portrait ?? null;
   if (!profile) return null;
   const imgUrl = summary ? sunriseImageUrl(summary.sunSign, summary.ascSign, profile.gender) : '';
   const month = (selectedDate || new Date().toISOString().slice(0, 10)).slice(0, 7);

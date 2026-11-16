@@ -229,6 +229,7 @@ export interface MessageRecord {
 }
 
 export interface SessionRecord {
+  subjects?: Array<{ ref: string; profileId?: string; profile: ProfileInput }>;
   id: string;
   mode: ConsultationMode;
   productSlug?: string;
@@ -237,14 +238,20 @@ export interface SessionRecord {
   profileIds: string[];
   profileName: string;
   title: string;
-  frozenPrompt: string;
-  frozenModel: string;
-  frozenTools: AstrologyToolName[];
+  frozenPrompt?: string;
+  frozenModel?: string;
+  frozenTools?: AstrologyToolName[];
   createdAt: string;
   updatedAt: string;
 }
 
+export function sessionProfiles(session: SessionRecord, profiles: ProfileRecord[]): ProfileRecord[] {
+  if (session.subjects?.length) return session.subjects.map(subject => ({ ...subject.profile, id: subject.profileId ?? subject.ref, createdAt: session.createdAt, updatedAt: session.createdAt }));
+  return (session.profileIds?.length ? session.profileIds : [session.profileId]).map(id => profiles.find(profile => profile.id === id)).filter((profile): profile is ProfileRecord => Boolean(profile));
+}
+
 export interface UsageRecord {
+  budgetMicroUsd?: number;
   periodStart: string;
   used: number;
   bonusMicroUsd?: number;
@@ -262,11 +269,31 @@ export interface UserRecord {
   createdAt: string;
 }
 
-export const CreateSessionRequestSchema = z.object({
-  mode: ConsultationModeSchema.default('personal'),
-  profileIds: z.array(z.string().min(1).max(128)).min(1).max(4),
-  initialQuestion: z.string().trim().max(2000).optional(),
-});
+export const SubjectRefSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
+export const SubjectBirthSchema = z.object({
+  datetime: ProfileInputSchema.shape.birthDateTime,
+  timezone: ProfileInputSchema.shape.timezone,
+  latitude: ProfileInputSchema.shape.latitude,
+  longitude: ProfileInputSchema.shape.longitude,
+  name: ProfileInputSchema.shape.name.optional(),
+  gender: GenderSchema.optional(),
+  entityType: EntityTypeSchema.optional(),
+  locationName: ProfileInputSchema.shape.locationName.optional(),
+  consentedOther: z.boolean().optional(),
+}).strict();
+export const SubjectSchema = z.union([
+  z.object({ ref: SubjectRefSchema, profile_id: SubjectRefSchema }).strict(),
+  z.object({ ref: SubjectRefSchema, birth: SubjectBirthSchema }).strict(),
+]);
+export const SubjectsSchema = z.array(SubjectSchema).min(1).max(4).refine(
+  subjects => new Set(subjects.map(s => s.ref)).size === subjects.length, 'DUPLICATE_SUBJECT_REF',
+);
+export type Subject = z.infer<typeof SubjectSchema>;
+const sessionFields = { mode: ConsultationModeSchema.default('personal'), initialQuestion: z.string().trim().max(2000).optional() };
+export const CreateSessionRequestSchema = z.union([
+  z.object({ ...sessionFields, subjects: SubjectsSchema }).strict(),
+  z.object({ ...sessionFields, profileIds: z.array(SubjectRefSchema).min(1).max(4) }).strict(),
+]);
 
 export function summarizeQuestionTitle(rawText: string, fallback = '星盘咨询'): string {
   const normalized = rawText.replace(/\s+/g, ' ').trim();
@@ -327,3 +354,12 @@ export function extractVelaUiBlocks(raw: string): { cleanText: string; uiBlocks:
   text = text.replace(/:::vela-ui[\s\S]*$/g, '').trim();
   return { cleanText: text, uiBlocks, suggestions };
 }
+
+export const PortraitSummarySchema = z.object({
+  sunSign:z.string(),moonSign:z.string(),ascSign:z.string(),epithet:z.string(),archetype:z.string(),insight:z.string(),elementTraits:z.array(z.string()),
+  elements:z.object({fire:z.number().int().min(0).max(100),earth:z.number().int().min(0).max(100),air:z.number().int().min(0).max(100),water:z.number().int().min(0).max(100)}),
+  modalities:z.object({cardinal:z.number().int().min(0).max(100),fixed:z.number().int().min(0).max(100),mutable:z.number().int().min(0).max(100)}),
+  signEnergy:z.array(z.object({sign:z.string(),pct:z.number().int().min(0).max(100)})).max(3),
+  dominantPlanets:z.array(z.object({name:z.string(),sign:z.string(),weight:z.number().nonnegative()})).max(3),
+});
+export type PortraitSummary = z.infer<typeof PortraitSummarySchema>;

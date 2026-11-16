@@ -1,105 +1,55 @@
-import { addDoc, collection, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import type { UserRecord } from '@vela-cf/shared';
-import { auth, db, functions, handleFirestoreError, OperationType } from './firebase';
+import type { UserRecord, Tier, TIER_META, AnalysisDepth } from '@vela-cf/shared';
+import { auth } from './firebase';
+import { businessApi } from './apiClient';
 
-export async function ensureUserRecord(
-  uid: string,
-  email: string,
-  displayName: string,
-): Promise<UserRecord> {
-  const path = `users/${uid}`;
-  const ref = doc(db, 'users', uid);
-  try {
-    const snap = await getDoc(ref);
-    const now = new Date().toISOString();
-    if (snap.exists()) {
-      return snap.data() as UserRecord;
-    }
-    const payload: UserRecord = {
-      email,
-      displayName: displayName || email.split('@')[0] || '用户',
-      acceptedTermsAt: now,
-      confirmedAdultAt: now,
-      createdAt: now,
-    };
-    await setDoc(ref, payload);
-    return payload;
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, path);
-  }
+export type ApiPlan = {id:Tier;analysisDepths:AnalysisDepth[]} & (typeof TIER_META)[Tier];
+export interface ApiSubscription {id:string;status:string;role?:string;currentPeriodEnd?:number}
+export async function loadPlans(uid:string|null,signal:AbortSignal):Promise<ApiPlan[]>{
+  const {items}=await businessApi<{items:ApiPlan[]}>(uid,'/v1/plans','GET',undefined,signal);
+  if(!Array.isArray(items)||!['free','go','pro'].every(id=>items.some(p=>p.id===id)) || items.some(p=>!Number.isFinite(p.maxProfiles)||p.maxProfiles<1||!Number.isFinite(p.maxSynastryProfiles)||p.maxSynastryProfiles<0||!Number.isFinite(p.monthlyBudgetMicroUsd)||p.monthlyBudgetMicroUsd<=0||typeof p.allowsEntityCharts!=='boolean'||!Array.isArray(p.analysisDepths)||p.analysisDepths.some(d=>!['quick','balanced','deep'].includes(d))))throw new Error('套餐信息不完整，请重试');
+  return items;
+}
+export async function loadSubscriptionPage(uid:string|null,signal:AbortSignal):Promise<{plans:ApiPlan[];subscriptions:ApiSubscription[]}>{
+  const [plans,subscriptions]=await Promise.all([
+    loadPlans(uid,signal),
+    uid?businessApi<{items:ApiSubscription[]}>(uid,'/v1/me/subscription','GET',undefined,signal):Promise.resolve({items:[]}),
+  ]);
+  return {plans,subscriptions:subscriptions.items};
 }
 
-export async function exportUserDataJson(_uid: string): Promise<void> {
-  const fn = httpsCallable<void, Record<string, unknown>>(functions, 'exportUserData');
-  const res = await fn();
-  const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `vela-export-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+export async function ensureUserRecord(uid:string,email:string,displayName:string):Promise<UserRecord>{
+  try{return await businessApi<UserRecord>(uid,'/v1/me');}
+  catch(error){if((error as {code?:string}).code!=='RESOURCE_NOT_FOUND')throw error;}
+  return businessApi(uid,'/v1/me','PATCH',{displayName:displayName||email.split('@')[0]||'用户',acceptedTerms:true,confirmedAdult:true});
 }
-
-export async function deleteUserAccount(_uid: string): Promise<void> {
-  const fn = httpsCallable<void, { deleted: boolean }>(functions, 'deleteAccount');
-  const res = await fn();
-  if (!res.data?.deleted) {
-    throw new Error('ACCOUNT_DELETE_INCOMPLETE');
-  }
-  await auth.signOut().catch(() => undefined);
+export async function exportUserDataJson(uid:string):Promise<void>{
+  const data=await businessApi(uid,'/v1/me/exports','POST',{});
+  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  const a=document.createElement('a');a.href=url;a.download=`vela-export-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);
 }
-
-export async function createStripeCheckout(uid: string, tier: 'go' | 'pro'): Promise<string | null> {
-  const priceId =
-    tier === 'go'
-      ? import.meta.env.VITE_STRIPE_PRICE_GO
-      : import.meta.env.VITE_STRIPE_PRICE_PRO;
-
-  if (!priceId) {
-    return null;
-  }
-
-  const ref = await addDoc(collection(db, 'customers', uid, 'checkout_sessions'), {
-    price: priceId,
-    success_url: `${window.location.origin}/account?checkout=success`,
-    cancel_url: `${window.location.origin}/account?checkout=cancel`,
-  });
-
-  return await new Promise<string | null>((resolve) => {
-    const unsub = onSnapshot(ref, (snap) => {
-      const data = snap.data();
-      if (data?.url) {
-        unsub();
-        resolve(String(data.url));
-      } else if (data?.error) {
-        unsub();
-        resolve(null);
-      }
-    });
-    setTimeout(() => {
-      unsub();
-      resolve(null);
-    }, 6000);
-  });
+export async function deleteUserAccount(uid:string):Promise<void>{
+  const result=await businessApi<{deleted:boolean}>(uid,'/v1/me','DELETE');
+  if(!result.deleted)throw new Error('ACCOUNT_DELETE_INCOMPLETE');
+  await auth.signOut();
 }
-
-export async function createStripePortal(): Promise<string | null> {
-  try {
-    const fn = httpsCallable<{ returnUrl: string }, { url?: string }>(
-      functions,
-      'ext-firestore-stripe-payments-createPortalLink',
-    );
-    const res = await fn({ returnUrl: window.location.href });
-    return res.data?.url ?? null;
-  } catch {
-    return null;
+export async function createStripeCheckout(uid:string,tier:'go'|'pro'):Promise<string|null>{
+  const created=await businessApi<{id:string}>(uid,'/v1/billing/checkout-sessions','POST',{tier,successUrl:`${window.location.origin}/account?checkout=success`,cancelUrl:`${window.location.origin}/account?checkout=cancel`});
+  const signal=AbortSignal.timeout(6000);
+  while(true){
+    const session=await businessApi<{status:string;url?:string;error?:string}>(uid,`/v1/billing/checkout-sessions/${encodeURIComponent(created.id)}`,'GET',undefined,signal);
+    if(session.status==='completed')return session.url??null;
+    if(session.status==='failed')throw new Error(session.error||'创建支付页面失败');
+    await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>{signal.removeEventListener('abort',abort);resolve();},500);const abort=()=>{clearTimeout(timer);reject(signal.reason);};signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();});
   }
+}
+export async function createStripePortal():Promise<string|null>{
+  const uid=auth.currentUser?.uid;if(!uid)throw new Error('AUTH_REQUIRED');
+  return (await businessApi<{url:string}>(uid,'/v1/billing/portal-sessions','POST',{returnUrl:window.location.href})).url;
 }
 
 export function formatAppError(err: unknown, fallback: string): string {
-  const code = (err as { code?: string })?.code ?? '';
+  const rawCode = (err as { code?: string })?.code ?? '';
+  const code = ({AUTH_REQUIRED:'functions/unauthenticated',INVALID_TOKEN:'functions/unauthenticated',MODEL_BUSY:'functions/resource-exhausted',INVALID_REQUEST:'functions/invalid-argument',RESOURCE_NOT_FOUND:'functions/not-found',INTERNAL_ERROR:'functions/internal'} as Record<string,string>)[rawCode] || rawCode;
   const msg = err instanceof Error ? err.message : String(err ?? '');
   if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
     return '邮箱或密码错误，若尚未注册请切换至「注册账号」';
@@ -122,7 +72,10 @@ export function formatAppError(err: unknown, fallback: string): string {
   if (code === 'functions/unauthenticated' || msg.includes('AUTH_REQUIRED')) {
     return '登录状态已失效，请重新登录后重试';
   }
-  if (msg.includes('SESSION_BUSY')) {
+  if (msg === 'PROFILE_LIMIT_REACHED') return '已达到当前套餐的档案数量上限，请删除不再使用的档案或升级套餐';
+  if (['TURN_FAILED','TURN_INTERRUPTED'].includes(msg)) return '上一条请求未完成，请重试';
+  if (msg === 'TURN_CANCELLED') return '上一条请求已取消，可重新发送';
+  if (msg.includes('SESSION_BUSY') || msg === 'TURN_RUNNING') {
     return '当前会话正在生成回复，请等待上一条消息完成后再试';
   }
   if (msg.includes('SUBSCRIPTION_CANCEL_FAILED') || msg.includes('STRIPE_NOT_CONFIGURED_FOR_ACTIVE_SUBSCRIPTION')) {

@@ -5,17 +5,29 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { google, project, config } from './google.mjs';
-import { liveSmoke } from './live-smoke.mjs';
+import { liveSmoke, liveApiSmoke } from './live-smoke.mjs';
 const tools=JSON.parse(readFileSync(new URL('./tools.json',import.meta.url),'utf8'));
 const functionsRoot=`https://cloudfunctions.googleapis.com/v2/projects/${project}/locations/asia-southeast1`;
 const hosting=`https://firebasehosting.googleapis.com/v1beta1/sites/${project}/releases`;
 const rules=`https://firebaserules.googleapis.com/v1/projects/${project}/releases`;
-export async function snapshot() {
-  const [functions,site,releases]=await Promise.all([google(`${functionsRoot}/functions`),google(`${hosting}?pageSize=1`),google(rules)]);
+async function listFunctions(request=google) {
+  const found=[];let pageToken;
+  do {
+    const page=await request(`${functionsRoot}/functions${pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : ''}`);
+    found.push(...(page.functions||[]));pageToken=page.nextPageToken;
+  } while(pageToken);
+  return {functions:found};
+}
+export async function snapshot(inventory) {
+  const [functions,site,releases]=await Promise.all([listFunctions(),google(`${hosting}?pageSize=1`),google(rules)]);
   assert(site.releases?.[0]?.version?.name,'No Hosting rollback version available');
-  const expected=['chat','createSession','deleteAccount','exportUserData','previewNatalWheel','resolveLocation'];
+  assert(inventory?.existing?.length && Array.isArray(inventory.introduced),'Missing owned function inventory');
+  const expected=[...inventory.existing,...inventory.introduced];
+  assert(new Set(expected).size===expected.length && expected.every(n=>/^[A-Za-z][A-Za-z0-9_]*$/.test(n)),'Invalid function inventory');
   const saved={functions:(functions.functions||[]).filter(f=>expected.includes(f.name.split('/').at(-1))).map(f=>({name:f.name,buildConfig:{source:f.buildConfig.source,runtime:f.buildConfig.runtime,entryPoint:f.buildConfig.entryPoint}})),hosting:site.releases[0].version.name,rules:(releases.releases||[]).filter(r=>r.name.endsWith(`/cloud.firestore/${config.firestoreDatabaseId}`)).map(r=>({name:r.name,rulesetName:r.rulesetName}))};
-  assert(saved.functions.length===expected.length&&saved.functions.every(f=>f.buildConfig.source?.storageSource),'Missing Functions rollback sources');
+  const present=new Set(saved.functions.map(f=>f.name.split('/').at(-1)));
+  assert(inventory.existing.every(n=>present.has(n))&&saved.functions.every(f=>f.buildConfig.source?.storageSource),'Missing Functions rollback sources');
+  saved.createdFunctions=inventory.introduced.filter(n=>!present.has(n)).map(n=>`projects/${project}/locations/asia-southeast1/functions/${n}`);
   assert(saved.rules.length>0,'Missing Firestore rollback rulesets');return saved;
 }
 export async function rollback(saved, { request=google, sleep=ms=>new Promise(r=>setTimeout(r,ms)), timeoutMs=20*60_000 }={}) {
@@ -24,6 +36,11 @@ export async function rollback(saved, { request=google, sleep=ms=>new Promise(r=
     const op=await request(`https://cloudfunctions.googleapis.com/v2/${f.name}?updateMask=buildConfig.source,buildConfig.runtime,buildConfig.entryPoint`,{method:'PATCH',body:{name:f.name,buildConfig:{source:f.buildConfig.source,runtime:f.buildConfig.runtime,entryPoint:f.buildConfig.entryPoint}}});
     pending.push(op.name);
   } catch(e) { errors.push(e); }
+  for(const name of saved.createdFunctions || []) try {
+    // Only names absent from the pre-release snapshot and explicitly owned by this release.
+    const all=await listFunctions(request);
+    if((all.functions||[]).some(f=>f.name===name)) {const op=await request(`https://cloudfunctions.googleapis.com/v2/${name}`,{method:'DELETE'});pending.push(op.name);}
+  } catch(e) {errors.push(e);}
   for(const r of saved.rules) try { await request(`https://firebaserules.googleapis.com/v1/${r.name}`,{method:'PATCH',body:{release:r,updateMask:'rulesetName'}}); } catch(e) { errors.push(e); }
   try {await request(`${hosting}?versionName=${encodeURIComponent(saved.hosting)}`,{method:'POST',body:{message:'Automatic rollback after failed release validation'}});} catch(e){errors.push(e);}
   const deadline=Date.now()+timeoutMs;
@@ -71,11 +88,18 @@ async function release() {
   const install=spawn('npm',['ci','--omit=dev','--ignore-scripts','--prefix',resolve('.release/api')],{stdio:'inherit'});
   const [installed]=await once(install,'exit');assert.equal(installed,0,'Release dependency installation failed');
   mkdirSync('artifacts',{recursive:true});
-  const saved=await snapshot();writeFileSync('artifacts/rollback.json',JSON.stringify(saved,null,2),{mode:0o600});
+  const saved=await snapshot(manifest.functionInventory);writeFileSync('artifacts/rollback.json',JSON.stringify(saved,null,2),{mode:0o600});
   try {
-    const child=spawn('npx',['--yes',`firebase-tools@${tools.firebase}`,'deploy','--config',resolve('.release/firebase.json'),'--project',project,'--only','functions,hosting,firestore:rules','--non-interactive'],{stdio:'inherit'});
-    const [code]=await once(child,'exit');assert.equal(code,0,'Firebase deployment failed');
-    await verifyHosting(manifest);await liveSmoke();
+    const deploy=async only=>{
+      const child=spawn('npx',['--yes',`firebase-tools@${tools.firebase}`,'deploy','--config',resolve('.release/firebase.json'),'--project',project,'--only',only,'--non-interactive'],{stdio:'inherit'});
+      const [code]=await once(child,'exit');assert.equal(code,0,`Firebase deployment failed: ${only}`);
+    };
+    await deploy('functions');
+    await liveApiSmoke(); // Backend must serve new clients before publishing their assets.
+    await deploy('hosting');
+    await verifyHosting(manifest);
+    await deploy('firestore:rules'); // Retire legacy direct writes only after API clients are published.
+    await liveSmoke();await liveApiSmoke();
     writeFileSync('artifacts/release-result.json',JSON.stringify({sha:manifest.sha,status:'verified',at:new Date().toISOString()}));
   } catch(error) {
     console.error('Release failed; restoring previous Functions sources, Hosting version, and Rules releases');

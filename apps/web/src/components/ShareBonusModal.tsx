@@ -1,7 +1,7 @@
 import { Modal } from './Modal';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MAX_MONTHLY_SHARE_BONUSES, type ProfileRecord, type Tier, type UsageRecord } from '@vela-cf/shared';
-import { computePortraitSummary, renderVelaSharePoster } from '../lib/portrait';
+import { renderVelaSharePoster } from '../lib/portrait';
 import { claimDailyShareBonus, formatAppError, type ChartSnapshot, type ShareClaimMethod } from '../lib/store';
 import { IconGift } from './Icons';
 
@@ -24,7 +24,7 @@ export function ShareBonusModal({ open, uid, tier, usage, profile, chart, onClos
   const [sharedActionDone, setSharedActionDone] = useState<ShareClaimMethod | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const summary = useMemo(() => chart?.natal ? computePortraitSummary(chart.natal) : null, [chart?.natal]);
+  const summary = chart?.portrait ?? null;
   const shareUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 

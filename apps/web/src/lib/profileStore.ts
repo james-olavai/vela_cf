@@ -1,19 +1,11 @@
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  updateDoc,
-} from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import {
   ProfileInputSchema,
   type LocationCandidate,
   type ProfileInput,
   type ProfileRecord,
+  type PortraitSummary,
 } from '@vela-cf/shared';
-import { db, functions, handleFirestoreError, OperationType } from './firebase';
+import { businessApi, apiList, subscribeApi } from './apiClient';
 
 export interface ChartPlanet {
   key: string;
@@ -26,6 +18,7 @@ export interface ChartPlanet {
 }
 
 export interface ChartSnapshot {
+  portrait?: PortraitSummary;
   natal: {
     houseSystem: string;
     ascendant: { longitude: number; house: number; signZh: string; formatted: string };
@@ -58,13 +51,13 @@ export interface ChartSnapshot {
 }
 
 const chartKey = (uid: string, profile: ProfileRecord) =>
-  `vela_chart_v2_${uid}_${JSON.stringify([profile.id, profile.birthDateTime, profile.latitude, profile.longitude, profile.timezone, profile.gender])}`;
+  `vela_chart_v3_${uid}_${JSON.stringify([profile.id, profile.birthDateTime, profile.latitude, profile.longitude, profile.timezone, profile.gender])}`;
 
 export function loadCachedChart(uid: string, profile: ProfileRecord): ChartSnapshot | null {
   try {
     const raw = sessionStorage.getItem(chartKey(uid, profile));
     const chart = raw ? JSON.parse(raw) as ChartSnapshot : null;
-    return chart?.natal?.planets?.length ? chart : null;
+    return chart?.natal?.planets?.length && chart.portrait ? chart : null;
   } catch { return null; }
 }
 
@@ -100,18 +93,7 @@ export function subscribeProfiles(
     window.addEventListener(E2E_PROFILES_EVENT, emit);
     return () => window.removeEventListener(E2E_PROFILES_EVENT, emit);
   }
-  return onSnapshot(
-    collection(db, 'users', uid, 'profiles'),
-    (snap) => {
-      const list: ProfileRecord[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<ProfileRecord, 'id'>),
-      }));
-      list.sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
-      onData(list);
-    },
-    onError,
-  );
+  return subscribeApi(signal => apiList<ProfileRecord>(uid, '/v1/profiles', signal).then(list => list.sort((a,b)=>(a.createdAt ?? '').localeCompare(b.createdAt ?? ''))), onData, onError);
 }
 
 export async function saveProfile(
@@ -149,26 +131,8 @@ export async function saveProfile(
     return id;
   }
 
-  if (profileId) {
-    const path = `users/${uid}/profiles/${profileId}`;
-    try {
-      await updateDoc(doc(db, 'users', uid, 'profiles', profileId), payload);
-      return profileId;
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, path);
-    }
-  } else {
-    const path = `users/${uid}/profiles`;
-    try {
-      const created = await addDoc(collection(db, 'users', uid, 'profiles'), {
-        ...payload,
-        createdAt: now,
-      });
-      return created.id;
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, path);
-    }
-  }
+  const record = await businessApi<ProfileRecord>(uid, profileId ? `/v1/profiles/${encodeURIComponent(profileId)}` : '/v1/profiles', profileId ? 'PATCH' : 'POST', validated);
+  return record.id;
 }
 
 export async function removeProfile(uid: string, profileId: string): Promise<void> {
@@ -176,24 +140,15 @@ export async function removeProfile(uid: string, profileId: string): Promise<voi
     writeE2eProfiles(readE2eProfiles().filter((p) => p.id !== profileId));
     return;
   }
-  const path = `users/${uid}/profiles/${profileId}`;
-  try {
-    await deleteDoc(doc(db, 'users', uid, 'profiles', profileId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, path);
-  }
+  await businessApi(uid, `/v1/profiles/${encodeURIComponent(profileId)}`, 'DELETE');
 }
 
 export async function searchLocations(queryText: string): Promise<LocationCandidate[]> {
   const q = queryText.trim();
   if (!q) return [];
   try {
-    const fn = httpsCallable<{ query: string }, { results?: LocationCandidate[] }>(
-      functions,
-      'resolveLocation',
-    );
-    const res = await fn({ query: q });
-    return res.data?.results ?? [];
+    const data = await businessApi<{results:LocationCandidate[]}>(null, `/v1/locations?query=${encodeURIComponent(q)}`);
+    return data.results;
   } catch (error) {
     if (!import.meta.env.DEV) throw error;
     const resp = await fetch(`/api/locations?q=${encodeURIComponent(q)}`);
@@ -207,19 +162,10 @@ export async function fetchNatalChart(
   uid: string | null,
   profile: ProfileRecord,
 ): Promise<ChartSnapshot> {
-  let natal: ChartSnapshot['natal'] | null = null;
+  let result: Pick<ChartSnapshot,'natal'|'portrait'>;
   try {
-    const fn = httpsCallable<
-      { birthDateTime: string; latitude: number; longitude: number; timezone: string },
-      { natal: ChartSnapshot['natal'] }
-    >(functions, 'previewNatalWheel');
-    const res = await fn({
-      birthDateTime: profile.birthDateTime,
-      latitude: profile.latitude,
-      longitude: profile.longitude,
-      timezone: profile.timezone,
-    });
-    natal = res.data.natal;
+    const data = await businessApi<Pick<ChartSnapshot,'natal'|'portrait'>>(null, '/v1/charts/natal', 'POST', {birthDateTime:profile.birthDateTime,latitude:profile.latitude,longitude:profile.longitude,timezone:profile.timezone});
+    result = data;
   } catch (error) {
     if (!import.meta.env.DEV) throw error;
     const resp = await fetch('/api/astrology', {
@@ -228,13 +174,24 @@ export async function fetchNatalChart(
       body: JSON.stringify({ profile }),
     });
     if (!resp.ok) throw new Error('排盘计算失败');
-    const data = (await resp.json()) as { natal: ChartSnapshot['natal'] };
-    natal = data.natal;
+    const data = (await resp.json()) as Pick<ChartSnapshot,'natal'|'portrait'>;
+    result = data;
   }
   const prev = uid ? loadCachedChart(uid, profile) : null;
-  const next: ChartSnapshot = { ...prev, natal };
+  if(!result.portrait)throw new Error('星盘画像数据不完整，请重试');
+  const next: ChartSnapshot = { ...prev, ...result };
   if (uid) {
     saveCachedChart(uid, profile, next);
   }
   return next;
+}
+
+export async function fetchTransitChart(profile:ProfileRecord,dateISO:string):Promise<ChartSnapshot>{
+  try {
+    const {transit}=await businessApi<{transit:ChartSnapshot['natal']}>(null,'/v1/charts/transits','POST',{birthDateTime:profile.birthDateTime,latitude:profile.latitude,longitude:profile.longitude,timezone:profile.timezone,atDateTime:`${dateISO}T12:00`,atTimezone:profile.timezone});
+    return {natal:transit};
+  } catch(error) {
+    if(!import.meta.env.DEV)throw error;
+    return fetchNatalChart(null,{...profile,birthDateTime:`${dateISO}T12:00`});
+  }
 }

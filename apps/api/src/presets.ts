@@ -8,6 +8,7 @@ export async function getServerPreset(
   mode?: ConsultationMode,
 ): Promise<ServerPresetConfig> {
   const fallback = DEFAULT_PRESETS[tier] ?? DEFAULT_PRESETS.free;
+  if (process.env.FUNCTIONS_EMULATOR === "true") return fallback;
   try {
     const defaultConfig: Record<string, string> = {};
     for (const [k, v] of Object.entries(DEFAULT_PRESETS)) {

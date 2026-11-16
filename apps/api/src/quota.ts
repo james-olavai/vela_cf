@@ -1,4 +1,4 @@
-import { FieldValue, type Firestore } from 'firebase-admin/firestore';
+import { FieldValue, type Firestore, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
   computeEffectiveBudget,
@@ -146,7 +146,9 @@ export async function reserveQuota(
       nextPayload.shareCount = 0;
       nextPayload.lastShareDate = '';
     }
-    tx.set(usageRef, nextPayload, { merge: true });
+    // Replace the reservation map atomically; recursive merge retains removed keys.
+    if (snap.exists) tx.update(usageRef, nextPayload);
+    else tx.set(usageRef, nextPayload);
     return { reservedMicroUsd: reserveMicroUsd, budgetMicroUsd: budget };
   });
 }
@@ -161,11 +163,15 @@ export async function settleQuota(
     now?: Date;
   },
 ): Promise<{ used: number }> {
+  return db.runTransaction(tx => settleQuotaInTransaction(db, tx, params));
+}
+export async function settleQuotaInTransaction(db: Firestore, tx: Transaction, params: {
+  uid:string;periodStart:string;requestId:string;costMicroUsd:number;now?:Date;
+}):Promise<{used:number}> {
   const { uid, periodStart, requestId, costMicroUsd, now = new Date() } = params;
   const nowMs = now.getTime();
   const usageRef = db.collection('usage').doc(uid);
 
-  return db.runTransaction(async (tx) => {
     const snap = await tx.get(usageRef);
     const data = snap.data();
     const reset = !data || String(data.periodStart ?? '') < periodStart;
@@ -184,9 +190,10 @@ export async function settleQuota(
       nextPayload.shareCount = 0;
       nextPayload.lastShareDate = '';
     }
-    tx.set(usageRef, nextPayload, { merge: true });
+    // Replace the reservation map atomically; recursive merge retains removed keys.
+    if (snap.exists) tx.update(usageRef, nextPayload);
+    else tx.set(usageRef, nextPayload);
     return { used: nextUsed };
-  });
 }
 
 export async function releaseQuota(
@@ -206,14 +213,7 @@ export async function releaseQuota(
     if (!snap.exists) return;
     const data = snap.data();
     const nextReservations = pruneReservations(data?.reservations, nowMs, requestId);
-    tx.set(
-      usageRef,
-      {
-        reservations: nextReservations,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+    tx.update(usageRef, { reservations: nextReservations, updatedAt: FieldValue.serverTimestamp() });
   });
 }
 
