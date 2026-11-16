@@ -59,3 +59,18 @@ test('application storage and monthly quota limits remain distinct from retryabl
     assert.equal(output.error.retryable,message==='provider exhausted');
   }
 });
+
+test('Only public catalogs support ETag; private recommendations and errors never become shared cache entries',async()=>{
+  const {HttpsError}=await import('firebase-functions/v2/https');
+  const call=async(path:string,tag?:string,fail=false)=>{
+    const out:any={headers:{}};
+    const handler=createHttpApi({verifyToken:async()=>({uid:'owner'} as any),publicRoute:()=>true,dispatch:async()=>{if(fail)throw new HttpsError('unavailable','LOCATION_PROVIDER_UNAVAILABLE');return {status:200,body:{catalogVersion:'v1',items:[]}};}});
+    const res:any={setHeader:(k:string,v:string)=>out.headers[k]=v,status:(v:number)=>{out.status=v;return res;},json:(v:unknown)=>out.body=v,end:()=>{out.ended=true;}};
+    await handler({method:'GET',path,headers:{},query:{},get:(key:string)=>key==='If-None-Match'?tag:undefined} as any,res);return out;
+  };
+  const catalog=await call('/v1/locations/catalog');assert.equal(catalog.status,200);assert(catalog.headers.ETag);
+  const cached=await call('/v1/locations/catalog',`W/${catalog.headers.ETag}`);assert.equal(cached.status,304);assert.equal(cached.body,undefined);
+  assert.equal((await call('/v1/locations/catalog','"different"')).status,200);
+  const privateResult=await call('/v1/profiles/owner/country-chart');assert.equal(privateResult.headers['Cache-Control'],'no-store');assert(!privateResult.headers.ETag);
+  const failure=await call('/v1/locations/catalog',undefined,true);assert.equal(failure.status,503);assert.equal(failure.body.error.code,'LOCATION_PROVIDER_UNAVAILABLE');assert.equal(failure.headers['Cache-Control'],'no-store');
+});

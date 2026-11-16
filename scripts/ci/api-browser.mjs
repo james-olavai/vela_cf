@@ -18,13 +18,20 @@ const server=await createServer({root:resolve('apps/web'),configFile:false,esbui
 }]});
 server.middlewares.use('/__api-browser',async(req,res,next)=>{
   if(req.url!=='/'&&req.url!=='')return next();
-  const html=`<!doctype html><html><body><div id="subscription"></div><div id="plan-probe"></div><script type="module">
+  const html=`<!doctype html><html><body><div id="subscription"></div><div id="plan-probe"></div><div id="geo"></div><script type="module">
     import React from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {usePlan} from '/src/lib/planStore.ts';
     const planRoot=createRoot(document.getElementById('plan-probe'));
     function PlanProbe({uid,tier}){const current=usePlan(uid,tier);window.planProbe={uid,tier,plan:current.plan,error:current.error};window.retryPlan=current.retry;return React.createElement('output',{'data-testid':'plan-probe'},current.error||current.plan?.label||'套餐加载中');}
+    import {ProfileManagerSubpage} from '/src/components/ProfileSidebarPanel.tsx';
+    import {CountryPanel} from '/src/components/CountryPanel.tsx';
+    const geoRoot=createRoot(document.getElementById('geo'));
+    function GeoProbe({uid,plan}){
+      const [profile,setProfile]=React.useState(null),[country,setCountry]=React.useState(null);window.geoChoice=country;
+      return React.createElement(React.Fragment,null,React.createElement(ProfileManagerSubpage,{uid,tier:'pro',plan,profiles:profile?[profile]:[],selectedProfileIds:profile?[profile.id]:[],launch:{seq:1,startAdd:true},onSetPrimaryProfile:()=>{},onToggleSynastryProfile:()=>{},onDeleteProfile:()=>{},onOpenSubscription:()=>{},onSaveProfile:async input=>{const id=await saveProfile(uid,null,input);const record=await businessApi(uid,'/v1/profiles/'+id);window.geoSaved=record;setProfile(record);}}),profile&&React.createElement(CountryPanel,{uid,profileId:profile.id,value:country,onChange:setCountry,allowed:true}));
+    }
     import {SubscriptionSubpage} from '/src/components/SubscriptionSubpage.tsx';
     const subscriptionRoot=createRoot(document.getElementById('subscription'));
     import {auth} from '/src/lib/firebase.ts';
@@ -37,7 +44,7 @@ server.middlewares.use('/__api-browser',async(req,res,next)=>{
     connectAuthEmulator(auth,${JSON.stringify(`http://${authHost}`)},{disableWarnings:true});
     window.state={profiles:[],usage:null,sessions:[],messages:[],errors:[]};window.stops=[];
     const fail=error=>window.state.errors.push(String(error));
-    window.harness={renderPlan:(uid,tier)=>flushSync(()=>planRoot.render(React.createElement(PlanProbe,{uid,tier}))),renderSubscription:uid=>subscriptionRoot.render(React.createElement(SubscriptionSubpage,{uid,tier:'free',usage:{used:0,periodStart:'2026-11-01'},profileCount:0,onRequestAuth:()=>{},onOpenShare:()=>{}})),saveProfile,removeProfile,businessApi,ensureUserRecord,claimDailyShareBonus,createConsultationSession,fetchNatalChart,
+    window.harness={renderGeo:async uid=>{await auth.currentUser.getIdToken(true);const plans=await businessApi(uid,'/v1/plans');geoRoot.render(React.createElement(GeoProbe,{uid,plan:plans.items.find(p=>p.id==='pro')}));},renderPlan:(uid,tier)=>flushSync(()=>planRoot.render(React.createElement(PlanProbe,{uid,tier}))),renderSubscription:uid=>subscriptionRoot.render(React.createElement(SubscriptionSubpage,{uid,tier:'free',usage:{used:0,periodStart:'2026-11-01'},profileCount:0,onRequestAuth:()=>{},onOpenShare:()=>{}})),saveProfile,removeProfile,businessApi,ensureUserRecord,claimDailyShareBonus,createConsultationSession,fetchNatalChart,
       watch:uid=>{window.stops.push(subscribeProfiles(uid,v=>window.state.profiles=v,fail),subscribeUsage(uid,v=>window.state.usage=v,fail),subscribeSessions(uid,v=>window.state.sessions=v,fail));},
       watchMessages:(uid,id)=>window.stops.push(subscribeMessages(uid,id,v=>window.state.messages=v,fail)),
       stop:()=>window.stops.forEach(fn=>fn()),login:async(email,password)=>(await createUserWithEmailAndPassword(auth,email,password)).user.uid,cleanup:async()=>{if(auth.currentUser)await deleteUser(auth.currentUser);}};
@@ -119,6 +126,27 @@ try{
   await page.evaluate(()=>window.harness.renderPlan(null,'go'));
   assert.equal(await page.evaluate(()=>window.planProbe.plan?.maxSynastryProfiles),8);
   await page.unroute('**/v1/plans');
+  // Real UI -> real authenticated API: catalogs, selection, recommendation and frozen country session.
+  const {getAuth}=await import('firebase-admin/auth');await getAuth(app).setCustomUserClaims(uid,{stripeRole:'pro'});
+  const externalRequests=[];page.on('request',request=>{if(request.url().includes('/v1/locations?')&&request.url().includes('source=external'))externalRequests.push(request.url());});
+  await page.evaluate(uid=>window.harness.renderGeo(uid),uid);
+  await page.locator('#profile-name').fill('Country browser synthetic');await page.locator('#profile-birth').fill('1994-06-03T08:20');
+  await page.locator('#profile-city').fill('北京');await page.getByRole('option',{name:/北京/}).first().waitFor();
+  await page.locator('#profile-city').evaluate(el=>el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,isComposing:true})));
+  assert.equal(await page.getByText(/^已选：/).count(),0,'IME confirmation must not silently select a location');
+  await page.locator('#profile-city').press('ArrowDown');await page.locator('#profile-city').press('Enter');await page.getByText(/^已选：/).waitFor();
+  await page.locator('#profile-city').fill('Not-in-catalog-xyz');assert.equal(await page.getByText(/^已选：/).count(),0);
+  await page.getByRole('button',{name:'保存',exact:true}).click();await page.getByRole('alert').getByText('请先选中匹配地点，或使用右侧搜索').waitFor();
+  await page.locator('#profile-city').fill('北京');await page.getByRole('option',{name:/北京/}).first().click();
+  await page.getByRole('button',{name:'保存',exact:true}).click();await page.waitForFunction(()=>Boolean(window.geoSaved));
+  const geoProfile=await page.evaluate(()=>window.geoSaved);assert(geoProfile.locationRef);assert.equal(geoProfile.countryCode,'CN');assert.equal(externalRequests.length,0,'Typing an internal location must not query external geocoding');
+  await page.getByText(/已关联：.*根据出生地/).waitFor();assert.equal(await page.getByRole('checkbox',{name:'加入本次分析'}).isChecked(),false);
+  await page.getByRole('checkbox',{name:'加入本次分析'}).check();await page.waitForFunction(()=>Boolean(window.geoChoice));
+  const countrySession=await page.evaluate(async()=>window.harness.createConsultationSession('synastry',[window.geoSaved],'Country API integration',window.geoChoice));
+  const frozen=countrySession.subjects.find(s=>s.ref==='country');assert.equal(frozen.profile.entityType,'country');assert(frozen.countryChart?.version,'Frozen country version missing');
+  const actual=(await db.doc(`users/${uid}/sessions/${countrySession.id}`).get()).data();assert.equal(actual.frozenSubjects.find(s=>s.ref==='country').countryChart.version,frozen.countryChart.version);
+  assert.equal((await db.collection(`users/${uid}/profiles`).get()).size,1,'Country must not be saved as an extra user profile');
+  console.log('PASS browser geographic UI: internal keyboard/IME matching, clear stale selection, no external request while typing, real profile reference, country recommendation/explicit selection and frozen API session');
   await page.evaluate(()=>window.harness.cleanup());
   console.log('PASS browser API integration: guest natal, real Firebase login/account, profile CRUD, session creation and polling profiles/messages/usage via API, share reward, subjects request, real plans/subscription UI, account switching, failed-load retry, usePlan first-load/tier/UID isolation/outage/same-response retry, CORS and Firestore persistence');
 }finally{

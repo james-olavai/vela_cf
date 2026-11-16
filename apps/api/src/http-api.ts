@@ -1,5 +1,5 @@
 import { ChatBody } from './chat-http.js';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { Request, Response } from 'express';
@@ -51,12 +51,18 @@ export function createHttpApi(deps: Dependencies) {
         return;
       }
       const result = await deps.dispatch({method:req.method,path:req.path,query:req.query,body:req.body,auth:{uid:token.uid,token}});
+      if (req.method === 'GET' && result.status === 200 && /^\/v1\/(locations\/catalog|country-charts(?:\/[A-Za-z0-9_-]+)?)$/.test(req.path)) {
+        const etag = `"${createHash('sha256').update(JSON.stringify(result.body)).digest('hex')}"`;
+        res.setHeader('ETag', etag); res.setHeader('Access-Control-Expose-Headers', 'ETag, X-Request-Id');
+        res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+        if (String(req.get('If-None-Match') || '').split(',').some(tag => tag.trim().replace(/^W\//,'') === etag || tag.trim() === '*')) {res.status(304).end();return;}
+      }
       if (result.status === 204) res.status(204).end();
       else res.status(result.status).json(result.body);
     } catch (error) {
       const known = error instanceof HttpsError;
       const status = error instanceof ZodError ? 400 : known ? statuses[error.code] || 500 : 500;
-      const code = error instanceof ZodError ? 'INVALID_REQUEST' : known && error.code === 'resource-exhausted' ? (['QUOTA_EXCEEDED','PROFILE_LIMIT_REACHED','MONTHLY_SHARE_LIMIT_REACHED'].includes(error.message) ? error.message : 'MODEL_BUSY') : known && status < 500 && /^[A-Z][A-Z0-9_]{0,79}$/.test(error.message) ? error.message : 'INTERNAL_ERROR';
+      const code = error instanceof ZodError ? 'INVALID_REQUEST' : known && error.code === 'resource-exhausted' ? (['QUOTA_EXCEEDED','PROFILE_LIMIT_REACHED','MONTHLY_SHARE_LIMIT_REACHED'].includes(error.message) ? error.message : 'MODEL_BUSY') : known && (status < 500 || error.message === 'LOCATION_PROVIDER_UNAVAILABLE') && /^[A-Z][A-Z0-9_]{0,79}$/.test(error.message) ? error.message : 'INTERNAL_ERROR';
       if (status >= 500) console.error('Business API failed', {requestId,code:known ? error.code : 'internal'});
       const result={error:{code,message:code,requestId,retryable:(status===429 && !['QUOTA_EXCEEDED','PROFILE_LIMIT_REACHED','MONTHLY_SHARE_LIMIT_REACHED'].includes(code)) || status===503 || status===504}};
       if(res.headersSent) {if(!res.destroyed)res.end(`data: ${JSON.stringify({type:'error',...result})}\n\n`);}

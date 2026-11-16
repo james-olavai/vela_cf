@@ -5,6 +5,7 @@ import {
   type ProfileRecord,
   type PortraitSummary,
 } from '@vela-cf/shared';
+import { auth } from './firebase';
 import { businessApi, apiList, subscribeApi } from './apiClient';
 
 export interface ChartPlanet {
@@ -143,20 +144,14 @@ export async function removeProfile(uid: string, profileId: string): Promise<voi
   await businessApi(uid, `/v1/profiles/${encodeURIComponent(profileId)}`, 'DELETE');
 }
 
-export async function searchLocations(queryText: string): Promise<LocationCandidate[]> {
+export async function searchLocations(queryText: string, source: 'auto'|'builtin'|'external' = 'auto', signal?:AbortSignal): Promise<LocationCandidate[]> {
   const q = queryText.trim();
   if (!q) return [];
-  try {
-    const data = await businessApi<{results:LocationCandidate[]}>(null, `/v1/locations?query=${encodeURIComponent(q)}`);
-    return data.results;
-  } catch (error) {
-    if (!import.meta.env.DEV) throw error;
-    const resp = await fetch(`/api/locations?q=${encodeURIComponent(q)}`);
-    if (!resp.ok) throw new Error('城市搜索服务暂时不可用');
-    const data = (await resp.json()) as { results?: LocationCandidate[] };
-    return data.results ?? [];
-  }
+  const data = await businessApi<{results:LocationCandidate[]}>(null, `/v1/locations?query=${encodeURIComponent(q)}&source=${source}`, 'GET', undefined, signal);
+  return data.results;
 }
+
+const chartSubject=(p:ProfileRecord)=>({ref:'primary',birth:{datetime:p.birthDateTime,latitude:p.latitude,longitude:p.longitude,timezone:p.timezone,name:p.name,gender:p.gender,entityType:p.entityType,locationName:p.locationName}});
 
 export async function fetchNatalChart(
   uid: string | null,
@@ -164,7 +159,7 @@ export async function fetchNatalChart(
 ): Promise<ChartSnapshot> {
   let result: Pick<ChartSnapshot,'natal'|'portrait'>;
   try {
-    const data = await businessApi<Pick<ChartSnapshot,'natal'|'portrait'>>(null, '/v1/charts/natal', 'POST', {birthDateTime:profile.birthDateTime,latitude:profile.latitude,longitude:profile.longitude,timezone:profile.timezone});
+    const data = await businessApi<Pick<ChartSnapshot,'natal'|'portrait'>>(uid, '/v1/charts/natal', 'POST', uid||(profile.entityType??'person')!=='person'?{subjects:[chartSubject(profile)]}:{birthDateTime:profile.birthDateTime,latitude:profile.latitude,longitude:profile.longitude,timezone:profile.timezone});
     result = data;
   } catch (error) {
     if (!import.meta.env.DEV) throw error;
@@ -188,7 +183,8 @@ export async function fetchNatalChart(
 
 export async function fetchTransitChart(profile:ProfileRecord,dateISO:string):Promise<ChartSnapshot>{
   try {
-    const {transit}=await businessApi<{transit:ChartSnapshot['natal']}>(null,'/v1/charts/transits','POST',{birthDateTime:profile.birthDateTime,latitude:profile.latitude,longitude:profile.longitude,timezone:profile.timezone,atDateTime:`${dateISO}T12:00`,atTimezone:profile.timezone});
+    const uid=auth.currentUser?.uid??null;
+    const {transit}=await businessApi<{transit:ChartSnapshot['natal']}>(uid,'/v1/charts/transits','POST',{...(uid||(profile.entityType??'person')!=='person'?{subjects:[chartSubject(profile)]}:{birthDateTime:profile.birthDateTime,latitude:profile.latitude,longitude:profile.longitude,timezone:profile.timezone}),atDateTime:`${dateISO}T12:00`,atTimezone:profile.timezone});
     return {natal:transit};
   } catch(error) {
     if(!import.meta.env.DEV)throw error;

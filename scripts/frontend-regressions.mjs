@@ -47,14 +47,19 @@ async function setup(viewport = { width: 1366, height: 860 }, { seedProfiles = p
    } }), { headers: { 'Content-Type': 'text/event-stream' } });
   };
  }, { profiles: seedProfiles });
- await page.route('**/businessApi/v1/charts/*', async route => {
+ // This visual-only harness has no Firebase identity; mock its explicit DEV chart fallback too.
+ const serveChart = async route => {
   const data = route.request().postDataJSON() ?? {};
-  const at=data.atDateTime || data.birthDateTime;
+  const at=data.atDateTime || data.birthDateTime || data.subjects?.[0]?.birth?.datetime || data.profile?.birthDateTime;
   const year = at?.slice(0, 4);
   chartRequests.push(at);
   await new Promise(r => setTimeout(r, year === '1994' ? 180 : 20));
   await route.fulfill({ json: route.request().url().endsWith('/transits') ? {transit:natal(year)} : {natal:natal(year),portrait:computePortraitSummary(natal(year))} });
- });
+ };
+ await page.route('**/businessApi/v1/charts/*', serveChart);
+ await page.route('**/api/astrology', serveChart);
+ await page.route('**/businessApi/v1/locations/catalog?*',route=>route.fulfill({json:{catalogVersion:'ui-fixture',items:[],nextCursor:null}}));
+ await page.route('**/businessApi/v1/country-charts?*',route=>route.fulfill({json:{catalogVersion:'ui-fixture',items:[],nextCursor:null}}));
  await page.route('**/businessApi/v1/locations?*', async route => {
   const q = new URL(route.request().url()).searchParams.get('query') || '';
   await new Promise(r => setTimeout(r, q === 'old' ? 200 : 10));
@@ -126,16 +131,16 @@ try {
  await page.locator('[data-testid="sidebar-nav-profiles"]').click();
  const item=page.locator('[data-testid="pm-item"]').filter({hasText:'B'});
  await item.getByRole('button',{name:'编辑',exact:true}).click();
- await page.getByLabel('出生城市 / 地点（搜索后选择，必填）').fill('old');
+ await page.getByLabel('出生城市 / 地点（从匹配结果选择，必填）').fill('old');
  await page.getByRole('button',{name:'搜索城市',exact:true}).click();
- await page.getByLabel('出生城市 / 地点（搜索后选择，必填）').fill('new');
+ await page.getByLabel('出生城市 / 地点（从匹配结果选择，必填）').fill('new');
  await new Promise(r=>setTimeout(r,250));
- assert.equal(await page.getByRole('button',{name:'old',exact:true}).count(),0,'stale search result cannot reappear after editing query');
+ assert.equal(await page.getByRole('option',{name:'old',exact:true}).count(),0,'stale search result cannot reappear after editing query');
  await page.getByRole('button',{name:'更新',exact:true}).click();
- await page.getByRole('alert').filter({hasText:'请先搜索并选中城市'}).waitFor();
+ await page.getByRole('alert').filter({hasText:'请先选中匹配地点，或使用右侧搜索'}).waitFor();
  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('vela_e2e_profiles_v1')).find(p=>p.name==='B').locationName),'上海');
  await page.getByRole('button',{name:'搜索城市',exact:true}).click();
- await page.getByRole('button',{name:'new',exact:true}).click();
+ await page.getByRole('option',{name:'new',exact:true}).click();
  await page.getByLabel('出生日期与时间（出生地当地时间，必填）').fill('1999-06-03T08:20');
  await page.getByRole('button',{name:'更新',exact:true}).click();
  await page.locator('[data-testid="pm-form"]').waitFor({state:'hidden'});
@@ -198,9 +203,9 @@ try {
  assert.equal(await fp.getByLabel('出生日期与时间（出生地当地时间，必填）').inputValue(),'','new profile must not prefill a sample birth date');
  await fp.getByLabel('称呼 / 名称（必填）').fill('首次访客');
  await fp.getByLabel('出生日期与时间（出生地当地时间，必填）').fill('1994-06-03T08:20');
- await fp.getByLabel('出生城市 / 地点（搜索后选择，必填）').fill('上海');
+ await fp.getByLabel('出生城市 / 地点（从匹配结果选择，必填）').fill('上海');
  await fp.getByRole('button',{name:'搜索城市',exact:true}).click();
- await fp.getByRole('button',{name:'上海',exact:true}).click();
+ await fp.getByRole('option',{name:'上海',exact:true}).click();
  await fp.getByRole('status').filter({hasText:'时区：Asia/Shanghai'}).waitFor();
  await fp.getByRole('button',{name:'保存',exact:true}).click();
  await fp.waitForFunction(()=>document.activeElement?.id==='consult-question');

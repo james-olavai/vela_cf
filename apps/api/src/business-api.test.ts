@@ -75,9 +75,11 @@ test('me initialization requires explicit consent, trusted identity and preserve
 
 test('session responses strip frozen prompt/config and messages require owned session', async () => {
   const { db, store } = database();
-  store.set('users/alice/sessions/s1', { mode: 'personal', profileIds: ['p1'], profileId: 'p1', profileName: 'A', title: 'T', createdAt: 'now', updatedAt: 'now', frozenPrompt: 'secret', frozenModel: 'internal', frozenTools: [], activeTurnId: 'hidden', frozenSubjects: [{ref:'self',profileId:'p1',profile:{...profile,gender:'female',entityType:'person'}}] });
+  store.set('users/alice/sessions/s1', { mode: 'personal', profileIds: ['p1'], profileId: 'p1', profileName: 'A', title: 'T', createdAt: 'now', updatedAt: 'now', frozenPrompt: 'secret', frozenModel: 'internal', frozenTools: [], activeTurnId: 'hidden', frozenSubjects: [{ref:'self',profileId:'p1',profile:{...profile,gender:'female',entityType:'person',locationRef:{id:'geonames-1796236',version:'1'},countryCode:'CN',locationSource:'builtin'}}] });
   const result = (await request(db, 'GET', '/v1/sessions/s1')).body as any;
   assert(!('frozenPrompt' in result)); assert(!('activeTurnId' in result));
+  assert.equal(result.subjects[0].profile.countryCode,'CN'); assert.equal(result.subjects[0].profile.locationSource,'builtin');
+  assert.deepEqual(result.subjects[0].profile.locationRef,{id:'geonames-1796236',version:'1'});
   assert.equal(result.subjects[0].profile.name,profile.name);assert(!('frozenSubjects' in result));
   const listed=(await request(db,'GET','/v1/sessions')).body as any;assert.equal(listed.items[0].subjects[0].ref,'self');
   store.set('users/bob/sessions/s2/messages/m1', { role: 'user', parts: [], createdAt: 'now' });
@@ -169,17 +171,4 @@ test('real Firestore profile cap serializes concurrency, handles downgrade and r
     if((await count())===0)await create();
     assert.equal(await count(),1);await assert.rejects(create,/PROFILE_LIMIT_REACHED/);
   }finally{await db.recursiveDelete(root);await usage.delete();await deleteApp(app);}
-});
-
-test('read compatibility accepts future stored location metadata without accepting future write input',async()=>{
-  const {db,store}=database(),created=await request(db,'POST','/v1/profiles',profile),id=(created.body as any).id;
-  const metadata={locationRef:{id:'geonames-1816670',version:'future'},countryCode:'CN',locationSource:'builtin'};
-  store.set(`users/alice/profiles/${id}`,{...store.get(`users/alice/profiles/${id}`),...metadata});
-  assert.deepEqual(((await request(db,'GET',`/v1/profiles/${id}`)).body as any).locationRef,metadata.locationRef);
-  assert.deepEqual(((await request(db,'PATCH',`/v1/profiles/${id}`,{name:'Changed name'})).body as any).locationRef,metadata.locationRef);
-  for(const body of [{...profile,locationRef:metadata.locationRef},{...profile,countryCode:'CN'}])await assert.rejects(()=>request(db,'POST','/v1/profiles',body));
-  await assert.rejects(()=>request(db,'PATCH',`/v1/profiles/${id}`,{locationRef:metadata.locationRef}));
-  await assert.rejects(()=>request(db,'POST','/v1/sessions',{subjects:[{ref:'country',country_chart:{id:'cn',version:'1'}}]}));
-  const moved=(await request(db,'PATCH',`/v1/profiles/${id}`,{locationName:'Changed place'})).body as any;
-  for(const key of Object.keys(metadata))assert(!(key in moved));
 });

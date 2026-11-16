@@ -1,13 +1,12 @@
+import { countryRoutes, dispatchCountryApi } from './country-charts.js';
 import { dispatchTurnApi } from './turns.js';
 import { createChatRunner } from './chat-service.js';
 import { dispatchActionApi, actionRoutes, searchLocations } from './action-api.js';
-import { resolveSubjects } from './subjects.js';
 import { getAppCheck } from 'firebase-admin/app-check';
 import { createHttpApi, verifyApiIdentity } from './http-api.js';
 import { dispatchBusinessApi } from './business-api.js';
 import { dispatchTuningApi } from './tuning-api.js';
 import { generateReading } from './generate-reading.js';
-import { defaultBundle } from './prompt-bundle.js';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -16,32 +15,10 @@ import { onCallGenkit } from 'firebase-functions/https';
 import { genkit, z } from 'genkit';
 import { enableFirebaseTelemetry } from '@genkit-ai/firebase';
 import { vertexAI } from '@genkit-ai/google-genai';
-import {
-  ChatRequestSchema,
-  computeTokenCostMicroUsd,
-  extractVelaUiBlocks,
-  MAX_OUTPUT_TOKENS_BY_TIER,
-  ResolveLocationRequestSchema,
-  type AstrologyToolName,
-} from '@vela-cf/shared';
-import { NatalWheelInputSchema, natalWheel, type NatalWheelResult } from '@vela-cf/astrology';
+import { NatalWheelInputSchema, natalWheel } from '@vela-cf/astrology';
 import { deleteAccountWithRetry, exportAccountData } from './account.js';
-import { buildNatalFactSummary, filterHallucinatedUiBlocks, verifyKeySignClaims } from './guard.js';
-import {
-  claimShareBonus,
-  releaseQuota,
-  reserveQuota,
-  resolveUserPeriodAndTier,
-  settleQuota,
-  type ShareMethod,
-} from './quota.js';
-import {
-  acquireSessionTurn,
-  commitSessionTurn,
-  createFrozenSession,
-  releaseSessionTurn,
-} from './session.js';
-import { routeTurnCapabilities } from './skills.js';
+import { claimShareBonus, resolveUserPeriodAndTier, type ShareMethod } from './quota.js';
+import { createFrozenSession } from './session.js';
 import { createAstrologyTools } from './tools.js';
 
 initializeApp();
@@ -200,14 +177,15 @@ export const deleteAccount = onCall(
   },
 );
 
+const matchesRoute=(route:{method:string;path:string},method:string,path:string)=>route.method===method && route.path.split('/').length===path.split('/').length && route.path.split('/').every((part,i)=>part==='{id}' || part===path.split('/')[i]);
 // HTTP migration entry; legacy Callable clients remain supported.
 export const businessApi = onRequest({
   region: REGION, timeoutSeconds: 180, invoker: 'public',
   cors: [`https://${process.env.GCLOUD_PROJECT || 'yhvhchen-387212'}.web.app`, `https://${process.env.GCLOUD_PROJECT || 'yhvhchen-387212'}.firebaseapp.com`, ...(process.env.FUNCTIONS_EMULATOR === 'true' ? [/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/] : [])],
 }, createHttpApi({
   verifyToken: token => verifyApiIdentity(auth, token),
-  publicRoute: (method,path) => (method==='GET' && ['/v1/locations','/v1/plans'].includes(path)) || (method==='POST' && ['/v1/charts/natal','/v1/charts/transits'].includes(path)),
+  publicRoute: (method,path) => [...actionRoutes,...countryRoutes].some(r=>'public' in r && r.public && matchesRoute(r,method,path)),
   stream: (body,identity,emit,signal) => runChat(body,{auth:identity,turnId:identity.turnId},emit,signal).catch(error=>{throw toHttpsError(error);}),
   ...(ENFORCE_APP_CHECK ? {verifyAppCheck: (token: string) => getAppCheck().verifyToken(token)} : {}),
-  dispatch: input => /\/turns\//.test(input.path) ? dispatchTurnApi(db,input) : input.path.startsWith('/v1/tuning/') ? dispatchTuningApi(input) : actionRoutes.some(r=>r.method===input.method && r.path.split('/').length===input.path.split('/').length && r.path.split('/').every((s,i)=>s==='{id}' || s===input.path.split('/')[i])) ? dispatchActionApi(db, auth, input) : dispatchBusinessApi(db, input),
+  dispatch: input => countryRoutes.some(r=>matchesRoute(r,input.method,input.path)) ? dispatchCountryApi(db,input) : /\/turns\//.test(input.path) ? dispatchTurnApi(db,input) : input.path.startsWith('/v1/tuning/') ? dispatchTuningApi(input) : actionRoutes.some(r=>matchesRoute(r,input.method,input.path)) ? dispatchActionApi(db, auth, input) : dispatchBusinessApi(db, input),
 }));

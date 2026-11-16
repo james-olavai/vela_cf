@@ -10,6 +10,7 @@ import {
 import type { ApiPlan } from '../lib/accountStore';
 import { updateAnalyticsConsent } from '../lib/firebase';
 import { searchLocations } from '../lib/store';
+import { loadCatalog, matchLocations, type CatalogLocation } from '../lib/geoStore';
 import { IconNotebook, IconPlus, IconSearch } from './Icons';
 
 export interface ProfileManagerLaunch {
@@ -163,10 +164,13 @@ export function ProfileManagerSubpage({
   const [entityType, setEntityType] = useState<EntityType>('person');
   const [birthDateTime, setBirthDateTime] = useState('');
   const [cityQuery, setCityQuery] = useState('');
-  const searchRun = useRef(0);
+  const searchRun = useRef(0), searchController=useRef<AbortController|null>(null);
   const [searchBusy, setSearchBusy] = useState(false);
-  useEffect(() => () => { ++searchRun.current; }, []);
+  useEffect(() => () => { ++searchRun.current; searchController.current?.abort(); }, [uid]);
   const [candidates, setCandidates] = useState<LocationCandidate[]>([]);
+  const [catalog,setCatalog]=useState<CatalogLocation[]|null>(null),[catalogError,setCatalogError]=useState(false),[externalQuery,setExternalQuery]=useState(''),[highlight,setHighlight]=useState(-1),[suggestionsOpen,setSuggestionsOpen]=useState(true);
+  useEffect(()=>{document.getElementById(`profile-city-${highlight}`)?.scrollIntoView({block:'nearest'});},[highlight]);
+  useEffect(()=>{let alive=true;if(formMode!=='none')void loadCatalog<CatalogLocation>('/v1/locations/catalog').then(items=>{if(alive){setCatalog(items);setCatalogError(false);}}).catch(()=>{if(alive)setCatalogError(true);});return()=>{alive=false;};},[formMode]);
   const [selectedLoc, setSelectedLoc] = useState<LocationCandidate | null>(null);
   const [gender, setGender] = useState<Gender>('unset');
   const [busy, setBusy] = useState(false);
@@ -182,9 +186,9 @@ export function ProfileManagerSubpage({
   const primaryId = selectedProfileIds[0] ?? profiles[0]?.id;
 
   const resetForm = () => {
-    ++searchRun.current; setSearchBusy(false);
+    ++searchRun.current; searchController.current?.abort(); setSearchBusy(false);
     setFormMode('none'); setEditingId(undefined); setName(''); setEntityType('person');
-    setBirthDateTime(''); setCityQuery(''); setCandidates([]);
+    setBirthDateTime(''); setCityQuery(''); setCandidates([]); setExternalQuery(''); setHighlight(-1);
     setSelectedLoc(null); setGender('unset'); setErr(null);
   };
 
@@ -195,12 +199,12 @@ export function ProfileManagerSubpage({
   };
 
   const startEdit = (p: ProfileRecord) => {
-    ++searchRun.current; setSearchBusy(false);
+    ++searchRun.current; searchController.current?.abort(); setSearchBusy(false);
     setFormMode('edit'); setEditingId(p.id); setName(p.name);
     setEntityType(p.entityType ?? 'person'); setBirthDateTime(p.birthDateTime);
     setCityQuery(p.locationName);
-    setSelectedLoc({ displayName: p.locationName, latitude: p.latitude, longitude: p.longitude, timezone: p.timezone });
-    setGender(p.gender ?? 'unset'); setCandidates([]); setErr(null);
+    setSelectedLoc({ displayName: p.locationName, latitude: p.latitude, longitude: p.longitude, timezone: p.timezone, ...p.locationRef });
+    setGender(p.gender ?? 'unset'); setCandidates([]); setExternalQuery(''); setHighlight(-1); setErr(null);
   };
 
   useEffect(() => {
@@ -210,6 +214,8 @@ export function ProfileManagerSubpage({
       if (target) startEdit(target);
     }
   }, [launch.seq]);
+  const previousUid=useRef(uid);
+  useEffect(()=>{if(previousUid.current!==uid){previousUid.current=uid;resetForm();}},[uid]);
 
   const ordered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -219,10 +225,10 @@ export function ProfileManagerSubpage({
 
   const handleSearch = async () => {
     if (!cityQuery.trim()) return;
-    const run = ++searchRun.current;
-    setErr(null); setSearchBusy(true); setCandidates([]);
+    const run = ++searchRun.current;searchController.current?.abort();const controller=new AbortController();searchController.current=controller;
+    setSuggestionsOpen(true); setErr(null); setSearchBusy(true); setCandidates([]); setExternalQuery(cityQuery); setHighlight(-1);
     try {
-      const list = await searchLocations(cityQuery);
+      const list = await searchLocations(cityQuery, 'external', controller.signal);
       if (run !== searchRun.current) return;
       setCandidates(list);
       if (list.length === 0) setErr('未找到城市，请尝试英文或拼音');
@@ -234,12 +240,13 @@ export function ProfileManagerSubpage({
     e.preventDefault();
     if (busy) return;
     if (!name.trim()) { setErr('请填写称呼或名称'); return; }
-    if (!selectedLoc || selectedLoc.displayName !== cityQuery) { setErr('请先搜索并选中城市'); return; }
+    if (!selectedLoc || selectedLoc.displayName !== cityQuery) { setErr('请先选中匹配地点，或使用右侧搜索'); return; }
     setBusy(true); setErr(null);
     try {
       await onSaveProfile({
         name: name.trim(), entityType, birthDateTime, locationName: selectedLoc.displayName,
         latitude: selectedLoc.latitude, longitude: selectedLoc.longitude, timezone: selectedLoc.timezone,
+        ...(selectedLoc.id&&selectedLoc.version?{locationRef:{id:selectedLoc.id,version:selectedLoc.version}}:{}),
         gender: entityType === 'person' ? gender : 'unset',
       }, editingId);
       if (needsConsent && !editingId) {
@@ -252,6 +259,9 @@ export function ProfileManagerSubpage({
     finally { setBusy(false); }
   };
 
+  const options = selectedLoc ? [] : externalQuery===cityQuery ? candidates : matchLocations(catalog||[],cityQuery);
+  const matches=suggestionsOpen?options:[];
+  const pickLocation=(c:LocationCandidate)=>{++searchRun.current;searchController.current?.abort();setSearchBusy(false);setSelectedLoc(c);setCityQuery(c.displayName);setCandidates([]);setHighlight(-1);setErr(null);};
   const renderForm = () => (
     <form onSubmit={(e) => void handleSubmit(e)} data-testid="pm-form" className="p-4 rounded-[14px] border border-accent/40 bg-[#0b1020] flex flex-col gap-3">
       <div className="text-[13px] font-bold text-accent-bright">✦ {editingId ? '编辑出生档案' : '添加新出生档案'}</div>
@@ -263,7 +273,7 @@ export function ProfileManagerSubpage({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1 flex-1 min-w-[180px]">
-          {(['person', 'company', 'country'] as const).map((et) => {
+          {(editingId&&entityType==='country'?['person','company','country'] as const:['person','company'] as const).map((et) => {
             const disabled = et !== 'person' && plan?.allowsEntityCharts === false;
             return (
               <button key={et} type="button" disabled={disabled} aria-pressed={entityType === et} onClick={() => setEntityType(et)} title={disabled ? '查看支持公司/国家盘的套餐' : undefined} className={`flex-1 min-h-[32px] rounded-[8px] border text-[13px] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${entityType === et ? 'border-accent bg-selected text-accent-bright' : 'border-border bg-panel text-muted'}`}>
@@ -283,16 +293,18 @@ export function ProfileManagerSubpage({
           </select>
         )}
       </div>
-      <label htmlFor="profile-city">出生城市 / 地点（搜索后选择，必填）</label>
+      <label htmlFor="profile-city">出生城市 / 地点（从匹配结果选择，必填）</label>
       <div className="flex gap-2">
-        <input id="profile-city" name="city" required placeholder="出生城市 / 地点" value={cityQuery} onChange={(e) => { ++searchRun.current; setSearchBusy(false); setCityQuery(e.target.value); setSelectedLoc(null); setCandidates([]); }} className="flex-1 min-w-0 min-h-[38px] px-3 rounded-[8px] border border-border-strong bg-panel text-primary text-[13px]" />
-        <button type="button" disabled={searchBusy} onClick={() => void handleSearch()} className="min-h-[38px] px-4 rounded-[8px] border border-border-strong bg-panel-2 text-primary text-[13px] cursor-pointer shrink-0">{searchBusy ? '搜索中…' : '搜索城市'}</button>
+        <input id="profile-city" name="city" required autoComplete="off" spellCheck={false} role="combobox" aria-autocomplete="list" aria-expanded={matches.length>0} aria-controls="profile-city-results" aria-describedby="profile-city-help" aria-activedescendant={highlight>=0?`profile-city-${highlight}`:undefined} placeholder="出生城市 / 地点" value={cityQuery} onChange={(e) => { ++searchRun.current; searchController.current?.abort(); setSearchBusy(false); setCityQuery(e.target.value); setSelectedLoc(null); setCandidates([]); setExternalQuery('');setHighlight(-1);setSuggestionsOpen(true);setErr(null); }} onKeyDown={e=>{if(e.nativeEvent.isComposing)return;if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();setSuggestionsOpen(true);setHighlight(i=>options.length?(i+(e.key==='ArrowDown'?1:-1)+options.length)%options.length:-1);}else if(e.key==='Enter'){e.preventDefault();if(matches[highlight])pickLocation(matches[highlight]);}else if(e.key==='Escape'){setHighlight(-1);setSuggestionsOpen(false);}}} className="flex-1 min-w-0 min-h-12 px-3 rounded-[8px] border border-border-strong bg-panel text-primary text-base" />
+        <button type="button" disabled={searchBusy} onClick={() => void handleSearch()} className="min-h-12 px-3 rounded-[8px] border border-border-strong bg-panel-2 text-primary text-[13px] cursor-pointer shrink-0">{searchBusy ? '搜索中…' : '搜索城市'}</button>
       </div>
+      <p id="profile-city-help" className="m-0 text-[13px] text-muted">{selectedLoc?'地点已选，可继续填写':catalogError?'内置目录暂不可用，可点击右侧搜索':!catalog?'正在加载内置地点，也可点击右侧搜索':cityQuery.trim()&&!options.length?'未找到该地点，可点击右侧搜索':'输入中文、英文或拼音，选择匹配地点'}</p>
+      <a href="https://www.geonames.org/" target="_blank" rel="noreferrer" className="text-[13px] text-muted underline">地点数据：GeoNames</a><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer" className="text-[13px] text-muted underline">许可：CC BY 4.0</a>
       {selectedLoc && <p role="status" className="m-0 rounded-[10px] border border-border bg-panel p-3 text-[13px] text-secondary">已选：{selectedLoc.displayName}<br />时区：{selectedLoc.timezone} · 纬度 {selectedLoc.latitude} / 经度 {selectedLoc.longitude}</p>}
-      {candidates.length > 0 && (
-        <div className="flex flex-col gap-1 max-h-[130px] overflow-y-auto">
-          {candidates.map((c, idx) => (
-            <button key={idx} type="button" onClick={() => { ++searchRun.current; setSearchBusy(false); setSelectedLoc(c); setCityQuery(c.displayName); setCandidates([]); }} className="text-left px-3 py-1.5 rounded-[8px] border border-border bg-panel-2 text-[13px] text-primary hover:border-accent cursor-pointer">
+      {matches.length > 0 && (
+        <div id="profile-city-results" role="listbox" aria-label="匹配地点" className="flex flex-col gap-1 max-h-[180px] overflow-y-auto">
+          {matches.map((c, idx) => (
+            <button key={idx} id={`profile-city-${idx}`} role="option" aria-selected={idx===highlight} type="button" onClick={() => pickLocation(c)} className={`text-left min-h-12 px-3 py-1.5 rounded-[8px] border ${idx===highlight?'border-accent':'border-border'} bg-panel-2 text-[13px] text-primary hover:border-accent cursor-pointer`}>
               {c.displayName}
             </button>
           ))}

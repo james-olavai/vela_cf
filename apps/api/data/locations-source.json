@@ -1,0 +1,14 @@
+{
+  "provider": "GeoNames",
+  "sourceUrl": "https://download.geonames.org/export/dump/cities15000.zip",
+  "license": "CC-BY-4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+  "attributionUrl": "https://www.geonames.org/",
+  "retrievedAt": "2026-11-16",
+  "sourceSha256": "ce7a405587d6d68ee7ed78743770b42d663e0ef1971e6193a6c14e54f1af207e",
+  "catalogVersion": "geo-13b9f09d0185bf7a",
+  "recordCount": 2124,
+  "verification": "All 2106 legacy IDs matched the official extract. Coordinates, timezone, country code and English/ascii names are refreshed from this extract. Chinese display labels are inherited from the project catalog; overseas labels are project translations. No demographic attributes are imported.",
+  "adminSourceUrl": "https://download.geonames.org/export/dump/admin1CodesASCII.txt",
+  "adminSourceSha256": "2e4867f5397acb056ea26377601b57af37cb4c81399770225018e9e439e91ad3"
+}

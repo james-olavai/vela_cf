@@ -30,6 +30,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - run: npm ci
+      - run: npm run catalog:check
       - run: npm run lint
       - run: npm run api:check
       - name: API compatibility against PR base
@@ -38,6 +39,7 @@ jobs:
           API_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -eu
+          node --import ./scripts/register-ts.mjs scripts/catalog-check.mjs --baseline="$API_BASE_SHA"
           if git cat-file -e "$API_BASE_SHA:docs/openapi.json" 2>/dev/null; then
             git show "$API_BASE_SHA:docs/openapi.json" > "$RUNNER_TEMP/vela-openapi-base.json"
             node --import ./scripts/register-ts.mjs scripts/api-contract.mjs docs/openapi.json --check --baseline="$RUNNER_TEMP/vela-openapi-base.json"

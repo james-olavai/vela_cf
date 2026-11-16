@@ -166,7 +166,9 @@ export const DEFAULT_PRODUCTS: CatalogProduct[] = [
   },
 ];
 
+export const LocationRefSchema = z.object({id:z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/),version:z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)}).strict();
 export const ProfileInputSchema = z.object({
+  locationRef: LocationRefSchema.optional(),
   name: z.string().trim().min(1, '请填写称呼').max(64, '称呼最多 64 个字'),
   entityType: EntityTypeSchema.default('person'),
   birthDateTime: z
@@ -183,12 +185,14 @@ export const ProfileInputSchema = z.object({
 export type ProfileInput = z.infer<typeof ProfileInputSchema>;
 
 export interface ProfileRecord extends ProfileInput {
+  countryCode?: string; locationSource?: 'builtin' | 'external';
   id: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface LocationCandidate {
+  id?: string; version?: string; name?: string; aliases?: string[]; admin1?: string; countryCode?: string; source?: 'builtin' | 'external';
   displayName: string;
   latitude: number;
   longitude: number;
@@ -271,6 +275,7 @@ export interface UserRecord {
 
 export const SubjectRefSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
 export const SubjectBirthSchema = z.object({
+  locationRef: LocationRefSchema.optional(),
   datetime: ProfileInputSchema.shape.birthDateTime,
   timezone: ProfileInputSchema.shape.timezone,
   latitude: ProfileInputSchema.shape.latitude,
@@ -281,7 +286,10 @@ export const SubjectBirthSchema = z.object({
   locationName: ProfileInputSchema.shape.locationName.optional(),
   consentedOther: z.boolean().optional(),
 }).strict();
+export const CountryChartRefSchema = z.union([LocationRefSchema,z.object({mode:z.literal('auto'),source_ref:SubjectRefSchema}).strict()]);
+export type CountryChartRef = z.infer<typeof CountryChartRefSchema>;
 export const SubjectSchema = z.union([
+  z.object({ref:SubjectRefSchema,country_chart:CountryChartRefSchema}).strict(),
   z.object({ ref: SubjectRefSchema, profile_id: SubjectRefSchema }).strict(),
   z.object({ ref: SubjectRefSchema, birth: SubjectBirthSchema }).strict(),
 ]);
@@ -322,6 +330,7 @@ export const ChatRequestSchema = z.object({
 });
 
 export const ResolveLocationRequestSchema = z.object({
+  source: z.enum(['builtin','external','auto']).optional(),
   query: z.string().trim().min(1).max(120),
 });
 

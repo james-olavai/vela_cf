@@ -1,3 +1,5 @@
+import { CountryPanel } from '../components/CountryPanel';
+import type { CountryChoice } from '../lib/geoStore';
 import { usePlan, planBudget, planUsagePercent } from '../lib/planStore';
 import { subscribeApi } from '../lib/apiClient';
 import { pendingTurn } from '../lib/turnClient';
@@ -65,7 +67,7 @@ interface WorkbenchPageProps {
   pendingHandoff: PendingHandoff | null;
   onClearPendingHandoff: () => void;
   onOpenAccountModal: (handoff?: PendingHandoff) => void;
-  onStartSession: (mode: ConsultationMode, profiles: ProfileRecord[], initialQuestion?: string) => Promise<SessionRecord>;
+  onStartSession: (mode: ConsultationMode, profiles: ProfileRecord[], initialQuestion?: string, country?: CountryChoice) => Promise<SessionRecord>;
   onSelectSession: (sessionId: string | null) => void;
 }
 
@@ -112,6 +114,7 @@ export function WorkbenchPage({
   const effectiveProfiles = uid ? profiles : draftProfiles;
 
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+  const [countrySelection,setCountrySelection]=useState<{owner:string;chart:CountryChoice}|null>(null);
   const maxSelectable = plan ? Math.max(1, plan.maxSynastryProfiles) : Infinity;
 
   const [messages, setMessages] = useState<MessageRecord[]>([]);
@@ -224,7 +227,10 @@ export function WorkbenchPage({
       .catch(() => { if (alive) setChartError('星盘加载失败，请检查网络后重试'); });
     return () => { alive = false; };
   }, [uid, chartSignature, chartRetry]);
-  const mode: ConsultationMode = activeProfiles.length >= 2 ? 'synastry' : 'personal';
+  const countryOwner=JSON.stringify([uid,primaryProfile?.id,primaryProfile?.updatedAt]);
+  useEffect(()=>setCountrySelection(null),[countryOwner,activeSession?.id]);
+  const country=!activeSession&&countrySelection?.owner===countryOwner?countrySelection.chart:null;
+  const mode: ConsultationMode = activeProfiles.length + Number(Boolean(country)) >= 2 ? 'synastry' : 'personal';
   const needsMoreProfiles = activeProfiles.length === 0 && effectiveProfiles.length === 0;
   const consultationLabel = `${(activeSession?.mode ?? mode) === 'synastry' ? '合盘' : '个人'} · ${activeSession?.profileName ?? (activeProfiles.map((p) => p.name).join(' × ') || primaryProfile?.name || '')}`;
 
@@ -239,6 +245,7 @@ export function WorkbenchPage({
         longitude: p.longitude,
         timezone: p.timezone,
         gender: p.gender ?? 'unset',
+        ...(p.locationRef?{locationRef:p.locationRef}:{}),
         consentedOther: p.consentedOther,
       })),
       chart: visibleChart,
@@ -267,6 +274,7 @@ export function WorkbenchPage({
   };
 
   const handleToggleSynastryProfile = (id: string) => {
+    if(country&&!selectedProfileIds.includes(id)&&selectedProfileIds.length+1>=maxSelectable){setReplyNotice('已达到本次分析对象上限，请先取消一个对象');return;}
     cancelStream();
     if (activeSession) onSelectSession(null);
     if (maxSelectable <= 1) {
@@ -380,7 +388,7 @@ export function WorkbenchPage({
     setAwayFromEnd(false);
 
     try {
-      const targetSession = activeSession ?? (await onStartSession(mode, activeProfiles, text));
+      const targetSession = activeSession ?? (await onStartSession(mode, activeProfiles, text, country ?? undefined));
       if (!current()) return;
       if (!activeSession) {
         request.path = `/consult/${targetSession.id}`;
@@ -593,6 +601,7 @@ export function WorkbenchPage({
         portraitSubtitle={portraitSubtitle}
         profiles={effectiveProfiles}
         selectedProfileIds={selectedProfileIds}
+        countryPanel={!activeSession&&<CountryPanel key={countryOwner} uid={uid} profileId={primaryProfile?.id} value={country} onChange={chart=>setCountrySelection(chart?{owner:countryOwner,chart}:null)} allowed={Boolean(plan?.allowsEntityCharts)&&activeProfiles.length<maxSelectable} />}
         onSetSidebarOpen={setSidebarOpen}
         onNewSession={() => { cancelStream(); setMessages([]); setActiveSubpage(null); onSelectSession(null); }}
         onOpenHistorySearch={() => setHistorySearchOpen(true)}

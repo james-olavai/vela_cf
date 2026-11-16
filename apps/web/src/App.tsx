@@ -1,3 +1,4 @@
+import type { CountryChoice } from './lib/geoStore';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
@@ -267,8 +268,9 @@ export function App() {
     mode: ConsultationMode,
     selectedProfiles: ProfileRecord[],
     initialQuestion?: string,
+    country?: CountryChoice,
   ): Promise<SessionRecord> => {
-    const session = await createConsultationSession(mode, selectedProfiles, initialQuestion);
+    const session = await createConsultationSession(mode, selectedProfiles, initialQuestion, country);
     if (uidRef.current !== user?.uid) throw new Error('登录状态已改变，请重试');
     setSessions((prev) => (prev.some((s) => s.id === session.id) ? prev : [session, ...prev]));
     return session;

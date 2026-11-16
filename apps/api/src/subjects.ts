@@ -1,6 +1,8 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { SubjectsSchema, ProfileInputSchema, type ProfileInput } from '@vela-cf/shared';
+import { getCountryChart, recommendCountry, countrySnapshot, type CountrySnapshot } from './country-charts.js';
+import { resolveProfileLocation } from './locations.js';
 
 // Reject invalid local dates, timezone gaps and folds rather than guessing an instant.
 export function validateBirthTime(datetime: string, timezone: string): void {
@@ -20,20 +22,39 @@ export function validateBirthTime(datetime: string, timezone: string): void {
   if (matches.length > 1) throw new HttpsError('invalid-argument', 'AMBIGUOUS_BIRTH_TIME');
 }
 
-export interface FrozenSubject { ref: string; profileId?: string; profile: ProfileInput }
+export interface FrozenSubject { ref: string; profileId?: string; profile: ProfileInput; countryChart?: CountrySnapshot }
 export async function resolveSubjects(db: Firestore, uid: string, rawSubjects: unknown): Promise<FrozenSubject[]> {
   const subjects = SubjectsSchema.parse(rawSubjects);
-  return Promise.all(subjects.map(async subject => {
+  const resolved = await Promise.all(subjects.map(async subject => {
+    if ('country_chart' in subject) return undefined;
     if ('profile_id' in subject) {
       if (!uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
       const snap = await db.collection('users').doc(uid).collection('profiles').doc(subject.profile_id).get();
       if (!snap.exists) throw new HttpsError('not-found', 'PROFILE_NOT_FOUND');
-      const parsed = ProfileInputSchema.safeParse(snap.data());
+      const raw = snap.data()!;
+      const parsed = ProfileInputSchema.safeParse(raw);
       if (!parsed.success) throw new HttpsError('failed-precondition', 'INVALID_STORED_PROFILE');
-      return { ref: subject.ref, profileId: subject.profile_id, profile: parsed.data };
+      return { ref: subject.ref, profileId: subject.profile_id, profile: {...parsed.data,...(raw.countryCode && raw.locationSource ? {countryCode:raw.countryCode,locationSource:raw.locationSource} : {})} };
     }
     const { datetime, ...birth } = subject.birth;
     validateBirthTime(datetime, birth.timezone);
-    return { ref: subject.ref, profile: ProfileInputSchema.parse({ name: subject.ref, locationName: 'Coordinates', ...birth, birthDateTime: datetime }) };
+    const located = await resolveProfileLocation(db, {name:subject.ref,...(!birth.locationRef?{locationName:'Coordinates'}:{}),...birth,birthDateTime:datetime});
+    return {ref:subject.ref,profile:{...ProfileInputSchema.parse(located),...(located.countryCode?{countryCode:located.countryCode,locationSource:located.locationSource}:{})}};
   }));
+  return subjects.map((subject,index) => {
+    if (!('country_chart' in subject)) return resolved[index]!;
+    if (!uid) throw new HttpsError('unauthenticated','AUTH_REQUIRED');
+    const ref = subject.country_chart;
+    let snapshot: CountrySnapshot;
+    if ('mode' in ref) {
+      const source = resolved.find(item=>item?.ref===ref.source_ref);
+      if (!source || source.profile.entityType==='country') throw new HttpsError('invalid-argument','INVALID_COUNTRY_SOURCE_REF');
+      const recommended = recommendCountry(source.profile);
+      if (!recommended.chart || recommended.status!=='matched') throw new HttpsError('failed-precondition',recommended.reason||'COUNTRY_CHART_UNAVAILABLE');
+      snapshot=countrySnapshot(recommended.chart,{sourceRef:ref.source_ref,basis:recommended.basis as 'birth_location'|'registration_location'});
+    } else snapshot=countrySnapshot(getCountryChart(ref.id,ref.version));
+    const datetime=`${snapshot.localDate}T${snapshot.localTime}`;
+    validateBirthTime(datetime,snapshot.timezone);
+    return {ref:subject.ref,countryChart:snapshot,profile:ProfileInputSchema.parse({name:snapshot.name,entityType:'country',birthDateTime:datetime,locationName:snapshot.placeLabel,latitude:snapshot.latitude,longitude:snapshot.longitude,timezone:snapshot.timezone})};
+  });
 }
