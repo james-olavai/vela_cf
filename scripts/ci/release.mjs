@@ -120,21 +120,21 @@ export async function verifyHosting(manifest) {
   assert.equal(createHash('sha256').update(html).digest('hex'),manifest.hashes['web/index.html']);
   for(const match of html.matchAll(/(?:src|href)="(\/assets\/[^\"]+\.(?:js|css|webp))"/g)) assert((await fetch(base+match[1],{signal:AbortSignal.timeout(30_000)})).ok,`Missing live asset ${match[1]}`);
 }
-export function verifyReleaseOrigin({ci,bootstrap,target,credentials,serviceAccount,useGcloud=false}) {
+export function verifyReleaseOrigin({ci,bootstrap,localStagingRelease=false,target,credentials,serviceAccount,useGcloud=false}) {
   assert(!bootstrap || target.environment==='staging','Production bootstrap is forbidden');
   verifyReleaseIdentity(credentials,target,{serviceAccount,useGcloud});
   if(ci==='true')return 'ci';
-  assert(bootstrap && target.environment==='staging','Local release is restricted to first staging bootstrap');
-  assert(['impersonated_service_account','external_account'].includes(credentials?.type),'Local staging bootstrap requires a dedicated impersonated release identity');
-  assert(serviceAccount,'Local staging bootstrap requires explicit VELA_RELEASE_SERVICE_ACCOUNT');
-  return 'local-staging-bootstrap';
+  assert((bootstrap || localStagingRelease===true) && target.environment==='staging','Local release requires explicit staging authorization');
+  assert(['impersonated_service_account','external_account'].includes(credentials?.type),'Local staging release requires a dedicated impersonated release identity');
+  assert(serviceAccount,'Local staging release requires explicit VELA_RELEASE_SERVICE_ACCOUNT');
+  return bootstrap?'local-staging-bootstrap':'local-staging-release';
 }
 async function release() {
   assert(['staging','production'].includes(process.env.VELA_ENVIRONMENT),'Release requires an explicit VELA_ENVIRONMENT');
   assert(process.env.CI_COMMIT_SHA,'CI_COMMIT_SHA is required');
   assert(process.env.GOOGLE_APPLICATION_CREDENTIALS,'Release credentials are required');
   const bootstrap=process.env.VELA_BOOTSTRAP_STAGING==='true';
-  const releaseOrigin=verifyReleaseOrigin({ci:process.env.CI,bootstrap,target:environmentConfig,credentials:JSON.parse(readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS,'utf8')),serviceAccount:process.env.VELA_RELEASE_SERVICE_ACCOUNT,useGcloud:process.env.VELA_USE_GCLOUD==='1'});
+  const releaseOrigin=verifyReleaseOrigin({ci:process.env.CI,bootstrap,localStagingRelease:process.env.VELA_LOCAL_STAGING_RELEASE==='true',target:environmentConfig,credentials:JSON.parse(readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS,'utf8')),serviceAccount:process.env.VELA_RELEASE_SERVICE_ACCOUNT,useGcloud:process.env.VELA_USE_GCLOUD==='1'});
   const manifest=validateArtifact('.release',process.env.CI_COMMIT_SHA);
   verifyBinding('.release',manifest,environmentConfig);
   assert.deepEqual(manifest.binding,{environment,projectId:project,configHash:environmentConfig.configHash},'Artifact is not bound to this environment');

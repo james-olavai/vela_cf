@@ -1069,3 +1069,6 @@ Webhook 是单独的服务器到服务器路径：使用原始请求体验证 St
 
 
 Firebase CLI 会优先使用本机缓存登录，因此仅设置 ADC 不足以证明发布身份。部署及 bootstrap 回滚禁用 Hosting 均通过隔离执行器运行：每次创建独立临时 `XDG_CONFIG_HOME`、移除 `FIREBASE_TOKEN`、将 ADC 转成绝对路径；保留原 `CLOUDSDK_CONFIG` 供短期 impersonation 读取源身份，执行后清理临时目录。此前实际回滚的 releaseUser 为本机邮箱，不能称为已通过专用 SA 部署；后续须结合实际审计记录确认。
+
+
+**受控本地 staging 更新：** 用户持续授权完成在线验证后，新增显式 `VELA_LOCAL_STAGING_RELEASE=true`，允许在已有独立 staging 上使用同项目且明确指定的 impersonated SA / SA impersonation WIF 进行正常更新，记录 `releaseOrigin: local-staging-release`。生产的所有本地发布仍拒绝；未显式设置 flag 的普通本地更新仍拒绝。bootstrap 仍须独立 `VELA_BOOTSTRAP_STAGING=true` 并通过空目标检查；正常更新继续验证既有版本的回滚能力、保存函数/Hosting/Rules/secret 引用快照，固定产物与环境绑定、真实 Vertex 候选证据、浏览器和八场景真实模型矩阵全部保留，失败按既有流程回滚。不设置虚假的 CI 状态。

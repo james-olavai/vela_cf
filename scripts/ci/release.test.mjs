@@ -245,3 +245,15 @@ test('Local release is allowed only for initial staging bootstrap with explicit 
   for(const patch of [{bootstrap:false},{target:{...target,environment:'production'}},{serviceAccount:undefined},{credentials:{type:'authorized_user'}},{credentials:{type:'service_account',project_id:target.firebase.projectId,client_email:serviceAccount}},{credentials:{...credentials,service_account_impersonation_url:credentials.service_account_impersonation_url.replace('vela-release@','other-release@')}}])assert.throws(()=>verifyReleaseOrigin({...input,...patch}));
   assert.throws(()=>verifyReleaseOrigin({...input,ci:'true',target:{...target,environment:'production'}}),/Production bootstrap/);
 });
+
+
+test('Explicit local staging updates retain impersonated identity requirement and never authorize production',()=>{
+  const target={environment:'staging',firebase:{projectId:'velaastro-staging'}};
+  const serviceAccount='vela-release@velaastro-staging.iam.gserviceaccount.com';
+  const credentials={type:'impersonated_service_account',source_credentials:{type:'authorized_user'},service_account_impersonation_url:`https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccount}:generateAccessToken`};
+  const input={target,credentials,serviceAccount,bootstrap:false,localStagingRelease:true};
+  assert.equal(verifyReleaseOrigin(input),'local-staging-release');
+  assert.equal(verifyReleaseOrigin({...input,bootstrap:true}),'local-staging-bootstrap');
+  assert.equal(verifyReleaseOrigin({...input,ci:'true'}),'ci');
+  for(const patch of [{localStagingRelease:false},{localStagingRelease:'true'},{target:{...target,environment:'production'}},{serviceAccount:undefined},{credentials:{type:'service_account',project_id:target.firebase.projectId,client_email:serviceAccount}},{credentials:{type:'authorized_user'}}])assert.throws(()=>verifyReleaseOrigin({...input,...patch}));
+});
