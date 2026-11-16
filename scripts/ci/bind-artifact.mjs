@@ -44,6 +44,13 @@ export function verifyPromotion(manifest,evidence,staging) {
   assert.equal(evidence.projectId,staging.firebase.projectId,'Staging project evidence mismatch');
   assert.notEqual(evidence.projectId,manifest.binding.projectId,'Staging cannot be production');
   assert.deepEqual(evidence.checks,['candidate-vertex','deployed-browser','live-matrix','api-ready'],'Incomplete staging verification');
+  const companies=evidence.companySynastry;
+  assert(companies?.api?.length===2 && ['person-company-pro','company-company-pro'].every(name=>companies.api.some(c=>c.case===name && c.status==='passed' && c.cleanup==='passed')),'Missing company synastry API verification');
+  assert(companies.browser?.status==='passed' && companies.browser.environment==='staging' && companies.browser.projectId===staging.firebase.projectId && companies.browser.cleanup===true && companies.browser.cases?.length===2 && ['person-company','company-company'].every(name=>companies.browser.cases.some(c=>c.name===name && c.status==='passed')),'Missing company synastry browser verification');
+  if(staging.billing?.enabled){
+    const billing=evidence.billingEvidence;
+    assert(evidence.billingVerified===true && billing?.result==='passed' && billing.cleanup===true && billing.sha===manifest.sha && billing.codeHash===manifest.codeHash && billing.configHash===staging.configHash && billing.projectId===staging.firebase.projectId,'Missing matching staging payment verification');
+  }
   const expected=['current-free','frozen-unlimited','exhausted-free','country-chart-pro','single-pro','pair-pro','four-person-pro','company-pro'];
   assert(Array.isArray(evidence.cases) && evidence.cases.length===expected.length && expected.every(name=>evidence.cases.some(c=>c.case===name && c.status==='passed')),'Incomplete staging model matrix');
 }

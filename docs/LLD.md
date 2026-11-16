@@ -1090,3 +1090,18 @@ Firebase CLI 会优先使用本机缓存登录，因此仅设置 ADC 不足以�
 `npm run test:company-synastry-browser` 使用真实已部署页面、Firebase SDK 登录、左侧主档案与合盘多选、输入框提交、真实 API/Vertex SSE，业务请求不 mock。个人＋公司及公司＋公司两项均通过，准确执行 2 次生成，验证请求对象与冻结类型、双方完整名称、实际 synastryAspects 和消息持久化；公司＋公司另实际调用双方 companyTenthHouse。无浏览器异常，结算 USD 0.090486，cleanup:true，独立 Auth 用户及其档案/会话/用量已删除。
 
 报告分别为 `artifacts/company-synastry-live.json`、`artifacts/company-synastry-browser.json`。补充的是测试脚本，本次没有修改或部署应用业务代码；原工作区的税务与正式价格配置编辑未纳入该测试提交。前端用例首次等待水合超时发生在生成前，已根据真实页面修正等待条件并保留真实请求和断言，不使用 mock 或自动重试掩盖模型失败。
+
+### 11.17 Gitea Actions 分阶段发布
+
+按用户要求，工作流分为 `local-tests → deploy-staging → verify-staging → deploy-production` 四个独立 job。PR 只运行本地测试；main push、v* tag push 及明确勾选发布的 main 手动任务走完整流水线。前一阶段失败或跳过，后续生产发布不会执行。当前实例为 Gitea 1.25.5，其 [1.25 官方兼容说明](https://docs.gitea.com/1.25/usage/actions/comparison/) 指出 concurrency 与 job timeout-minutes 被忽略，因此不用这些 YAML 字段作为串行或超时保证；实际命令使用 GNU timeout，环境发布使用 Firestore compare-and-set 锁。
+
+1. **本地测试与构建**：类型/边界、OpenAPI 兼容、单元测试、模拟器、UI/API 浏览器回归；仅在这里构建一次，打包干净 Git 提交对应的不可变产物。
+2. **部署测试环境**：下载原始产物并绑定 staging 配置，验证真实候选 Vertex，取得环境锁后保存旧 Functions/Secrets 引用/Hosting/Rules 快照，再部署并执行必要就绪检查。成功仅生成 `status:deployed` 的 deployment receipt，不生成 verified 发布结果。receipt 绑定 SHA、codeHash、configHash、项目、流水线 owner 与 rollback 快照哈希，随脱敏部署证据上传。
+3. **在线验收**：重新下载同一原始产物与本次部署证据；不重新构建或部署。验证 receipt、快照哈希、流水线锁和当前 Hosting 版本后，运行真实 Stripe Webhook 权限与额度同步、真实网页流程、原有 8 个模型场景，以及个人＋公司/公司＋公司的 API 与真实 UI 合盘补充测试。全部通过且 fixture 清理成功才产生 verified 证据。过程中的测试失败按原快照回滚；锁丢失或站点已被手工替换时拒绝覆盖更新版本。
+4. **生产发布并验证**：只依赖在线验收成功；从同一原始产物绑定生产配置，不重新构建。晋级检查要求同 SHA/codeHash/staging configHash、8 场景、两类公司 API/UI 验收及启用支付时的匹配支付证据；随后运行生产候选检查、部署、线上冒烟，失败恢复生产快照。
+
+`VELA_RELEASE_PHASE=deploy|verify|all` 将分段行为落实到脚本，生产仅允许 all。CI 使用独立私有临时凭据目录与两套项目凭据，下载/上传的证据不包含原始 secret 或支付 URL；wrapper 在退出及信号处理时删除临时配置。既有服务账号 JSON secret 可继续使用，配置 impersonation/WIF ADC 时须同时设置对应项目的 release service account 变量。Gitea 1.25 不提供 GitHub 等价的 environment 审批或 OIDC id-token 能力，不能仅加 YAML 字段便声称具有这些保护。
+
+`releaseLocks/pipeline` 位于各环境自己的 Firestore，2 小时租约从 staging 部署持续到在线验收完成；生产使用自己的锁。获取、过期接管和释放均带 Firestore 写入前置条件，过期或不同 owner 无权继续验证/回滚。首次空环境检查只豁免发布锁集合，仍拒绝业务数据。另一个发布占锁时新任务直接失败，不并发覆盖。若 runner 被强杀、任务取消或证据传输失败，使在线验证进程未能运行，生产仍被阻止；应使用留存快照人工恢复和检查锁，不能把租约到期视作自动完成回滚。
+
+本次本地完整测试 185 项：182 通过、3 项环境专用跳过；发布/环境/阶段组 37/37，通过 YAML 实际解析与四阶段依赖图检查、真实 staging Firestore 锁竞争与清理验证。部署与验收分段的顺序、失败阻断回归均通过。未触发远端 Gitea Actions、未发布生产；线上仍运行前一轮已验证 staging 版本。首轮远端执行需要已配置的 `FIREBASE_STAGING_SERVICE_ACCOUNT_B64`、`FIREBASE_SERVICE_ACCOUNT_B64`，若用 ADC 模拟则还需对应 `FIREBASE_STAGING_RELEASE_SERVICE_ACCOUNT` / `FIREBASE_RELEASE_SERVICE_ACCOUNT` 变量。

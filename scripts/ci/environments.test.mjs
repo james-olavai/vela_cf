@@ -45,7 +45,15 @@ test('Production promotion requires complete same-code staging evidence and unch
   try{
     const bound=bindArtifact(dir,production,manifest.sha);
     const evidence={environment:'staging',status:'verified',sha:bound.sha,codeHash:bound.codeHash,configHash:staging.configHash,projectId:staging.firebase.projectId,checks:['candidate-vertex','deployed-browser','live-matrix','api-ready'],cases:['current-free','frozen-unlimited','exhausted-free','country-chart-pro','single-pro','pair-pro','four-person-pro','company-pro'].map(name=>({case:name,status:'passed'}))};
+    evidence.companySynastry={api:['person-company-pro','company-company-pro'].map(name=>({case:name,status:'passed',cleanup:'passed'})),browser:{status:'passed',environment:'staging',projectId:staging.firebase.projectId,cleanup:true,cases:['person-company','company-company'].map(name=>({name,status:'passed'}))}};
     verifyPromotion(bound,evidence,staging);
+    assert.throws(()=>verifyPromotion(bound,{...evidence,companySynastry:undefined},staging));
+    assert.throws(()=>verifyPromotion(bound,{...evidence,companySynastry:{...evidence.companySynastry,browser:{status:'failed'}}},staging));
+    const paid={...staging,billing:{enabled:true,mode:'test'}};
+    assert.throws(()=>verifyPromotion(bound,evidence,paid));
+    const billingEvidence={result:'passed',cleanup:true,sha:bound.sha,codeHash:bound.codeHash,configHash:staging.configHash,projectId:staging.firebase.projectId};
+    verifyPromotion(bound,{...evidence,billingVerified:true,billingEvidence},paid);
+    assert.throws(()=>verifyPromotion(bound,{...evidence,billingVerified:true,billingEvidence:{...billingEvidence,codeHash:'wrong'}},paid));
     for(const patch of [{status:'failed'},{sha:'b'.repeat(40)},{codeHash:hash('different')},{configHash:hash('changed')},{environment:'production'},{projectId:'vela-test-prod'},{checks:['candidate-vertex']},{cases:evidence.cases.slice(1)}])assert.throws(()=>verifyPromotion(bound,{...evidence,...patch},staging));
     assert.throws(()=>verifyPromotion(bound,{...evidence,cases:evidence.cases.map((c,i)=>i?c:{...c,status:'failed'})},staging));
   }finally{rmSync(dir,{recursive:true,force:true});}
@@ -65,7 +73,8 @@ test('Bootstrap requires a genuinely empty staging target and treats read failur
     await assert.rejects(emptyStagingSnapshot(staging,production.firebase.projectId,inventory,{request:async()=>response}));
   }
   await assert.rejects(emptyStagingSnapshot(staging,production.firebase.projectId,inventory,{request:async()=>{throw new Error('read denied');}}),/read denied/);
-  assert(requests.some(r=>r.url.includes('accounts:batchGet')));assert(requests.some(r=>r.options?.body?.pageSize===1));
+  assert(requests.some(r=>r.url.includes('accounts:batchGet')));assert(requests.some(r=>r.options?.body?.pageSize===2));
+  await emptyStagingSnapshot(staging,production.firebase.projectId,inventory,{request:async url=>url.includes('listCollectionIds')?{collectionIds:['releaseLocks']}:{}});
 });
 
 test('Deployment identity must belong to the selected project; no production credential fallback',async()=>{

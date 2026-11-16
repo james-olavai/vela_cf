@@ -1,3 +1,4 @@
+import {releaseLock} from './release-lock.mjs';
 import {runFirebaseCli} from './firebase-cli.mjs';
 import {verifyBinding} from './bind-artifact.mjs';
 import {verifyCandidateEvidence} from './vertex-evidence.mjs';
@@ -139,10 +140,29 @@ export async function verifyStagingBilling(target,manifest,run=async()=>{const {
   const billingEvidence={...report,sha:manifest.sha,codeHash:manifest.codeHash,configHash:target.configHash,projectId:target.firebase.projectId,verifiedAt:new Date().toISOString()};
   return {billingVerified:true,billingEvidence};
 }
+
+export function deploymentReceipt(manifest,target,owner,snapshot) {
+  return {status:'deployed',sha:manifest.sha,codeHash:manifest.codeHash,configHash:target.configHash,environment:target.environment,projectId:target.firebase.projectId,owner,snapshotHash:createHash('sha256').update(JSON.stringify(snapshot)).digest('hex')};
+}
+export function verifyDeploymentReceipt(manifest,target,owner,receipt,snapshot) {
+  assert.deepEqual(receipt,deploymentReceipt(manifest,target,owner,snapshot),'Deployment receipt or rollback snapshot mismatch');
+  assert.equal(target.environment,'staging','Online verification must target staging');
+  return snapshot;
+}
+
+export async function runReleasePhases(phase,{deploy,verify}) {
+  assert(['all','deploy','verify'].includes(phase),'Invalid release phase');
+  if(phase!=='verify')await deploy();
+  if(phase!=='deploy')await verify();
+}
+
 async function release() {
   assert(['staging','production'].includes(process.env.VELA_ENVIRONMENT),'Release requires an explicit VELA_ENVIRONMENT');
   assert(process.env.CI_COMMIT_SHA,'CI_COMMIT_SHA is required');
   assert(process.env.GOOGLE_APPLICATION_CREDENTIALS,'Release credentials are required');
+  const phase=process.env.VELA_RELEASE_PHASE||'all';
+  assert(['all','deploy','verify'].includes(phase),'Invalid release phase');
+  assert(environment==='staging' || phase==='all','Split deployment is staging-only');
   const bootstrap=process.env.VELA_BOOTSTRAP_STAGING==='true';
   const releaseOrigin=verifyReleaseOrigin({ci:process.env.CI,bootstrap,localStagingRelease:process.env.VELA_LOCAL_STAGING_RELEASE==='true',target:environmentConfig,credentials:JSON.parse(readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS,'utf8')),serviceAccount:process.env.VELA_RELEASE_SERVICE_ACCOUNT,useGcloud:process.env.VELA_USE_GCLOUD==='1'});
   const manifest=validateArtifact('.release',process.env.CI_COMMIT_SHA);
@@ -151,14 +171,28 @@ async function release() {
   if(environment==='production')verifyPromotion(manifest,JSON.parse(readFileSync('staging-evidence/release-result.json','utf8')),loadEnvironment('staging'));
   const candidate=JSON.parse(readFileSync('artifacts/vertex-live.json','utf8'));
   verifyCandidateEvidence(candidate,manifest);
-  const initial=bootstrap?await emptyStagingSnapshot(environmentConfig,loadEnvironment('production').firebase.projectId,manifest.functionInventory,{request:google}):undefined;
-  const rollbackVersion=bootstrap?undefined:await verifyRollbackCapabilities(manifest);
+  const owner=process.env.CI_RELEASE_ID||`local-${manifest.sha}`;
+  const lockRoot=`https://firestore.googleapis.com/v1/projects/${project}/databases/${config.firestoreDatabaseId}/documents`;
+  const lease=action=>releaseLock(lockRoot,owner,manifest.sha,action,{request:google});
+  let saved;
+  if(phase==='verify'){
+    saved=verifyDeploymentReceipt(manifest,environmentConfig,owner,JSON.parse(readFileSync('artifacts/deployment.json','utf8')),JSON.parse(readFileSync('artifacts/rollback.json','utf8')));
+    await lease('check');
+  }
+  if(phase!=='verify'){
   // CLI loads the compiled function locally before upload; install the exact artifact lock for discovery.
   const install=spawn('npm',['ci','--omit=dev','--ignore-scripts','--prefix',resolve('.release/api')],{stdio:'inherit'});
   const [installed]=await once(install,'exit');assert.equal(installed,0,'Release dependency installation failed');
   mkdirSync('artifacts',{recursive:true});
-  const saved={releaseOrigin,...(initial || await snapshot(manifest.functionInventory)),...(rollbackVersion?{rollbackVersion}:{})};writeFileSync('artifacts/rollback.json',JSON.stringify(saved,null,2),{mode:0o600});
+  await lease('acquire');
+  }
+  let deploymentComplete=false,releaseSafe=false;
   try {
+    await runReleasePhases(phase,{deploy:async()=>{
+    const initial=bootstrap?await emptyStagingSnapshot(environmentConfig,loadEnvironment('production').firebase.projectId,manifest.functionInventory,{request:google}):undefined;
+    const rollbackVersion=bootstrap?undefined:await verifyRollbackCapabilities(manifest);
+    saved={releaseOrigin,...(initial || await snapshot(manifest.functionInventory)),...(rollbackVersion?{rollbackVersion}:{})};
+    writeFileSync('artifacts/rollback.json',JSON.stringify(saved,null,2),{mode:0o600});
     const deploy=async only=>{
       await runFirebaseCli(['--yes',`firebase-tools@${tools.firebase}`,'deploy','--config',resolve('.release/firebase.json'),'--project',project,'--only',only,'--non-interactive']);
     };
@@ -169,16 +203,40 @@ async function release() {
     await deploy('hosting');
     await verifyHosting(manifest);
     await deploy('firestore:rules'); // Retire legacy direct writes only after API clients are published.
+    writeFileSync('artifacts/deployment.json',JSON.stringify(deploymentReceipt(manifest,environmentConfig,owner,saved)));
+    deploymentComplete=true;
+    // The deploy job keeps the lease until online verification completes.
+    },verify:async()=>{
+    await lease('check');
+    await verifyHosting(manifest); // Fail closed if the deployed site changed between jobs.
     const billing=await verifyStagingBilling(environmentConfig,manifest);
     if(billing.billingVerified)writeFileSync('artifacts/stripe-release-evidence.json',JSON.stringify(billing.billingEvidence,null,2));
     if(environment==='staging')await stagingBrowser();
-    const cases=await liveSmoke({mode:environment});await liveApiSmoke();
-    writeFileSync('artifacts/release-result.json',JSON.stringify({sha:manifest.sha,codeHash:manifest.codeHash,configHash:environmentConfig.configHash,environment,projectId:project,firstDeployment:bootstrap,releaseOrigin,...billing,status:'verified',checks:environment==='staging'?['candidate-vertex','deployed-browser','live-matrix','api-ready']:['candidate-vertex','live-matrix','api-ready'],cases,at:new Date().toISOString()}));
+    const cases=await liveSmoke({mode:environment});
+    let companySynastry;
+    if(environment==='staging'){
+      const api=await liveSmoke({mode:'company-synastry-staging',evidencePath:'artifacts/company-synastry-live.json'});
+      const {companySynastryBrowser}=await import('./company-synastry-browser.mjs');
+      const browser=await companySynastryBrowser();
+      companySynastry={api,browser};
+    }
+    await liveApiSmoke();
+    await lease('check');
+    writeFileSync('artifacts/release-result.json',JSON.stringify({sha:manifest.sha,codeHash:manifest.codeHash,configHash:environmentConfig.configHash,environment,projectId:project,firstDeployment:bootstrap,releaseOrigin,...billing,...(companySynastry?{companySynastry}:{}),status:'verified',checks:environment==='staging'?['candidate-vertex','deployed-browser','live-matrix','api-ready']:['candidate-vertex','live-matrix','api-ready'],cases,at:new Date().toISOString()}));
+    releaseSafe=true;
+    }});
   } catch(error) {
+    if(!saved)throw error;
+    await lease('check');
+    if(phase==='verify')await verifyHosting(manifest); // Never overwrite a manually replaced site.
+    // A stale pipeline must never roll back a newer deployment.
     console.error('Release failed; restoring previous Functions sources, Hosting version, and Rules releases');
-    try {await rollback(saved);writeFileSync('artifacts/rollback-result.json',JSON.stringify({sha:manifest.sha,environment,firstDeployment:bootstrap,releaseOrigin,status:'restored',at:new Date().toISOString()}));console.error(bootstrap?'Failed staging bootstrap disabled and owned resources cleaned':'Previous release restored');}
+    try {await rollback(saved);releaseSafe=true;writeFileSync('artifacts/rollback-result.json',JSON.stringify({sha:manifest.sha,environment,firstDeployment:bootstrap,releaseOrigin,status:'restored',at:new Date().toISOString()}));console.error(bootstrap?'Failed staging bootstrap disabled and owned resources cleaned':'Previous release restored');}
     catch(restoreError){writeFileSync('artifacts/rollback-result.json',JSON.stringify({sha:manifest.sha,environment,firstDeployment:bootstrap,releaseOrigin,status:'failed',at:new Date().toISOString()}));throw new AggregateError([error,restoreError],'Release and automatic rollback failed');}
     throw error;
+  } finally {
+    if((phase!=='deploy' || !deploymentComplete) && (releaseSafe || !saved))await lease('release');
+    // Incomplete rollback retains the lease for explicit recovery, never admits another writer.
   }
 }
 if(process.argv[1]&&import.meta.url===new URL(process.argv[1],'file:').href) await release();
