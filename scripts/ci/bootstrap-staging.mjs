@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
-import {once} from 'node:events';
+import {runFirebaseCli} from './firebase-cli.mjs';
 export const rulesRelease=(project,database)=>`projects/${project}/releases/cloud.firestore${database==='(default)'?'':`/${database}`}`;
 export async function emptyStagingSnapshot(target,productionProject,inventory,{request}={}) {
   assert.equal(target.environment,'staging','Bootstrap is staging-only');
@@ -30,6 +29,5 @@ export async function emptyStagingSnapshot(target,productionProject,inventory,{r
 }
 export async function disableStagingHosting(saved,productionProject,version) {
   assert(saved.firstDeployment && saved.environment==='staging' && saved.projectId!==productionProject,'Refusing to disable a non-bootstrap or production site');
-  const child=spawn('npx',['--yes',`firebase-tools@${version}`,'hosting:disable','--project',saved.projectId,'--site',saved.projectId,'--force','--non-interactive'],{stdio:'inherit'});
-  const [code]=await once(child,'exit');assert.equal(code,0,'Failed to disable staging Hosting after bootstrap failure');
+  await runFirebaseCli(['--yes',`firebase-tools@${version}`,'hosting:disable','--project',saved.projectId,'--site',saved.projectId,'--force','--non-interactive']);
 }

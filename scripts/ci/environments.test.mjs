@@ -171,3 +171,13 @@ test('Bootstrap retry accepts only complete Hosting history of SITE_DISABLE entr
   // A disabled site never exempts existing application resources from inspection.
   for(const occupied of [{functions:[{}]},{users:[{}]},{collectionIds:['users']}])await assert.rejects(emptyStagingSnapshot(staging,production.firebase.projectId,inventory,{request:async url=>url.includes('firebasehosting.googleapis.com')?{releases:[disabled]}:occupied}));
 });
+
+
+test('Firebase CLI isolates cached human login and legacy token while retaining explicit ADC and gcloud store',async()=>{
+  const {firebaseCliEnvironment}=await import('./firebase-cli.mjs');
+  const original={PATH:'/bin',XDG_CONFIG_HOME:'/human/cache',CLOUDSDK_CONFIG:'/gcloud/source',GOOGLE_APPLICATION_CREDENTIALS:'./temporary-adc.json',FIREBASE_TOKEN:'legacy-human-token'};
+  const env=firebaseCliEnvironment('/tmp/isolated-firebase',original);
+  assert.equal(env.XDG_CONFIG_HOME,'/tmp/isolated-firebase');assert.equal(env.CLOUDSDK_CONFIG,'/gcloud/source');assert.equal(env.PATH,'/bin');assert.equal(env.FIREBASE_TOKEN,undefined);
+  assert(env.GOOGLE_APPLICATION_CREDENTIALS.endsWith('/temporary-adc.json'));assert(env.GOOGLE_APPLICATION_CREDENTIALS.startsWith('/'));
+  assert.equal(original.FIREBASE_TOKEN,'legacy-human-token');assert.throws(()=>firebaseCliEnvironment('/tmp/isolated',{}),/explicit ADC/);
+});

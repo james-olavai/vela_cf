@@ -1,3 +1,4 @@
+import {runFirebaseCli} from './firebase-cli.mjs';
 import {verifyBinding} from './bind-artifact.mjs';
 import {verifyCandidateEvidence} from './vertex-evidence.mjs';
 import assert from 'node:assert/strict';
@@ -149,8 +150,7 @@ async function release() {
   const saved={releaseOrigin,...(initial || await snapshot(manifest.functionInventory)),...(rollbackVersion?{rollbackVersion}:{})};writeFileSync('artifacts/rollback.json',JSON.stringify(saved,null,2),{mode:0o600});
   try {
     const deploy=async only=>{
-      const child=spawn('npx',['--yes',`firebase-tools@${tools.firebase}`,'deploy','--config',resolve('.release/firebase.json'),'--project',project,'--only',only,'--non-interactive'],{stdio:'inherit'});
-      const [code]=await once(child,'exit');assert.equal(code,0,`Firebase deployment failed: ${only}`);
+      await runFirebaseCli(['--yes',`firebase-tools@${tools.firebase}`,'deploy','--config',resolve('.release/firebase.json'),'--project',project,'--only',only,'--non-interactive']);
     };
     await deploy('functions');
     await configureGateway(true); // Firebase ID Tokens belong to application auth, not Cloud Run IAM.

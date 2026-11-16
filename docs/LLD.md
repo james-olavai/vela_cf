@@ -1063,3 +1063,6 @@ Webhook 是单独的服务器到服务器路径：使用原始请求体验证 St
 
 
 首次 staging 引导失败后，回滚会删除本次创建的函数并禁用 Hosting；Hosting 保留 `SITE_DISABLE` 历史记录。重试空项目检查允许完整历史中仅存在无 `version` 的 `SITE_DISABLE`，按 `pageSize=100` 查询且存在分页即拒绝；任何真实部署、未知 release 类型、附带版本、已有函数/用户/Firestore 集合或查询失败仍拒绝。该例外仅允许失败引导后的空站点重试，不适用于已有应用发布。
+
+
+Firebase CLI 会优先使用本机缓存登录，因此仅设置 ADC 不足以证明发布身份。部署及 bootstrap 回滚禁用 Hosting 均通过隔离执行器运行：每次创建独立临时 `XDG_CONFIG_HOME`、移除 `FIREBASE_TOKEN`、将 ADC 转成绝对路径；保留原 `CLOUDSDK_CONFIG` 供短期 impersonation 读取源身份，执行后清理临时目录。此前实际回滚的 releaseUser 为本机邮箱，不能称为已通过专用 SA 部署；后续须结合实际审计记录确认。
