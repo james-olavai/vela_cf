@@ -77,6 +77,7 @@ export async function verifyHosting(manifest) {
   const base=`https://${project}.web.app`;
   const version=await (await fetch(`${base}/version.json?t=${Date.now()}`,{cache:'no-store',signal:AbortSignal.timeout(30_000)})).json();
   assert.equal(version.sha,manifest.sha,'Hosting release SHA does not match tested artifact');
+  assert.deepEqual(version.rollbackCapabilities,manifest.rollbackCapabilities,'Hosting read compatibility declaration does not match artifact');
   const html=await(await fetch(base,{cache:'no-store',signal:AbortSignal.timeout(30_000)})).text();
   assert.equal(createHash('sha256').update(html).digest('hex'),manifest.hashes['web/index.html']);
   for(const match of html.matchAll(/(?:src|href)="(\/assets\/[^\"]+\.(?:js|css|webp))"/g)) assert((await fetch(base+match[1],{signal:AbortSignal.timeout(30_000)})).ok,`Missing live asset ${match[1]}`);

@@ -53,3 +53,12 @@ test('User API client sends token only in headers, supports function base path, 
     assert.throws(() => apiClient('https://user:secret@example.com', 'token'));
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });
+
+test('read preparation allows only optional response metadata without weakening request contracts',()=>{
+  const spec=openApi(businessRoutes), add=structuredClone(spec), path='/v1/profiles/{id}';
+  add.paths[path].get.responses['200'].content['application/json'].schema.properties.futureReadMetadata={type:'string'};
+  assert.deepEqual(checkCompatibility(spec,add),[]);
+  const required=structuredClone(add);required.paths[path].get.responses['200'].content['application/json'].schema.required.push('futureReadMetadata');assert(checkCompatibility(spec,required).length>0);
+  const changed=structuredClone(spec);changed.paths[path].get.responses['200'].content['application/json'].schema.properties.name={type:'number'};assert(checkCompatibility(spec,changed).length>0);
+  const writable=structuredClone(spec);writable.paths['/v1/profiles'].post.requestBody.content['application/json'].schema.properties.locationRef={type:'object'};assert(checkCompatibility(spec,writable).length>0);
+});

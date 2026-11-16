@@ -164,3 +164,61 @@ test('real HTTP chat runner persists messages and usage, uses frozen subject and
     await deleteApp(app);
   }
 });
+
+test('read-compatible release consumes seeded future profiles and country sessions through real user HTTP',async()=>{
+  const app=initializeApp({projectId:'demo-vela-ci'},'read-compat-test'),db=getFirestore(app),auth=getAuth(app);
+  let uid,observed,generations=0;
+  const runner=createChatRunner(db,async(input,emit)=>{observed=input;generations++;emit({type:'text',text:'Synthetic compatible frozen country reading.'});return {text:'Synthetic compatible frozen country reading.',uiBlocks:[],suggestions:[],toolParts:[],chart:{},usage:{inputTokens:10,outputTokens:10}};});
+  const handler=createHttpApi({verifyToken:t=>verifyApiIdentity(auth,t),dispatch:i=>dispatchBusinessApi(db,i),stream:(body,identity,emit,signal)=>runner(body,{auth:identity,turnId:identity.turnId},emit,signal)});
+  const server=createServer(async(req,res)=>{
+    const url=new URL(req.url,'http://localhost');let body='';for await(const chunk of req)body+=chunk;
+    req.path=url.pathname;req.query=Object.fromEntries(url.searchParams);req.body=body?JSON.parse(body):undefined;req.get=name=>req.headers[name.toLowerCase()];req.is=mime=>req.headers['content-type']?.startsWith(mime);
+    res.status=code=>{res.statusCode=code;return res;};res.json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};await handler(req,res);
+  });
+  server.listen(0,'127.0.0.1');await once(server,'listening');const base=`http://127.0.0.1:${server.address().port}`;
+  try {
+    const signup=await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});assert.equal(signup.status,200);
+    const user=await signup.json();uid=user.localId;const call=apiClient(base,user.idToken);
+    const legacy={name:'Synthetic new-version profile',birthDateTime:'1994-06-03T08:20',locationName:'Shanghai',latitude:31.23,longitude:121.47,timezone:'Asia/Shanghai',gender:'unset',entityType:'person'};
+    const profile=await call('POST','/v1/profiles',legacy);assert.equal(profile.status,201);
+    const metadata={locationRef:{id:'geonames-1816670',version:'future-fixture'},countryCode:'CN',locationSource:'builtin'};
+    await db.doc(`users/${uid}/profiles/${profile.body.id}`).update(metadata); // Admin only seeds newer-version data.
+    assert.deepEqual((await call('GET',`/v1/profiles/${profile.body.id}`)).body.locationRef,metadata.locationRef);
+    assert.equal((await call('GET','/v1/profiles')).body.items[0].countryCode,'CN');
+    assert.deepEqual((await call('PATCH',`/v1/profiles/${profile.body.id}`,{name:'Edited by old client'})).body.locationRef,metadata.locationRef);
+    assert.equal((await call('POST','/v1/profiles',{...legacy,...metadata})).status,400);
+    assert.equal((await call('PATCH',`/v1/profiles/${profile.body.id}`,{locationRef:metadata.locationRef})).status,400);
+    assert.equal((await call('POST','/v1/sessions',{subjects:[{ref:'country',country_chart:{id:'future-cn',version:'1'}}]})).status,400);
+    assert.equal((await call('GET','/v1/country-charts')).status,404,'Preparation must not expose new feature routes');
+    const now=new Date().toISOString(),countryChart={id:'synthetic-country',version:'1',catalogVersion:'future-fixture',contentHash:'fixture-hash',timeReliability:'verified',eventName:'Synthetic event',sourceReferences:['https://example.test/synthetic']};
+    const frozenSubjects=[{ref:'self',profileId:profile.body.id,profile:{...legacy,...metadata}},{ref:'country',profile:{...legacy,name:'Synthetic country',entityType:'country',birthDateTime:'1949-10-01T15:00'},countryChart}];
+    const session={mode:'synastry',profileIds:[profile.body.id,'country'],profileId:profile.body.id,profileName:'Synthetic pair',title:'Synthetic compatibility',createdAt:now,updatedAt:now,frozenSubjects};
+    await db.doc(`users/${uid}/sessions/future`).set(session);
+    assert.deepEqual((await call('GET','/v1/sessions/future')).body.subjects[1].countryChart,countryChart);
+    const send=async(key,target='future')=>{
+      const res=await fetch(`${base}/v1/sessions/${target}/turns`,{method:'POST',headers:{Authorization:`Bearer ${user.idToken}`,'Content-Type':'application/json','Idempotency-Key':key},body:JSON.stringify({message:'Read this frozen synthetic case'})});
+      assert.equal(res.status,200);return (await res.text()).split('\n').filter(l=>l.startsWith('data:')).map(l=>JSON.parse(l.slice(5)));
+    };
+    const periodStart=now.slice(0,7)+'-01T00:00:00Z';
+    await db.doc(`usage/${uid}`).set({overrideTier:'pro',unlimited:true,used:0,periodStart});
+    await call('DELETE',`/v1/profiles/${profile.body.id}`);
+    const success=await send('compatible-country');assert.equal(success.at(-1).type,'result');assert.equal(generations,1);
+    assert.deepEqual(observed.profiles[1].countryChart,countryChart);assert.equal(observed.profiles[0].name,legacy.name);
+    assert.equal((await call('GET','/v1/sessions/future/messages')).body.items.length,2);
+    assert.deepEqual((await db.doc(`users/${uid}/sessions/future`).get()).data().frozenSubjects,frozenSubjects);
+    const used=(await call('GET','/v1/me/usage')).body.used;
+    await db.doc(`usage/${uid}`).update({overrideTier:'go'});
+    assert.equal((await send('downgraded-country')).at(-1).error.code,'ENTITY_CHART_REQUIRES_PRO');
+    await db.doc(`users/${uid}/sessions/pair`).set({...session,frozenSubjects:[frozenSubjects[0],{ref:'second',profile:legacy}]});
+    await db.doc(`usage/${uid}`).update({overrideTier:'free'});
+    assert.equal((await send('downgraded-pair','pair')).at(-1).error.code,'INVALID_SYNASTRY_PROFILE_COUNT');
+    assert.equal(generations,1);assert.equal((await call('GET','/v1/me/usage')).body.used,used);
+    const other=await call('POST','/v1/profiles',legacy);await db.doc(`users/${uid}/profiles/${other.body.id}`).update(metadata);
+    const moved=await call('PATCH',`/v1/profiles/${other.body.id}`,{locationName:'Moved location'});assert.equal(moved.status,200);
+    for(const key of Object.keys(metadata))assert(!(key in moved.body));
+  } finally {
+    server.closeAllConnections();await new Promise(resolve=>server.close(resolve));
+    if(uid){await db.recursiveDelete(db.doc(`users/${uid}`));await db.doc(`usage/${uid}`).delete();await auth.deleteUser(uid);}
+    await deleteApp(app);
+  }
+});

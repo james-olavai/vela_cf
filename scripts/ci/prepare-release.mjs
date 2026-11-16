@@ -35,7 +35,8 @@ const functionInventory=read('scripts/ci/functions.json');
 const declared=[...readFileSync('apps/api/src/index.ts','utf8').matchAll(/export const (\w+) = (?:onCall|onCallGenkit|onRequest)\(/g)].map(m=>m[1]).sort();
 assert.deepEqual([...functionInventory.existing,...functionInventory.introduced].sort(),declared,'Function inventory does not match source exports');
 const sha=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
-writeFileSync(resolve(out,'web/version.json'),JSON.stringify({sha}));
+const rollbackCapabilities=['profile-location-metadata'], requiredRollbackCapabilities=[];
+writeFileSync(resolve(out,'web/version.json'),JSON.stringify({sha,rollbackCapabilities}));
 const hashes={};
 function hashFiles(dir='') {
   for(const entry of readdirSync(resolve(out,dir),{withFileTypes:true})) {
@@ -45,6 +46,6 @@ function hashFiles(dir='') {
   }
 }
 hashFiles();
-writeFileSync(resolve(out,'manifest.json'),JSON.stringify({sha,node:process.version,functionInventory,openApiHash:hashes['openapi.json'],runtimeDependencies:pkg.dependencies,hashes},null,2));
+writeFileSync(resolve(out,'manifest.json'),JSON.stringify({sha,rollbackCapabilities,requiredRollbackCapabilities,node:process.version,functionInventory,openApiHash:hashes['openapi.json'],runtimeDependencies:pkg.dependencies,hashes},null,2));
 execFileSync('tar',['-czf','release.tar.gz','-C',out,'.']);
 console.log(`Prepared immutable release ${sha}`);

@@ -27,12 +27,35 @@ export function openApi(routes, server = 'http://127.0.0.1:5001/demo-vela-ci/asi
 
 // Conservative compatibility gate: an existing operation must retain its complete contract.
 // New paths/methods are allowed. Intentional changes need reviewed API versioning, not auto-baselining.
+// Read-compatibility preparation permits additive optional response fields only.
+function responseCompatible(previous,candidate) {
+  if(JSON.stringify(previous)===JSON.stringify(candidate))return true;
+  if(!previous || !candidate || typeof previous!=='object' || typeof candidate!=='object' || Array.isArray(previous) || Array.isArray(candidate))return false;
+  const a={...previous},b={...candidate};
+  if(a.properties && b.properties) {
+    if(JSON.stringify(a.required||[])!==JSON.stringify(b.required||[]))return false;
+    for(const [key,value] of Object.entries(a.properties))if(!responseCompatible(value,b.properties[key]))return false;
+    if(Object.keys(b.properties).some(key=>!(key in a.properties) && (b.required||[]).includes(key)))return false;
+    delete a.properties;delete b.properties;
+  }
+  for(const key of ['items','schema'])if(a[key] && b[key]) {if(!responseCompatible(a[key],b[key]))return false;delete a[key];delete b[key];}
+  return JSON.stringify(a)===JSON.stringify(b);
+}
+function operationCompatible(previous,candidate) {
+  const a=structuredClone(previous),b=structuredClone(candidate);
+  for(const [status,response] of Object.entries(a.responses||{}))for(const [mime,content] of Object.entries(response.content||{})) {
+    const next=b.responses?.[status]?.content?.[mime];
+    if(!next || !responseCompatible(content.schema,next.schema))return false;
+    delete content.schema;delete next.schema;
+  }
+  return JSON.stringify(a)===JSON.stringify(b);
+}
 export function checkCompatibility(previous, candidate) {
   const changes = [];
   for (const [path, methods] of Object.entries(previous.paths)) for (const [method, operation] of Object.entries(methods)) {
     const next = candidate.paths[path]?.[method];
     if (!next) changes.push(`Removed ${method.toUpperCase()} ${path}`);
-    else if (JSON.stringify(operation) !== JSON.stringify(next)) changes.push(`Changed ${method.toUpperCase()} ${path}`);
+    else if (!operationCompatible(operation,next)) changes.push(`Changed ${method.toUpperCase()} ${path}`);
   }
   if (JSON.stringify(previous.components) !== JSON.stringify(candidate.components)) changes.push('Changed shared components');
   return changes;
