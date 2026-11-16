@@ -17,8 +17,7 @@ on:
         default: false
 # Gitea 1.25 ignores concurrency; release-lock.mjs serializes each environment.
 jobs:
-  local-tests:
-    name: 1. 本地测试与构建
+  ci: # 1. 本地测试与构建；保留保护分支要求的 ci 检查名称
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -80,7 +79,7 @@ jobs:
           retention-days: 14
   deploy-staging:
     name: 2. 部署测试环境
-    needs: local-tests
+    needs: ci
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && (inputs.deploy_firebase == true || inputs.deploy_firebase == 'true'))
@@ -171,7 +170,7 @@ jobs:
           retention-days: 14
   deploy-production:
     name: 4. 发布生产并验证
-    needs: [local-tests, verify-staging]
+    needs: [ci, verify-staging]
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:

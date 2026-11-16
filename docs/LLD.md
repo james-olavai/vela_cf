@@ -1093,7 +1093,7 @@ Firebase CLI 会优先使用本机缓存登录，因此仅设置 ADC 不足以�
 
 ### 11.17 Gitea Actions 分阶段发布
 
-按用户要求，工作流分为 `local-tests → deploy-staging → verify-staging → deploy-production` 四个独立 job。PR 只运行本地测试；main push、v* tag push 及明确勾选发布的 main 手动任务走完整流水线。前一阶段失败或跳过，后续生产发布不会执行。当前实例为 Gitea 1.25.5，其 [1.25 官方兼容说明](https://docs.gitea.com/1.25/usage/actions/comparison/) 指出 concurrency 与 job timeout-minutes 被忽略，因此不用这些 YAML 字段作为串行或超时保证；实际命令使用 GNU timeout，环境发布使用 Firestore compare-and-set 锁。
+按用户要求，工作流分为 `ci（本地测试）→ deploy-staging → verify-staging → deploy-production` 四个独立 job。PR 只运行本地测试；main push、v* tag push 及明确勾选发布的 main 手动任务走完整流水线。前一阶段失败或跳过，后续生产发布不会执行。当前实例为 Gitea 1.25.5，其 [1.25 官方兼容说明](https://docs.gitea.com/1.25/usage/actions/comparison/) 指出 concurrency 与 job timeout-minutes 被忽略，因此不用这些 YAML 字段作为串行或超时保证；实际命令使用 GNU timeout，环境发布使用 Firestore compare-and-set 锁。
 
 1. **本地测试与构建**：类型/边界、OpenAPI 兼容、单元测试、模拟器、UI/API 浏览器回归；仅在这里构建一次，打包干净 Git 提交对应的不可变产物。
 2. **部署测试环境**：下载原始产物并绑定 staging 配置，验证真实候选 Vertex，取得环境锁后保存旧 Functions/Secrets 引用/Hosting/Rules 快照，再部署并执行必要就绪检查。成功仅生成 `status:deployed` 的 deployment receipt，不生成 verified 发布结果。receipt 绑定 SHA、codeHash、configHash、项目、流水线 owner 与 rollback 快照哈希，随脱敏部署证据上传。
@@ -1105,3 +1105,5 @@ Firebase CLI 会优先使用本机缓存登录，因此仅设置 ADC 不足以�
 `releaseLocks/pipeline` 位于各环境自己的 Firestore，2 小时租约从 staging 部署持续到在线验收完成；生产使用自己的锁。获取、过期接管和释放均带 Firestore 写入前置条件，过期或不同 owner 无权继续验证/回滚。首次空环境检查只豁免发布锁集合，仍拒绝业务数据。另一个发布占锁时新任务直接失败，不并发覆盖。若 runner 被强杀、任务取消或证据传输失败，使在线验证进程未能运行，生产仍被阻止；应使用留存快照人工恢复和检查锁，不能把租约到期视作自动完成回滚。
 
 本次本地完整测试 185 项：182 通过、3 项环境专用跳过；发布/环境/阶段组 37/37，通过 YAML 实际解析与四阶段依赖图检查、真实 staging Firestore 锁竞争与清理验证。部署与验收分段的顺序、失败阻断回归均通过。未触发远端 Gitea Actions、未发布生产；线上仍运行前一轮已验证 staging 版本。首轮远端执行需要已配置的 `FIREBASE_STAGING_SERVICE_ACCOUNT_B64`、`FIREBASE_SERVICE_ACCOUNT_B64`，若用 ADC 模拟则还需对应 `FIREBASE_STAGING_RELEASE_SERVICE_ACCOUNT` / `FIREBASE_RELEASE_SERVICE_ACCOUNT` 变量。
+
+保护分支 required status context 为 `Vela CI/CD / ci (pull_request)`；本地测试 job 保留 `ci` 名称以兼容该规则，不降低或跳过保护分支检查。
