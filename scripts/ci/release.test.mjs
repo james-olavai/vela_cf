@@ -19,6 +19,7 @@ test('Rollback restores frozen Functions source, Hosting version, and Rules and 
     calls.push({url,options});
     if(url.includes('/functions/chat'))return {name:'projects/test/locations/asia-southeast1/operations/restore'};
     if(url.includes('/operations/'))return {done:true};
+    if(url.endsWith('/releases?pageSize=1'))return {releases:[{version:{name:'sites/test/versions/new'}}]};
     return {};
   }});
   assert.deepEqual(calls[0].options.body.buildConfig.source,saved.functions[0].buildConfig.source);
@@ -31,6 +32,7 @@ test('Partial rollback failure still attempts other services and fails the relea
   await assert.rejects(rollback(saved,{request:async(url)=>{
     called.push(url);
     if(url.includes('/functions/chat'))throw new Error('restore denied');
+    if(url.endsWith('/releases?pageSize=1'))return {releases:[{version:{name:saved.hosting}}]};
     return {};
   }}),/Rollback incomplete/);
   assert(called.some(x=>x.includes('firebaserules.googleapis.com')));
@@ -58,6 +60,7 @@ test('Rollback deletes only explicitly introduced functions absent before deploy
     if(options?.method==='DELETE')return {name:'projects/test/locations/asia-southeast1/operations/delete'};
     if(url.includes('/functions/chat'))return {name:'projects/test/locations/asia-southeast1/operations/restore'};
     if(url.includes('/operations/'))return {done:true};
+    if(url.endsWith('/releases?pageSize=1'))return {releases:[{version:{name:'sites/test/versions/new'}}]};
     return {};
   }});
   assert.deepEqual(calls.filter(c=>c.options?.method==='DELETE').map(c=>c.url),[`https://cloudfunctions.googleapis.com/v2/${name}`]);
@@ -68,4 +71,39 @@ test('HTTP chat smoke requires useful final result and streamed completion',()=>
   assert(parseHttpChat(good).characters>30);
   assert.throws(()=>parseHttpChat(sse({type:'done'})));
   assert.throws(()=>parseHttpChat(good+sse({type:'error',error:{code:'FAILED'}})));
+});
+
+test('Rollback skips Hosting creation when the saved version is already active',async()=>{
+  const calls=[];
+  await rollback(saved,{request:async(url,options)=>{
+    calls.push({url,options});
+    if(url.includes('/functions/chat'))return {name:'projects/test/locations/asia-southeast1/operations/restore'};
+    if(url.includes('/operations/'))return {done:true};
+    if(url.endsWith('/releases?pageSize=1'))return {releases:[{version:{name:saved.hosting}}]};
+    if(options?.method==='POST')throw new Error('Cannot release current active version');
+    return {};
+  }});
+  assert(calls.some(c=>c.url.endsWith('/releases?pageSize=1')));
+  assert(!calls.some(c=>c.options?.method==='POST'));
+  assert(calls.some(c=>c.options?.body?.release?.rulesetName===saved.rules[0].rulesetName));
+  assert(calls.some(c=>c.url.includes('/operations/')));
+});
+
+test('Hosting lookup and restore failures remain fatal while Function operations finish',async()=>{
+  for(const failure of ['lookup','missing-version','publish']) {
+    const calls=[];
+    await assert.rejects(rollback(saved,{request:async(url,options)=>{
+      calls.push({url,options});
+      if(url.includes('/functions/chat'))return {name:'projects/test/locations/asia-southeast1/operations/restore'};
+      if(url.includes('/operations/'))return {done:true};
+      if(url.endsWith('/releases?pageSize=1')) {
+        if(failure==='lookup')throw new Error('lookup denied');
+        return failure==='missing-version'?{}:{releases:[{version:{name:'sites/test/versions/new'}}]};
+      }
+      if(options?.method==='POST')throw new Error('publish denied');
+      return {};
+    }}),/Rollback incomplete/);
+    assert(calls.some(c=>c.url.includes('/operations/')));
+    assert.equal(calls.some(c=>c.options?.method==='POST'),failure==='publish');
+  }
 });

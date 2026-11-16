@@ -42,7 +42,12 @@ export async function rollback(saved, { request=google, sleep=ms=>new Promise(r=
     if((all.functions||[]).some(f=>f.name===name)) {const op=await request(`https://cloudfunctions.googleapis.com/v2/${name}`,{method:'DELETE'});pending.push(op.name);}
   } catch(e) {errors.push(e);}
   for(const r of saved.rules) try { await request(`https://firebaserules.googleapis.com/v1/${r.name}`,{method:'PATCH',body:{release:r,updateMask:'rulesetName'}}); } catch(e) { errors.push(e); }
-  try {await request(`${hosting}?versionName=${encodeURIComponent(saved.hosting)}`,{method:'POST',body:{message:'Automatic rollback after failed release validation'}});} catch(e){errors.push(e);}
+  try {
+    const site=await request(`${hosting}?pageSize=1`);
+    const active=site.releases?.[0]?.version?.name;
+    assert(active,'No active Hosting version available during rollback');
+    if(active!==saved.hosting) await request(`${hosting}?versionName=${encodeURIComponent(saved.hosting)}`,{method:'POST',body:{message:'Automatic rollback after failed release validation'}});
+  } catch(e){errors.push(e);}
   const deadline=Date.now()+timeoutMs;
   while(pending.length&&Date.now()<deadline) {
     for(let i=pending.length-1;i>=0;i--) {
