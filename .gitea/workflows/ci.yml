@@ -91,16 +91,16 @@ jobs:
         run: mkdir -p .release && tar -xzf release.tar.gz -C .release
       - name: Candidate Vertex check, deploy, verify and automatically roll back on failure
         env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           CI_COMMIT_SHA: ${{ github.sha }}
           CI: 'true'
         run: |
           set -eu
-          test -n "$FIREBASE_SERVICE_ACCOUNT" || { echo 'Missing mandatory release credentials'; exit 1; }
+          test -n "$FIREBASE_SERVICE_ACCOUNT_B64" || { echo 'Missing mandatory release credentials'; exit 1; }
           umask 077
           CREDENTIAL_FILE="$RUNNER_TEMP/vela-release-credentials.json"
           trap 'rm -f "$CREDENTIAL_FILE"' EXIT
-          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$CREDENTIAL_FILE"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_B64" | base64 --decode > "$CREDENTIAL_FILE"
           export GOOGLE_APPLICATION_CREDENTIALS="$CREDENTIAL_FILE"
           node --import ./scripts/register-ts.mjs scripts/ci/vertex-live.mjs
           npm run release
