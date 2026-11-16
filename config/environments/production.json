@@ -11,5 +11,11 @@
     "measurementId": "",
     "oAuthClientId": "541206690668-60fd4uf28q3hru3bhqq6sk85g5goee7d.apps.googleusercontent.com",
     "recaptchaSiteKey": ""
+  },
+  "billing": {
+    "enabled": false,
+    "mode": "live",
+    "goPriceId": "price_1UcOgFK3bRPDTzyHcatDH5zV",
+    "proPriceId": "price_1UcOhJK3bRPDTzyHu9lhn4fy"
   }
 }
