@@ -541,7 +541,7 @@ Gitea 是发布入口，GitHub 同步代码。每次 main/PR/tag 提交运行 `c
 
 CI 生成 `release-<SHA>` 产物，内含预编译 API、同次构建的前端、实际应用命名数据库的规则配置、按本次已安装版本固定的 API 依赖及独立 lock、逐文件 SHA256 清单和版本文件。生成器拒绝解析出根 lock 中不存在的依赖版本。部署直接使用该产物，不重新编译前端/API；云端按包内 lock 安装。
 
-生产发布仅由 v* tag 或 main 上显式 workflow_dispatch 触发，必须依赖 `ci` 成功。缺少 `FIREBASE_SERVICE_ACCOUNT` 立即失败；先用候选代码、相同 Vertex 模型及旧冻结 Bundle 进行真实模型验证，失败不执行部署。发布前按显式函数清单保存 Vela Functions 的源存档引用、Hosting 版本及应用命名数据库 Ruleset；不操作同项目内其他应用或 Storage 规则。更新 Functions/Hosting/Firestore Rules 后，校验线上 SHA/资源，并用自动创建和清理的合成账号验证正常免费咨询、旧冻结配置的超预算无限账号、真实额度用尽拒绝；检查流式正文、done、最终结果、消息落库、用量结算、预留释放及会话解锁。HTTP 200 或静态首页可访问均不算聊天成功。
+生产发布仅由 main 上独立的 deploy-production workflow_dispatch 触发，显式选择已通过 staging 验收的运行编号；跨 workflow 来源门禁见 §11.17。缺少 `FIREBASE_SERVICE_ACCOUNT_B64` 立即失败；先用候选代码、相同 Vertex 模型及旧冻结 Bundle 进行真实模型验证，失败不执行部署。发布前按显式函数清单保存 Vela Functions 的源存档引用、Hosting 版本及应用命名数据库 Ruleset；不操作同项目内其他应用或 Storage 规则。更新 Functions/Hosting/Firestore Rules 后，校验线上 SHA/资源，并用自动创建和清理的合成账号验证正常免费咨询、旧冻结配置的超预算无限账号、真实额度用尽拒绝；检查流式正文、done、最终结果、消息落库、用量结算、预留释放及会话解锁。HTTP 200 或静态首页可访问均不算聊天成功。
 
 部署或线上验证失败时，尝试恢复上述三类版本，等待 Functions 恢复操作完成；即使某类恢复失败也继续尝试其他服务，并以失败退出、保留恢复快照及验证证据。`npm test` 覆盖 SSE 假成功、流式错误及部分回滚失败。回滚脚本不修改用户业务数据；数据库结构破坏性迁移不属于这条自动恢复路径。
 
@@ -966,7 +966,7 @@ staging / production 采用独立 Firebase 项目及受限部署身份；凭据�
 
 真实模型验收脚本固化 staging 八类与 production 四类用例，检查正文、工具、对象覆盖、终态、持久化、结算、锁释放及档案未修改；失败保留脱敏证据并清理，不自动重试。staging 增加真实 Firebase 登录和部署网页浏览器流程。成本门限基于应用已结算用量，不代表上游账单的硬上限。超时、主动取消、断连和观察失败分别返回安全错误码；生成后提交前重新核实授权与当前套餐。本地 Auth/Firestore HTTP 测试覆盖超时、取消、授权撤销及在途降档。尚未执行新环境的真实模型或浏览器验收。
 
-实际 `config/environments/staging.json` 和 staging 部署凭据尚缺，流水线会明确阻断，不回退到生产。首次部署前须建立独立 Firebase 项目、Web App、Auth、数据库、必要 API 与受限部署身份，按 `staging.example.json` 填入真实配置并运行 `npm run environment:check -- staging`。首次手动运行 workflow 使用 `deploy_firebase=true`、`bootstrap_staging=true`；脚本确认独立 staging 无既有 Functions、Hosting 发布、Auth 用户及 Firestore 集合，读取失败不视为空。生产不允许 bootstrap，后续 staging 发布关闭该开关。
+实际 `config/environments/staging.json` 和 staging 部署凭据尚缺，流水线会明确阻断，不回退到生产。首次部署前须建立独立 Firebase 项目、Web App、Auth、数据库、必要 API 与受限部署身份，按 `staging.example.json` 填入真实配置并运行 `npm run environment:check -- staging`。首次运行独立“部署测试环境” workflow 时选择成功构建的 `source_run`，并设 `bootstrap_staging=true`；脚本确认独立 staging 无既有 Functions、Hosting 发布、Auth 用户及 Firestore 集合，读取失败不视为空。生产不允许 bootstrap，后续 staging 发布关闭该开关。
 
 首次 bootstrap 失败时不存在旧版本可恢复：仅清理本次创建的函数、停用 Hosting 并恢复/移除本次 Rules release。停用 Hosting 会留下 disabled release 历史，再次 bootstrap 将被空项目门禁拒绝；应调查残留后规划受控恢复基线，或使用新的独立空 staging 项目，不能删除检查绕过。常规发布失败则恢复已有版本和受管环境变量，保留无关配置。
 
@@ -1093,18 +1093,35 @@ Firebase CLI 会优先使用本机缓存登录，因此仅设置 ADC 不足以�
 
 ### 11.17 Gitea Actions 分阶段发布
 
-按用户要求，工作流分为 `ci（本地测试）→ deploy-staging → verify-staging → deploy-production` 四个独立 job。PR 只运行本地测试；main push、v* tag push 及明确勾选发布的 main 手动任务走完整流水线。前一阶段失败或跳过，后续生产发布不会执行。当前实例为 Gitea 1.25.5，其 [1.25 官方兼容说明](https://docs.gitea.com/1.25/usage/actions/comparison/) 指出 concurrency 与 job timeout-minutes 被忽略，因此不用这些 YAML 字段作为串行或超时保证；实际命令使用 GNU timeout，环境发布使用 Firestore compare-and-set 锁。
+Gitea 1.25.5 界面无法单独重跑 job；四个 job 同属一份 workflow 时，生产失败也必须重跑构建和昂贵的模型验收。因此拆为四个独立 workflow，每个仅一个阶段，可单独从 Actions 页面 Run workflow 触发或重跑。当前改为人工选择下一阶段，不在 main push 后自动部署。PR/main push/v* tag 只运行本地测试；发布阶段只接受 main 上 push 或手动成功构建，不使用 tag/PR 产物。
+
+| Actions 入口 | 文件 | 手动输入 `source_run` |
+| --- | --- | --- |
+| Vela CI/CD（本地测试与构建） | `.gitea/workflows/ci.yml` | 无；PR、main push 自动运行，也可手动运行 |
+| 2. 部署测试环境 | `.gitea/workflows/deploy-staging.yml` | 成功本地测试的页面运行编号 |
+| 3. 在线验收测试环境 | `.gitea/workflows/verify-staging.yml` | 成功测试环境部署的页面运行编号 |
+| 4. 发布生产并验证 | `.gitea/workflows/deploy-production.yml` | 成功在线验收的页面运行编号 |
+
+`source_run` 是 Actions 页面 `#74` 中的 `74`，不是 API run ID；从 main 触发，脚本通过仓库 API 定位上游，验证仓库、main 分支、事件、workflow 文件、对应 job 的 SHA/成功状态。独立 workflow 必须整体成功；迁移兼容旧 `ci.yml` 时只检查对应阶段 job 成功，允许同一次旧流水线的后续生产失败后复用其已成功验收。比如 #74 在线验收通过而生产失败，可以独立发布生产时选 74；#75 在线验收失败则禁止使用。不能输入任意下载地址或仅指定 SHA 绕过门禁。
+
+跨 workflow 使用当前实例实际支持的 v3 artifact 下载地址，绑定已验证运行编号与产物名称；下载限制体积，解包前检查全部 ZIP/TAR 条目，拒绝目录穿越、链接、重复路径和异常类型。新部署/验收证据中的 `workflow-source.json` 记录候选 SHA、原始构建运行编号和直接上游编号。下游重新下载原始构建产物，校验清单/文件哈希、证据 SHA 和 main 祖先关系后 checkout 候选源码，绑定环境配置，不重新构建，也不将控制 workflow 的 HEAD 误认为候选版本。
+
+当前实例的 [1.25 官方兼容说明](https://docs.gitea.com/1.25/usage/actions/comparison/) 指出 concurrency 与 job timeout-minutes 被忽略，因此实际命令使用 GNU timeout，环境发布使用 Firestore compare-and-set 锁。
 
 1. **本地测试与构建**：类型/边界、OpenAPI 兼容、单元测试、模拟器、UI/API 浏览器回归；仅在这里构建一次，打包干净 Git 提交对应的不可变产物。
-2. **部署测试环境**：下载原始产物并绑定 staging 配置，验证真实候选 Vertex，取得环境锁后保存旧 Functions/Secrets 引用/Hosting/Rules 快照，再部署并执行必要就绪检查。成功仅生成 `status:deployed` 的 deployment receipt，不生成 verified 发布结果。receipt 绑定 SHA、codeHash、configHash、项目、流水线 owner 与 rollback 快照哈希，随脱敏部署证据上传。
-3. **在线验收**：重新下载同一原始产物与本次部署证据；不重新构建或部署。验证 receipt、快照哈希、流水线锁和当前 Hosting 版本后，运行真实 Stripe Webhook 权限与额度同步、真实网页流程、原有 8 个模型场景，以及个人＋公司/公司＋公司的 API 与真实 UI 合盘补充测试。全部通过且 fixture 清理成功才产生 verified 证据。过程中的测试失败按原快照回滚；锁丢失或站点已被手工替换时拒绝覆盖更新版本。
+2. **部署测试环境**：下载原始产物并绑定 staging 配置，验证真实候选 Vertex，取得环境锁后保存旧 Functions/Secrets 引用/Hosting/Rules 快照，再部署并执行必要就绪检查。成功仅生成 `status:deployed` 的 deployment receipt，不生成 verified 发布结果。receipt 绑定 SHA、codeHash、configHash、项目、部署运行 owner 与 rollback 快照哈希，随脱敏部署证据上传。
+3. **在线验收**：重新下载同一原始产物与本次部署证据；不重新构建或部署。沿用原部署运行 owner（而非新验收运行 ID），验证 receipt、快照哈希、发布锁和当前 Hosting 版本后，运行真实 Stripe Webhook 权限与额度同步、真实网页流程、原有 8 个模型场景，以及个人＋公司/公司＋公司的 API 与真实 UI 合盘补充测试。全部通过且 fixture 清理成功才产生 verified 证据。过程中的测试失败按原快照回滚；锁丢失或站点已被手工替换时拒绝覆盖更新版本。
 4. **生产发布并验证**：只依赖在线验收成功；从同一原始产物绑定生产配置，不重新构建。晋级检查要求同 SHA/codeHash/staging configHash、8 场景、两类公司 API/UI 验收及启用支付时的匹配支付证据；随后运行生产候选检查、部署、线上冒烟，失败恢复生产快照。
 
 `VELA_RELEASE_PHASE=deploy|verify|all` 将分段行为落实到脚本，生产仅允许 all。CI 使用独立私有临时凭据目录与两套项目凭据，下载/上传的证据不包含原始 secret 或支付 URL；wrapper 在退出及信号处理时删除临时配置。既有服务账号 JSON secret 可继续使用，配置 impersonation/WIF ADC 时须同时设置对应项目的 release service account 变量。Gitea 1.25 不提供 GitHub 等价的 environment 审批或 OIDC id-token 能力，不能仅加 YAML 字段便声称具有这些保护。
 
 `releaseLocks/pipeline` 位于各环境自己的 Firestore，2 小时租约从 staging 部署持续到在线验收完成；生产使用自己的锁。获取、过期接管和释放均带 Firestore 写入前置条件，过期或不同 owner 无权继续验证/回滚。首次空环境检查只豁免发布锁集合，仍拒绝业务数据。另一个发布占锁时新任务直接失败，不并发覆盖。若 runner 被强杀、任务取消或证据传输失败，使在线验证进程未能运行，生产仍被阻止；应使用留存快照人工恢复和检查锁，不能把租约到期视作自动完成回滚。
 
-本次本地完整测试 185 项：182 通过、3 项环境专用跳过；发布/环境/阶段组 37/37，通过 YAML 实际解析与四阶段依赖图检查、真实 staging Firestore 锁竞争与清理验证。部署与验收分段的顺序、失败阻断回归均通过。未触发远端 Gitea Actions、未发布生产；线上仍运行前一轮已验证 staging 版本。首轮远端执行需要已配置的 `FIREBASE_STAGING_SERVICE_ACCOUNT_B64`、`FIREBASE_SERVICE_ACCOUNT_B64`，若用 ADC 模拟则还需对应 `FIREBASE_STAGING_RELEASE_SERVICE_ACCOUNT` / `FIREBASE_RELEASE_SERVICE_ACCOUNT` 变量。
+重跑规则：构建失败只重跑本地测试；部署失败且已成功回滚，可继续选择原构建编号重新部署；验收在有效租约及原部署仍在线时可单独触发，但真实验收失败会回滚并释放锁，之后必须重新部署再验收；生产失败并成功回滚后，可复用未过期的已成功验收产物，单独重跑生产。取消/强杀、回滚失败或锁已失效不视为可安全续跑，须先检查环境并恢复。制品保留 14 天，过期或上游无法读取立即阻断，重新构建与验收，不自动回退其他版本。
+
+跨 workflow 回归包含上游失败/跳过/错误仓库/PR/错误阶段拒绝、旧流水线对应阶段成功的兼容、SHA/构建来源关联、部署 owner 传递、真实 HTTP 下载和不可变制品验证，以及 ZIP/TAR 路径穿越/链接/重复项拒绝。既有阶段、锁、回滚和晋级证据测试继续运行。所需凭据仍为 `FIREBASE_STAGING_SERVICE_ACCOUNT_B64` / `FIREBASE_SERVICE_ACCOUNT_B64`；跨运行读取使用内置 job token，不引入长期管理 PAT。
+
+本地验证：191 项测试中 188 通过、3 项环境专用跳过；类型/边界检查与四份 YAML 实际解析通过。
 
 保护分支 required status context 为 `Vela CI/CD / ci (pull_request)`；本地测试 job 保留 `ci` 名称以兼容该规则，不降低或跳过保护分支检查。
 

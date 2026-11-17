@@ -1,0 +1,51 @@
+name: 3. 在线验收测试环境
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: '测试环境部署成功的 Actions 运行编号（页面上的 #编号；不是 API ID）'
+        required: true
+        type: string
+# Independent manual workflows; real timeouts and Firestore CAS locks enforce safety.
+jobs:
+  verify-staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Validate successful upstream run and download its immutable artifact
+        env:
+          SOURCE_RUN: ${{ inputs.source_run }}
+          GITEA_TOKEN: ${{ github.token }}
+        run: timeout --signal=TERM --kill-after=10s 10m node scripts/ci/workflow-source.mjs verify
+      - name: Use the exact reviewed candidate source without rebuilding
+        run: git checkout --detach "$CI_COMMIT_SHA"
+      - run: npm ci
+      - name: Bind staging configuration and check promotion evidence
+        run: node scripts/ci/bind-artifact.mjs staging
+      - name: Install isolated browser tooling
+        run: |
+          npm install --prefix "$RUNNER_TEMP/vela-browser" --no-package-lock --ignore-scripts playwright-core@1.62.1
+          node "$RUNNER_TEMP/vela-browser/node_modules/playwright-core/cli.js" install --with-deps chromium
+      - name: verify with isolated environment credentials
+        env:
+          CI: 'true'
+          VELA_ENVIRONMENT: staging
+          VELA_BOOTSTRAP_STAGING: 'false'
+          VELA_RELEASE_SERVICE_ACCOUNT: ${{ vars.FIREBASE_STAGING_RELEASE_SERVICE_ACCOUNT }}
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_STAGING_SERVICE_ACCOUNT_B64 }}
+          PLAYWRIGHT_CORE_PATH: ${{ runner.temp }}/vela-browser/node_modules/playwright-core
+        run: timeout --signal=TERM --kill-after=60s 45m node scripts/ci/job-release.mjs verify
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: staging-verified-evidence
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
