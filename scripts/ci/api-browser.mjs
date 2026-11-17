@@ -170,6 +170,16 @@ try{
   await page.locator('#auth-consent').waitFor();
   const newUid=await page.evaluate(()=>window.harness.currentUid());assert(newUid);authUids.add(newUid);
   assert.equal((await db.doc(`users/${newUid}`).get()).exists,false,'Authentication must not automatically record consent');
+  await page.evaluate(()=>{localStorage.setItem('vela_magic_link_email','previous@example.test');localStorage.setItem('vela_magic_link_handoff','previous draft');});
+  await page.getByRole('button',{name:'退出登录',exact:true}).click();
+  assert.deepEqual(await page.evaluate(()=>[localStorage.getItem('vela_magic_link_email'),localStorage.getItem('vela_magic_link_handoff')]),[null,null],'Abandoning onboarding must clear the previous login handoff');
+  await page.getByRole('button',{name:'登录 / 注册账号',exact:true}).click();
+  await page.getByLabel('邮箱地址',{exact:true}).fill(credentials.email);
+  await page.getByLabel('密码（至少 6 位）',{exact:true}).fill(credentials.password);
+  await page.getByRole('button',{name:'邮箱登录并继续',exact:true}).click();
+  await page.locator('#auth-consent').waitFor();
+  assert.equal(await page.evaluate(()=>window.harness.currentUid()),newUid);
+  assert.equal((await db.doc(`users/${newUid}`).get()).exists,false,'An Auth identity alone is not a recorded agreement');
   await page.getByRole('button',{name:'同意并继续',exact:true}).click();
   assert.equal((await db.doc(`users/${newUid}`).get()).exists,false,'Unchecked confirmation must not initialize the account');
   await page.locator('#auth-consent').check();

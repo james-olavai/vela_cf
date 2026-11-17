@@ -290,6 +290,9 @@ export function App() {
   };
 
   const handleSignOut = async () => {
+    setPendingHandoff(null);
+    window.localStorage.removeItem(MAGIC_HANDOFF_KEY);
+    window.localStorage.removeItem(MAGIC_EMAIL_KEY);
     await signOut(auth);
     navigate('/');
   };
