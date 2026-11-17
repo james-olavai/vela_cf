@@ -59,10 +59,14 @@ export async function rollback(saved, { request=google, sleep=ms=>new Promise(r=
   const pending=[], errors=[];
   if(saved.firstDeployment)assert(saved.environment==='staging' && saved.projectId!==loadEnvironment('production').firebase.projectId,'Invalid bootstrap rollback target');
   for(const f of saved.functions) try {
+    const current=await request(`https://cloudfunctions.googleapis.com/v2/${f.name}`);
+    // Firebase CLI trusts this label when skipping unchanged functions. A direct
+    // source/config rollback must invalidate the failed candidate's cached hash.
+    const labels={...current.labels};delete labels['firebase-functions-hash'];
     let serviceConfig;
-    if(f.environmentVariables){const current=await request(`https://cloudfunctions.googleapis.com/v2/${f.name}`),variables={...current.serviceConfig?.environmentVariables};for(const key of ownedEnvironmentKeys){if(key in f.environmentVariables)variables[key]=f.environmentVariables[key];else delete variables[key];}serviceConfig={environmentVariables:variables};}
+    if(f.environmentVariables){const variables={...current.serviceConfig?.environmentVariables};for(const key of ownedEnvironmentKeys){if(key in f.environmentVariables)variables[key]=f.environmentVariables[key];else delete variables[key];}serviceConfig={environmentVariables:variables};}
     if(f.secretEnvironmentVariables!==undefined)serviceConfig={...serviceConfig,secretEnvironmentVariables:f.secretEnvironmentVariables};
-    const op=await request(`https://cloudfunctions.googleapis.com/v2/${f.name}?updateMask=buildConfig.source,buildConfig.runtime,buildConfig.entryPoint${f.environmentVariables?',serviceConfig.environmentVariables':''}${f.secretEnvironmentVariables!==undefined?',serviceConfig.secretEnvironmentVariables':''}`,{method:'PATCH',body:{name:f.name,buildConfig:{source:f.buildConfig.source,runtime:f.buildConfig.runtime,entryPoint:f.buildConfig.entryPoint},...(serviceConfig?{serviceConfig}:{})}});
+    const op=await request(`https://cloudfunctions.googleapis.com/v2/${f.name}?updateMask=labels,buildConfig.source,buildConfig.runtime,buildConfig.entryPoint${f.environmentVariables?',serviceConfig.environmentVariables':''}${f.secretEnvironmentVariables!==undefined?',serviceConfig.secretEnvironmentVariables':''}`,{method:'PATCH',body:{name:f.name,labels,buildConfig:{source:f.buildConfig.source,runtime:f.buildConfig.runtime,entryPoint:f.buildConfig.entryPoint},...(serviceConfig?{serviceConfig}:{})}});
     pending.push(op.name);
   } catch(e) { errors.push(e); }
   for(const name of saved.createdFunctions || []) try {

@@ -24,7 +24,7 @@ test('Rollback restores frozen Functions source, Hosting version, and Rules and 
     if(url.endsWith('/releases?pageSize=1'))return {releases:[{version:{name:'sites/test/versions/new'}}]};
     return {};
   }});
-  assert.deepEqual(calls[0].options.body.buildConfig.source,saved.functions[0].buildConfig.source);
+  assert.deepEqual(calls.find(c=>c.options?.body?.buildConfig).options.body.buildConfig.source,saved.functions[0].buildConfig.source);
   assert(calls.some(c=>c.url.includes('versionName=sites%2Ftest%2Fversions%2Fold')));
   assert(calls.some(c=>c.options?.body?.release?.rulesetName==='projects/test/rulesets/old'));
   assert(calls.some(c=>c.url.includes('/operations/')));
@@ -209,6 +209,7 @@ test('Rollback restores previous secret versions and removes newly introduced bi
   for(const secretEnvironmentVariables of [previous,[]]) {
     let patch,urlMask;
     await rollback({...saved,functions:saved.functions.map(f=>({...f,secretEnvironmentVariables}))},{request:async(url,options)=>{
+      if(!options && url.includes('/functions/chat'))return {};
       if(url.includes('/functions/chat')) {patch=options.body.serviceConfig;urlMask=url;return {done:true};}
       if(url.endsWith('/releases?pageSize=1'))return {releases:[{version:{name:saved.hosting}}]};
       return {done:true};
@@ -216,6 +217,24 @@ test('Rollback restores previous secret versions and removes newly introduced bi
     assert.deepEqual(patch.secretEnvironmentVariables,secretEnvironmentVariables);
     assert(urlMask.includes('serviceConfig.secretEnvironmentVariables'));
   }
+});
+
+test('A rolled-back function loses the failed candidate hash so the same candidate can deploy again',async()=>{
+  let state={labels:{'firebase-functions-hash':'candidate-hash','deployment-tool':'cli-firebase',team:'vela'},serviceConfig:{environmentVariables:{STRIPE_BILLING_ENABLED:'true',UNRELATED:'keep'}}};
+  const previous={...saved,functions:saved.functions.map(f=>({...f,environmentVariables:{STRIPE_BILLING_ENABLED:'false'}}))};
+  await rollback(previous,{request:async(url,options)=>{
+    if(url.includes('/functions/chat')){
+      if(!options)return state;
+      assert(url.includes('updateMask=labels,'));
+      state={...state,...options.body};return {done:true};
+    }
+    if(url.endsWith('/releases?pageSize=1'))return {releases:[{version:{name:saved.hosting}}]};
+    return {done:true};
+  }});
+  assert.equal(state.serviceConfig.environmentVariables.STRIPE_BILLING_ENABLED,'false');
+  assert.equal(state.serviceConfig.environmentVariables.UNRELATED,'keep');
+  assert.equal(state.labels['firebase-functions-hash'],undefined,'CLI must not skip the next deployment based on the failed candidate hash');
+  assert.deepEqual(state.labels,{'deployment-tool':'cli-firebase',team:'vela'});
 });
 
 

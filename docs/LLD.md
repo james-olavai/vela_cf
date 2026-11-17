@@ -1121,15 +1121,17 @@ Gitea 1.25.5 界面无法单独重跑 job；四个 job 同属一份 workflow 时
 
 重跑规则：构建失败只重跑本地测试；部署失败且已成功回滚，可继续选择原构建编号重新部署；验收在有效租约及原部署仍在线时可单独触发，但真实验收失败会回滚并释放锁，之后必须重新部署再验收；生产失败并成功回滚后，可复用未过期的已成功验收产物，单独重跑生产。取消/强杀、回滚失败或锁已失效不视为可安全续跑，须先检查环境并恢复。制品保留 14 天，过期或上游无法读取立即阻断，重新构建与验收，不自动回退其他版本。
 
+生产独立重试补充发现：直接通过 Cloud Functions API 回滚源和环境变量后，原候选的 `firebase-functions-hash` 标签仍保留，导致 Firebase CLI 重试同一候选时错误输出 Skipped，实际 billing 仍为旧值。回滚现在同一 PATCH 恢复源/配置并移除该 CLI 哈希标签，保留其他标签；下一次发布必须重新部署，不能信任失败候选的缓存。回归验证回滚后 billing=false、无候选哈希且其他配置/标签保留。既有线上残留标签在环境锁保护下修正后再执行正常独立生产发布，不直接改开关绕过门禁。
+
 跨 workflow 回归包含上游失败/跳过/错误仓库/PR/错误阶段拒绝、旧流水线对应阶段成功的兼容、SHA/构建来源关联、部署 owner 传递、真实 HTTP 下载和不可变制品验证，以及 ZIP/TAR 路径穿越/链接/重复项拒绝。既有阶段、锁、回滚和晋级证据测试继续运行。所需凭据仍为 `FIREBASE_STAGING_SERVICE_ACCOUNT_B64` / `FIREBASE_SERVICE_ACCOUNT_B64`；跨运行读取使用内置 job token，不引入长期管理 PAT。
 
-本地验证：191 项测试中 188 通过、3 项环境专用跳过；类型/边界检查与四份 YAML 实际解析通过。
+本地验证：192 项测试中 189 通过、3 项环境专用跳过；类型/边界检查与四份 YAML 实际解析通过。
 
 保护分支 required status context 为 `Vela CI/CD / ci (pull_request)`；本地测试 job 保留 `ci` 名称以兼容该规则，不降低或跳过保护分支检查。
 
 ### 11.18 正式收款启用
 
-用户确认正式 Stripe 配置已完成并将 live key 与 Webhook secret 存入生产 Secret Manager，授权接入。核实生产域名 velaastro.com 的 Hosting/所有权/证书均 ACTIVE，Stripe 账户可收款和提现；Go/Pro 正式价格为 USD 9.90/24.90 每月，商品 firebaseRole 正确，生产 Webhook 已启用全部必要事件。补齐默认 live Customer Portal 的正式返回地址、条款/隐私链接、固定 Go/Pro 切换、到期取消、发票和付款方式管理。运行账户与 CI 发布账户在两项指定支付 Secret 上获得所需读取权限，密钥不落盘或输出。
+用户确认正式 Stripe 配置已完成并将 live key 与 Webhook secret 存入生产 Secret Manager，授权接入。核实生产域名 velaastro.com 的 Hosting/所有权/证书均 ACTIVE，Stripe 账户可收款和提现；Go/Pro 正式价格为 USD 9.90/24.90 每月，商品 firebaseRole 正确，生产 Webhook 已启用全部必要事件。补齐默认 live Customer Portal 的正式返回地址、条款/隐私链接、固定 Go/Pro 切换、到期取消、发票和付款方式管理。运行账户与 CI 发布账户在两项指定支付 Secret 上获得所需读取权限，密钥不落盘或输出。生产 CI 另绑定仅含 firebaseauth.users.delete 的自定义清理角色，清理本轮自动创建的 Auth fixture；不授予完整 Auth Admin。
 
 本次纳入用户已在工作区设置的生产 billing.enabled=true、mode=live 及正式 price IDs；Checkout 与测试配置按现有编辑关闭 automatic_tax，条款不再宣称自动计税，保留 required 服务条款确认。此实现不会由 Stripe 自动计算或代收税费；如以后启用，须配置真实税务设置并同步 Checkout 和条款。生产与 staging 继续使用独立 Secret 和商品价格。
 
