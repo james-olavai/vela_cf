@@ -19,6 +19,8 @@ interface SettingsModalProps {
   authError: string | null;
   authNotice: string | null;
   pendingQuestion?: string;
+  consentRequired?: boolean;
+  onConfirmConsent: () => void;
   onConfirmGoogleLogin: () => void;
   onEmailAuth: (mode: EmailAuthMode, email: string, password: string) => void;
   onResetPassword: (email: string) => void;
@@ -34,6 +36,8 @@ export function SettingsModal({
   authError,
   authNotice,
   pendingQuestion,
+  consentRequired = false,
+  onConfirmConsent,
   onConfirmGoogleLogin,
   onEmailAuth,
   onResetPassword,
@@ -59,7 +63,7 @@ export function SettingsModal({
 
   const handleEmailSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!agreed || authBusy || !authEmail.trim()) return;
+    if (authBusy || !authEmail.trim()) return;
     onEmailAuth(emailMode, authEmail.trim(), password);
   };
 
@@ -87,6 +91,9 @@ export function SettingsModal({
             </div>
           )}
 
+          {authError && <p role="alert" className="m-0 text-[13px] text-danger">{authError}</p>}
+          {authNotice && <p role="status" className="m-0 text-[13px] text-accent-bright">{authNotice}</p>}
+
           {!uid ? (
             <div className="p-4 rounded-[12px] border border-border bg-[#0b1020] flex flex-col gap-3.5">
               <div>
@@ -103,16 +110,14 @@ export function SettingsModal({
                 </div>
               )}
 
-              {authError && <p role="alert" className="m-0 text-[13px] text-danger">{authError}</p>}
-              {authNotice && <p role="status" className="m-0 text-[13px] text-accent-bright">{authNotice}</p>}
 
               <button
                 type="button"
-                disabled={!agreed || authBusy}
+                disabled={authBusy}
                 onClick={onConfirmGoogleLogin}
                 className="min-h-[42px] w-full rounded-[10px] bg-accent text-on-accent text-[14px] font-bold border-0 cursor-pointer hover:bg-accent-bright disabled:opacity-45 disabled:cursor-not-allowed"
               >
-                {authBusy ? '正在处理…' : '使用 Google 账号继续并开始解读'}
+                {authBusy ? '正在处理…' : pendingQuestion ? '使用 Google 账号登录并开始解读' : '使用 Google 账号登录'}
               </button>
 
               <div className="flex items-center gap-3 text-[13px] text-muted">
@@ -179,7 +184,7 @@ export function SettingsModal({
                   )}
                   <button
                     type="submit"
-                    disabled={!agreed || authBusy || !authEmail.trim() || (emailMode !== 'magic' && password.length < 6)}
+                    disabled={authBusy}
                     className="ml-auto min-h-[38px] px-4 rounded-[8px] border border-accent/70 bg-selected text-accent-bright text-[13px] font-semibold cursor-pointer hover:bg-accent hover:text-on-accent disabled:opacity-45 disabled:cursor-not-allowed"
                   >
                     {emailMode === 'login' ? '邮箱登录并继续' : emailMode === 'register' ? '注册邮箱并继续' : '发送免密登录链接'}
@@ -187,21 +192,7 @@ export function SettingsModal({
                 </div>
               </form>
 
-              <label className="flex items-start gap-2.5 pt-1 border-t border-divider text-[13px] leading-[1.55] text-secondary cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 accent-accent cursor-pointer shrink-0"
-                />
-                <span>
-                  我已年满 18 岁，并同意{' '}
-                  <a href="/terms" onClick={(e) => { e.preventDefault(); onClose(); navigate('/terms'); }} className="underline text-accent-bright">服务条款</a>{' '}
-                  与{' '}
-                  <a href="/privacy" onClick={(e) => { e.preventDefault(); onClose(); navigate('/privacy'); }} className="underline text-accent-bright">隐私政策</a>
-                  ；如录入亲友出生信息，确认已获对方同意。
-                </span>
-              </label>
+
             </div>
           ) : (
             <div className="p-4 rounded-[12px] border border-border bg-panel-2 flex flex-col items-stretch sm:flex-row sm:items-center justify-between gap-4">
@@ -219,6 +210,32 @@ export function SettingsModal({
                 退出登录
               </button>
             </div>
+          )}
+
+          {uid && consentRequired && (
+            <form onSubmit={(event) => { event.preventDefault(); if (agreed && !authBusy) onConfirmConsent(); }} className="p-4 rounded-[12px] border border-border bg-panel-2 flex flex-col gap-3">
+              <p className="m-0 text-[14px] font-bold text-primary">首次使用，完成账号确认</p>
+              <p className="m-0 text-[13px] text-muted">确认后即可保存档案和开始解读，之后登录无需重复确认。</p>
+              <label htmlFor="auth-consent" className="flex items-start gap-2.5 pt-1 border-t border-divider text-[13px] leading-[1.55] text-secondary cursor-pointer select-none">
+                <input
+                  id="auth-consent" name="consent" required
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-accent cursor-pointer shrink-0"
+                />
+                <span>
+                  我已年满 18 岁，并同意{' '}
+                  <a href="/terms" onClick={(e) => { e.preventDefault(); onClose(); navigate('/terms'); }} className="underline text-accent-bright">服务条款</a>{' '}
+                  与{' '}
+                  <a href="/privacy" onClick={(e) => { e.preventDefault(); onClose(); navigate('/privacy'); }} className="underline text-accent-bright">隐私政策</a>
+                  ；如录入亲友出生信息，确认已获对方同意。
+                </span>
+              </label>
+              <button type="submit" disabled={authBusy} className="min-h-[44px] px-4 rounded-[8px] border-0 bg-accent text-on-accent text-[14px] font-bold cursor-pointer disabled:opacity-45">
+                {authBusy ? '正在确认…' : '同意并继续'}
+              </button>
+            </form>
           )}
 
           <div className="p-4 rounded-[12px] border border-border bg-base flex flex-col gap-3">
@@ -245,8 +262,8 @@ export function SettingsModal({
             </div>
           </div>
 
-          {open && uid && <ApiTokensPanel key={uid} uid={uid} />}
-          {uid && (
+          {open && uid && !consentRequired && <ApiTokensPanel key={uid} uid={uid} />}
+          {uid && !consentRequired && (
             <>
               <div className="p-4 rounded-[12px] border border-border bg-base flex flex-col items-stretch sm:flex-row sm:items-center justify-between gap-4">
                 <div>

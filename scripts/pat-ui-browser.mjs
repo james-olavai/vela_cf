@@ -16,7 +16,7 @@ window.__pat={uid:'user-a',listeners:new Set(),authMode:'success',authCalls:0,re
 window.__pat.user={uid:'user-a',email:'user-a@example.invalid',providerData:[{providerId:'google.com'}],getIdToken:async(force)=>{if(force)window.__pat.refreshes++;return 'synthetic-firebase-user-a'}};
 function Harness(){const[uid,setUid]=useState('user-a'),[open,setOpen]=useState(true);
 window.__switchUid=(next)=>{window.__pat.uid=next;window.__pat.user=next?{uid:next,providerData:[{providerId:'google.com'}],getIdToken:async()=> 'synthetic-firebase-'+next}:null;window.__pat.listeners.forEach(fn=>fn(next));setUid(next);};
-return <><button onClick={()=>setOpen(v=>!v)}>设置测试开关</button><SettingsModal open={open} uid={uid} email={uid+'@example.invalid'} authBusy={false} authError={null} authNotice={null} onConfirmGoogleLogin={()=>{}} onEmailAuth={()=>{}} onResetPassword={()=>{}} onClose={()=>setOpen(false)} onSignOut={()=>window.__switchUid(null)}/></>;}
+return <><button onClick={()=>setOpen(v=>!v)}>设置测试开关</button><SettingsModal open={open} uid={uid} email={uid+'@example.invalid'} authBusy={false} authError={null} authNotice={null} onConfirmConsent={()=>{}} onConfirmGoogleLogin={()=>{}} onEmailAuth={()=>{}} onResetPassword={()=>{}} onClose={()=>setOpen(false)} onSignOut={()=>window.__switchUid(null)}/></>;}
 createRoot(document.getElementById('root')).render(<React.StrictMode><Harness/></React.StrictMode>);`;
 const authAdapter=`
 export const EmailAuthProvider={credential:(email,password)=>({email,password})};

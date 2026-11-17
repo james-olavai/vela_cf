@@ -48,6 +48,8 @@ export function App() {
   const [retry, setRetry] = useState(0);
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [consentUser, setConsentUser] = useState<User | null>(null);
+  const consentedUid = useRef<string | null>(null);
   const uidRef = useRef(user?.uid);
   uidRef.current = user?.uid;
   const [tier, setTier] = useState<Tier>('free');
@@ -64,9 +66,20 @@ export function App() {
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [pendingHandoff, setPendingHandoff] = useState<PendingHandoff | null>(null);
 
-  const finalizePostLogin = async (loggedUser: User, handoff: PendingHandoff | null) => {
+  const finalizePostLogin = async (loggedUser: User, handoff: PendingHandoff | null, consentGiven=false) => {
     const uid = loggedUser.uid;
-    await ensureUserRecord(uid, loggedUser.email ?? '', loggedUser.displayName ?? '');
+    try { await ensureUserRecord(uid, loggedUser.email ?? '', loggedUser.displayName ?? '', consentGiven); }
+    catch (error) {
+      if (auth.currentUser?.uid !== uid) return;
+      if ((error as {code?:string}).code !== 'CONSENT_REQUIRED') throw error;
+      if (consentedUid.current !== uid) { setConsentUser(loggedUser); setSettingsOpen(true); }
+      return;
+    }
+    if (auth.currentUser?.uid !== uid) return;
+    consentedUid.current = uid;
+    setConsentUser(null);
+    setUser(loggedUser);
+    setRetry((n) => n + 1);
 
     if (handoff) {
       const now = new Date().toISOString();
@@ -167,8 +180,10 @@ export function App() {
       setDataError(null);
       if (lastUid !== (nextUser?.uid ?? null)) { setProfiles([]); setSessions([]); setUsage({ periodStart: utcMonthPeriodStart(), used: 0 }); }
       lastUid = nextUser?.uid ?? null;
-      setUser(nextUser);
       if (!nextUser) {
+        setUser(null);
+        setConsentUser(null);
+        consentedUid.current = null;
         setTier('free');
         setProfiles([]);
         setSessions([]);
@@ -176,6 +191,21 @@ export function App() {
         setAuthReady(true);
         return;
       }
+
+      try {
+        if (consentedUid.current !== nextUser.uid) await ensureUserRecord(nextUser.uid, nextUser.email ?? '', nextUser.displayName ?? '');
+      } catch (error) {
+        if (run !== generation) return;
+        if ((error as {code?:string}).code === 'CONSENT_REQUIRED') {
+          if (consentedUid.current !== nextUser.uid) {
+            setUser(null); setConsentUser(nextUser); setSettingsOpen(true); setAuthReady(true); return;
+          }
+        } else { setDataError('账号信息加载失败，请检查网络后重试'); setAuthReady(true); return; }
+      }
+      if (run !== generation) return;
+      consentedUid.current = nextUser.uid;
+      setConsentUser(null);
+      setUser(nextUser);
 
       try {
         const tokenRes = await nextUser.getIdTokenResult();
@@ -325,10 +355,18 @@ export function App() {
       />
 
       <Suspense fallback={<p role="status" className="sr-only">正在加载账号界面</p>}>
-      {settingsOpen && <SettingsModal key={user?.uid ?? 'visitor'}
+      {settingsOpen && <SettingsModal key={user?.uid ?? consentUser?.uid ?? 'visitor'}
         open={settingsOpen}
-        uid={user?.uid ?? null}
-        email={user?.email ?? 'Google 用户'}
+        uid={user?.uid ?? consentUser?.uid ?? null}
+        email={user?.email ?? consentUser?.email ?? 'Google 用户'}
+        consentRequired={Boolean(consentUser)}
+        onConfirmConsent={() => {
+          if (!consentUser || authBusy) return;
+          setAuthBusy(true); setAuthError(null);
+          void finalizePostLogin(consentUser, pendingHandoff, true)
+            .catch((error) => setAuthError(formatAppError(error, '账号确认失败，请重试')))
+            .finally(() => setAuthBusy(false));
+        }}
         authBusy={authBusy}
         authError={authError}
         authNotice={authNotice}
@@ -338,7 +376,7 @@ export function App() {
         onResetPassword={(email) => void handleResetPassword(email)}
         onClose={() => {
           setSettingsOpen(false);
-          setPendingHandoff(null);
+          if (!consentUser) setPendingHandoff(null);
         }}
         onSignOut={() => void handleSignOut()}
       />}

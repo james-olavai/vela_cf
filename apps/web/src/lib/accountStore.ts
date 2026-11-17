@@ -17,9 +17,10 @@ export async function loadSubscriptionPage(uid:string|null,signal:AbortSignal):P
   return {plans,subscriptions:subscriptions.items};
 }
 
-export async function ensureUserRecord(uid:string,email:string,displayName:string):Promise<UserRecord>{
-  try{return await businessApi<UserRecord>(uid,'/v1/me');}
+export async function ensureUserRecord(uid:string,email:string,displayName:string,consentGiven=false):Promise<UserRecord>{
+  try{const record=await businessApi<UserRecord>(uid,'/v1/me');if(record.acceptedTermsAt&&record.confirmedAdultAt)return record;}
   catch(error){if((error as {code?:string}).code!=='RESOURCE_NOT_FOUND')throw error;}
+  if(!consentGiven)throw Object.assign(new Error('CONSENT_REQUIRED'),{code:'CONSENT_REQUIRED'});
   return businessApi(uid,'/v1/me','PATCH',{displayName:displayName||email.split('@')[0]||'用户',acceptedTerms:true,confirmedAdult:true});
 }
 export async function exportUserDataJson(uid:string):Promise<void>{

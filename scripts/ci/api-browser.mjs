@@ -17,12 +17,13 @@ const server=await createServer({root:resolve('apps/web'),configFile:false,esbui
   name:'emulator-config-only',enforce:'pre',load(id){if(id.endsWith('/firebase-applet-config.json'))return JSON.stringify({projectId:project,apiKey:'fake',appId:'test',authDomain:'localhost',firestoreDatabaseId:database,recaptchaSiteKey:''});}
 }]});
 server.middlewares.use('/__api-browser',async(req,res,next)=>{
-  if(req.url!=='/'&&req.url!=='')return next();
-  const html=`<!doctype html><html><body><div id="subscription"></div><div id="plan-probe"></div><div id="geo"></div><script type="module">
+  if(new URL(req.url||'/', 'http://localhost').pathname!=='/')return next();
+  const html=`<!doctype html><html><body><div id="subscription"></div><div id="plan-probe"></div><div id="geo"></div><div id="app"></div><script type="module">
     import React from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {usePlan} from '/src/lib/planStore.ts';
+    import {App} from '/src/App.tsx';
     const planRoot=createRoot(document.getElementById('plan-probe'));
     function PlanProbe({uid,tier}){const current=usePlan(uid,tier);window.planProbe={uid,tier,plan:current.plan,error:current.error};window.retryPlan=current.retry;return React.createElement('output',{'data-testid':'plan-probe'},current.error||current.plan?.label||'套餐加载中');}
     import {ProfileManagerSubpage} from '/src/components/ProfileSidebarPanel.tsx';
@@ -44,14 +45,14 @@ server.middlewares.use('/__api-browser',async(req,res,next)=>{
     connectAuthEmulator(auth,${JSON.stringify(`http://${authHost}`)},{disableWarnings:true});
     window.state={profiles:[],usage:null,sessions:[],messages:[],errors:[]};window.stops=[];
     const fail=error=>window.state.errors.push(String(error));
-    window.harness={renderGeo:async uid=>{await auth.currentUser.getIdToken(true);const plans=await businessApi(uid,'/v1/plans');geoRoot.render(React.createElement(GeoProbe,{uid,plan:plans.items.find(p=>p.id==='pro')}));},renderPlan:(uid,tier)=>flushSync(()=>planRoot.render(React.createElement(PlanProbe,{uid,tier}))),renderSubscription:uid=>subscriptionRoot.render(React.createElement(SubscriptionSubpage,{uid,tier:'free',usage:{used:0,periodStart:'2026-11-01'},profileCount:0,onRequestAuth:()=>{},onOpenShare:()=>{}})),saveProfile,removeProfile,businessApi,ensureUserRecord,claimDailyShareBonus,createConsultationSession,fetchNatalChart,
+    window.harness={renderApp:()=>{planRoot.unmount();geoRoot.unmount();subscriptionRoot.unmount();createRoot(document.getElementById('app')).render(React.createElement(React.StrictMode,null,React.createElement(App)));},currentUid:()=>auth.currentUser?.uid,renderGeo:async uid=>{await auth.currentUser.getIdToken(true);const plans=await businessApi(uid,'/v1/plans');geoRoot.render(React.createElement(GeoProbe,{uid,plan:plans.items.find(p=>p.id==='pro')}));},renderPlan:(uid,tier)=>flushSync(()=>planRoot.render(React.createElement(PlanProbe,{uid,tier}))),renderSubscription:uid=>subscriptionRoot.render(React.createElement(SubscriptionSubpage,{uid,tier:'free',usage:{used:0,periodStart:'2026-11-01'},profileCount:0,onRequestAuth:()=>{},onOpenShare:()=>{}})),saveProfile,removeProfile,businessApi,ensureUserRecord,claimDailyShareBonus,createConsultationSession,fetchNatalChart,
       watch:uid=>{window.stops.push(subscribeProfiles(uid,v=>window.state.profiles=v,fail),subscribeUsage(uid,v=>window.state.usage=v,fail),subscribeSessions(uid,v=>window.state.sessions=v,fail));},
       watchMessages:(uid,id)=>window.stops.push(subscribeMessages(uid,id,v=>window.state.messages=v,fail)),
       stop:()=>window.stops.forEach(fn=>fn()),login:async(email,password)=>(await createUserWithEmailAndPassword(auth,email,password)).user.uid,cleanup:async()=>{if(auth.currentUser)await deleteUser(auth.currentUser);}};
   </script></body></html>`;
   try{res.setHeader('Content-Type','text/html');res.end(await server.transformIndexHtml('/__api-browser',html));}catch(error){next(error);}
 });
-let browser,uid;
+let browser,uid;const authUids=new Set();
 try{
   await server.listen();
   browser=await chromium.launch({executablePath:process.env.CHROME_BIN||undefined,headless:true,args:['--no-sandbox','--disable-gpu']});
@@ -62,7 +63,7 @@ try{
   assert(guest.natal.planets.length>0);assert(guest.portrait?.sunSign,'Guest natal API must provide server portrait');assert(guest.portrait.elements,'Portrait element summary missing');
   uid=await page.evaluate(async({email,password})=>window.harness.login(email,password),{email:`browser-${randomUUID()}@vela.test`,password:randomUUID()});
   assert.notEqual(uid,'e2e_test_user');
-  await page.evaluate(async uid=>{await window.harness.ensureUserRecord(uid,'ignored-client-email','Browser API');window.harness.watch(uid);},uid);
+  await page.evaluate(async uid=>{await window.harness.ensureUserRecord(uid,'ignored-client-email','Browser API',true);window.harness.watch(uid);},uid);
   const profile={name:'Browser API',birthDateTime:'1994-06-03T08:20',locationName:'Shanghai',latitude:31.23,longitude:121.47,timezone:'Asia/Shanghai',gender:'female'};
   const id=await page.evaluate(({uid,profile})=>window.harness.saveProfile(uid,null,profile),{uid,profile});
   const ref=db.doc(`users/${uid}/profiles/${id}`);
@@ -147,9 +148,65 @@ try{
   const actual=(await db.doc(`users/${uid}/sessions/${countrySession.id}`).get()).data();assert.equal(actual.frozenSubjects.find(s=>s.ref==='country').countryChart.version,frozen.countryChart.version);
   assert.equal((await db.collection(`users/${uid}/profiles`).get()).size,1,'Country must not be saved as an extra user profile');
   console.log('PASS browser geographic UI: internal keyboard/IME matching, clear stale selection, no external request while typing, real profile reference, country recommendation/explicit selection and frozen API session');
+  authUids.add(uid);
+  // Real App + Firebase SDK + API: returning users never reconfirm consent.
+  const originalConsent=(await db.doc(`users/${uid}`).get()).data();
+  const beforeAuthWrites=writes.filter(w=>w.method==='PATCH'&&w.url.endsWith('/v1/me')).length;
+  await page.evaluate(()=>window.harness.renderApp());
+  await page.getByRole('button',{name:/^账号设置：/}).click();
+  await page.getByRole('dialog',{name:'账号与合规设置'}).waitFor();
+  assert.equal(await page.locator('#auth-consent').count(),0);
+  assert.equal(await page.getByRole('button',{name:/使用 Google 账号/}).count(),0);
+  assert.equal(writes.filter(w=>w.method==='PATCH'&&w.url.endsWith('/v1/me')).length,beforeAuthWrites);
+  await page.getByRole('button',{name:'退出登录',exact:true}).click();
+  await page.getByRole('button',{name:'登录 / 注册账号',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'使用 Google 账号登录',exact:true}).isEnabled(),true,'Returning Google users must not be blocked before account lookup');
+  assert.equal(await page.locator('#auth-consent').count(),0,'Consent belongs to onboarding after authentication');
+  const credentials={email:`consent-${randomUUID()}@vela.test`,password:randomUUID()};
+  await page.getByRole('button',{name:'注册账号',exact:true}).click();
+  await page.getByLabel('邮箱地址',{exact:true}).fill(credentials.email);
+  await page.getByLabel('密码（至少 6 位）',{exact:true}).fill(credentials.password);
+  await page.getByRole('button',{name:'注册邮箱并继续',exact:true}).click();
+  await page.locator('#auth-consent').waitFor();
+  const newUid=await page.evaluate(()=>window.harness.currentUid());assert(newUid);authUids.add(newUid);
+  assert.equal((await db.doc(`users/${newUid}`).get()).exists,false,'Authentication must not automatically record consent');
+  await page.getByRole('button',{name:'同意并继续',exact:true}).click();
+  assert.equal((await db.doc(`users/${newUid}`).get()).exists,false,'Unchecked confirmation must not initialize the account');
+  await page.locator('#auth-consent').check();
+  await page.getByRole('button',{name:'同意并继续',exact:true}).click();
+  await page.getByRole('dialog').waitFor({state:'hidden'});
+  await page.getByRole('button',{name:/^账号设置：/}).click();
+  const consent=(await db.doc(`users/${newUid}`).get()).data();assert(consent.acceptedTermsAt&&consent.confirmedAdultAt);
+  await page.getByRole('button',{name:'退出登录',exact:true}).click();
+  await page.getByRole('button',{name:'登录 / 注册账号',exact:true}).click();
+  await page.getByLabel('邮箱地址',{exact:true}).fill(credentials.email);
+  await page.getByLabel('密码（至少 6 位）',{exact:true}).fill(credentials.password);
+  await page.getByRole('button',{name:'邮箱登录并继续',exact:true}).click();
+  await page.getByRole('dialog').waitFor({state:'hidden'});
+  await page.getByRole('button',{name:/^账号设置：/}).click();
+  assert.equal(await page.locator('#auth-consent').count(),0);
+  assert.deepEqual((await db.doc(`users/${newUid}`).get()).data(),consent,'Password login must preserve consent timestamps');
+  await page.getByRole('button',{name:'退出登录',exact:true}).click();
+  await page.getByRole('button',{name:'登录 / 注册账号',exact:true}).click();
+  await page.getByRole('button',{name:'免密邮件链接',exact:true}).click();
+  await page.getByLabel('邮箱地址',{exact:true}).fill(credentials.email);
+  await page.getByRole('button',{name:'发送免密登录链接',exact:true}).click();
+  await page.getByRole('status').filter({hasText:'免密登录链接已发送'}).waitFor();
+  const codes=await(await fetch(`http://${authHost}/emulator/v1/projects/${project}/oobCodes`)).json();
+  const code=codes.oobCodes.find(c=>c.email===credentials.email&&c.requestType==='EMAIL_SIGNIN');assert(code?.oobCode);
+  await page.goto(`http://127.0.0.1:3138/__api-browser?apiKey=fake&mode=signIn&oobCode=${encodeURIComponent(code.oobCode)}`);
+  await page.waitForFunction(()=>Boolean(window.harness));await page.evaluate(()=>window.harness.renderApp());
+  await page.getByRole('button',{name:/^账号设置：/}).click();
+  await page.getByRole('dialog',{name:'账号与合规设置'}).waitFor();
+  assert.equal(await page.locator('#auth-consent').count(),0);
+  assert.equal(await page.getByRole('button',{name:/使用 Google 账号/}).count(),0);
+  assert.deepEqual((await db.doc(`users/${newUid}`).get()).data(),consent,'Magic-link login must preserve consent timestamps');
+  assert.deepEqual((await db.doc(`users/${uid}`).get()).data(),originalConsent);
+  console.log('PASS real App authentication: returning account/settings, enabled Google entry, explicit first-time consent, password re-login and actual email-link completion without repeated consent or timestamp writes');
   await page.evaluate(()=>window.harness.cleanup());
   console.log('PASS browser API integration: guest natal, real Firebase login/account, profile CRUD, session creation and polling profiles/messages/usage via API, share reward, subjects request, real plans/subscription UI, account switching, failed-load retry, usePlan first-load/tier/UID isolation/outage/same-response retry, CORS and Firestore persistence');
 }finally{
-  if(uid){await db.recursiveDelete(db.doc(`users/${uid}`));await db.doc(`usage/${uid}`).delete();await db.recursiveDelete(db.doc(`customers/${uid}`));const {getAuth}=await import('firebase-admin/auth');await getAuth(app).deleteUser(uid).catch(e=>{if(e.code!=='auth/user-not-found')throw e;});}
+  if(uid)authUids.add(uid);
+  for(const id of authUids){await db.recursiveDelete(db.doc(`users/${id}`));await db.doc(`usage/${id}`).delete();await db.recursiveDelete(db.doc(`customers/${id}`));const {getAuth}=await import('firebase-admin/auth');await getAuth(app).deleteUser(id).catch(e=>{if(e.code!=='auth/user-not-found')throw e;});}
   await browser?.close();await server.close();await deleteApp(app);
 }
