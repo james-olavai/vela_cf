@@ -1104,6 +1104,8 @@ Gitea 1.25.5 界面无法单独重跑 job；四个 job 同属一份 workflow 时
 
 `source_run` 是 Actions 页面 `#74` 中的 `74`，不是 API run ID；从 main 触发，脚本通过仓库 API 定位上游，验证仓库、main 分支、事件、workflow 文件、对应 job 的 SHA/成功状态。独立 workflow 必须整体成功；迁移兼容旧 `ci.yml` 时只检查对应阶段 job 成功，允许同一次旧流水线的后续生产失败后复用其已成功验收。比如 #74 在线验收通过而生产失败，可以独立发布生产时选 74；#75 在线验收失败则禁止使用。不能输入任意下载地址或仅指定 SHA 绕过门禁。
 
+实际 runner #78 验证发现 Gitea 1.25 的 `/actions/runs` 列表接口要求仓库 owner，内置 job token 返回 403；单个 run/job GET 允许 Actions reader（[官方路由实现](https://github.com/go-gitea/gitea/blob/v1.25.5/routers/api/v1/api.go)）。解析页面运行编号时先使用正常 CSRF/Cookie 读取该运行的只读 view JSON（空 logCursors，不执行重跑/取消/审批），取得 job ID，再用单个 job/run API 核实 run ID、页面编号、仓库及全部原有来源门禁。不增加 owner 权限或长期 PAT，页面无权访问或 API 元数据不一致直接阻断。HTTP 回归固定模拟 owner-only 列表返回 403，确保不依赖本机管理员凭据才能通过。
+
 跨 workflow 使用当前实例实际支持的 v3 artifact 下载地址，绑定已验证运行编号与产物名称；下载限制体积，解包前检查全部 ZIP/TAR 条目，拒绝目录穿越、链接、重复路径和异常类型。新部署/验收证据中的 `workflow-source.json` 记录候选 SHA、原始构建运行编号和直接上游编号。下游重新下载原始构建产物，校验清单/文件哈希、证据 SHA 和 main 祖先关系后 checkout 候选源码，绑定环境配置，不重新构建，也不将控制 workflow 的 HEAD 误认为候选版本。
 
 当前实例的 [1.25 官方兼容说明](https://docs.gitea.com/1.25/usage/actions/comparison/) 指出 concurrency 与 job timeout-minutes 被忽略，因此实际命令使用 GNU timeout，环境发布使用 Firestore compare-and-set 锁。

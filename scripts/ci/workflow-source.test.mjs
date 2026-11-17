@@ -84,7 +84,17 @@ test('Independent workflows fetch one immutable build and preserve the deploymen
   const all=[base,deploy,verify],downloads=[];
   const server=createServer((req,res)=>{
     const path=req.url.split('?')[0];res.setHeader('Content-Type','application/json');
-    if(path.endsWith('/actions/runs'))return res.end(JSON.stringify({workflow_runs:all.map(p=>p.run)}));
+    // Actual Gitea 1.25 policy: listing runs is owner-only. The reader token
+    // must resolve UI numbers without calling this privileged endpoint.
+    if(path.endsWith('/actions/runs')){res.statusCode=403;return res.end('{}');}
+    const view=all.find(p=>path.endsWith(`/runs/${p.run.run_number}/jobs/0`));
+    if(view){
+      if(req.method==='GET'){res.setHeader('Set-Cookie','csrf=test-cookie; HttpOnly');return res.end('<script>csrfToken: "test-csrf"</script>');}
+      assert.equal(req.method,'POST');assert.equal(req.headers['x-csrf-token'],'test-csrf');assert.equal(req.headers.cookie,'csrf=test-cookie');
+      return res.end(JSON.stringify({state:{run:{jobs:[{id:100+view.run.id}]}}}));
+    }
+    const job=all.find(p=>path.endsWith(`/actions/jobs/${100+p.run.id}`));if(job)return res.end(JSON.stringify({run_id:job.run.id}));
+    const run=all.find(p=>path.endsWith(`/actions/runs/${p.run.id}`));if(run)return res.end(JSON.stringify(run.run));
     const p=all.find(p=>path.endsWith(`/runs/${p.run.id}/jobs`));if(p)return res.end(JSON.stringify({jobs:p.jobs}));
     downloads.push(path);
     if(path.endsWith(`/5/artifacts/release-${commit}`))return res.end(release);

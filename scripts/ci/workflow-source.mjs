@@ -78,9 +78,10 @@ export async function prepareWorkflow(phase,sourceNumber,env=process.env){
   const server=new URL(env.GITHUB_SERVER_URL);
   assert(['http:','https:'].includes(server.protocol)&&!server.username&&!server.password,'Invalid Gitea server');
   const headers=env.GITEA_TOKEN?{Authorization:`token ${env.GITEA_TOKEN}`} : {};
-  async function request(path,json=true){
-    const response=await fetch(new URL(path,server),{headers,redirect:'error',signal:AbortSignal.timeout(120000)});
+  async function request(path,json=true,options={}){
+    const response=await fetch(new URL(path,server),{...options,headers:{...headers,...options.headers},redirect:'error',signal:AbortSignal.timeout(120000)});
     assert(response.ok,`Source download failed: HTTP ${response.status}`);
+    if(json==='response')return response;
     if(json)return response.json();
     assert(Number(response.headers.get('content-length')||0)<=256*1024*1024,'Download too large');
     const chunks=[];let size=0;
@@ -89,13 +90,24 @@ export async function prepareWorkflow(phase,sourceNumber,env=process.env){
   }
   const api=`/api/v1/repos/${repository}`;
   async function producer(number,stage){
-    let run;
-    for(let page=1;page<=100;page++){
-      const list=await request(`${api}/actions/runs?page=${page}&limit=50`);
-      run=list.workflow_runs?.find(r=>r.run_number===Number(number));
-      if(run || !list.workflow_runs?.length)break;
-    }
-    assert(run,`Source run #${number} not found`);
+    // Gitea 1.25's run LIST requires repo ownership; individual run/job GETs only
+    // require Actions read access. Resolve the UI number using its read-only view,
+    // then trust only the canonical API metadata below. No owner PAT is needed.
+    assert(Number.isSafeInteger(Number(number))&&Number(number)>0,'Invalid source run');
+    const viewPath=`/${repository}/actions/runs/${number}/jobs/0`;
+    const page=await request(viewPath,'response'),html=await page.text();
+    const csrf=html.match(/csrfToken:\s*['"]([^'"]+)/)?.[1]||html.match(/name="_csrf" content="([^"]+)/)?.[1];
+    assert(csrf,'Cannot read Gitea run view');
+    const cookie=page.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
+    // This POST only reads the view state with no log cursors; it never reruns,
+    // cancels, approves or otherwise changes a workflow.
+    const view=await request(viewPath,true,{method:'POST',headers:{'Content-Type':'application/json','X-Csrf-Token':csrf,Cookie:cookie},body:JSON.stringify({logCursors:[]})});
+    const jobId=view.state?.run?.jobs?.[0]?.id;
+    assert(Number.isSafeInteger(jobId)&&jobId>0,'Missing source job');
+    const job=await request(`${api}/actions/jobs/${jobId}`);
+    assert(Number.isSafeInteger(job.run_id)&&job.run_id>0,'Missing source run ID');
+    const run=await request(`${api}/actions/runs/${job.run_id}`);
+    assert.equal(run.run_number,Number(number),'Run view and API number mismatch');
     const {jobs}=await request(`${api}/actions/runs/${run.id}/jobs`);
     return {...assertProducer(run,jobs,stage,repository),run};
   }
